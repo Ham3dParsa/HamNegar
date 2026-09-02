@@ -21,7 +21,7 @@ function rulePolish(text){
   return out;
 }
 
-async function queryGroq(blob){
+async function queryGroq(blob, externalSignal){
   const { groqKey: k } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Groq نیست'),{status:401});
   if(!k.startsWith('gsk_')) throw Object.assign(new Error('Groq باید gsk_ باشد'),{status:401});
@@ -29,12 +29,13 @@ async function queryGroq(blob){
   const fd=new FormData(); fd.append('file',blob,'speech.webm'); fd.append('model','whisper-large-v3'); fd.append('response_format','json');
   Logger.log('info','به Groq...',{size:blob.size});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),35000);
-  let res; try{ res=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq'),{status:408}); throw Object.assign(new Error('شبکه Groq: '+e.message),{status:0}); }
+  if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  let res; try{ res=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : 'تایم‌اوت Groq'),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error('شبکه Groq: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); Logger.log('error','Groq fail',{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
   const j=await res.json(); Logger.log('info','Groq ok',j); return (j.text||'').trim();
 }
-async function queryGemini(blob, model){
+async function queryGemini(blob, model, externalSignal){
   const { geminiKey: k } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Gemini نیست'),{status:401});
   if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید اشتباه'),{status:401});
@@ -43,7 +44,8 @@ async function queryGemini(blob, model){
   Logger.log('info',`به Gemini ${model}...`,{size:blob.size});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),40000);
-  let res; try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:"Transcribe verbatim in original language(s). Only transcription, no summary."},{inlineData:{mimeType:blob.type||"audio/webm",data:b64}}]}],generationConfig:{temperature:0.1}}),signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Gemini'),{status:408}); throw Object.assign(new Error('شبکه Gemini: '+e.message),{status:0}); }
+  if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  let res; try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:"Transcribe verbatim in original language(s). Only transcription, no summary."},{inlineData:{mimeType:blob.type||"audio/webm",data:b64}}]}],generationConfig:{temperature:0.1}}),signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : 'تایم‌اوت Gemini'),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error('شبکه Gemini: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error','Gemini fail',{status:res.status, model, body:er.text}); throw err; }
   const j=await res.json(); Logger.log('debug','Gemini raw',j); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
@@ -113,15 +115,29 @@ export const Transcription = {
       const id = chain[i];
       const isGroq = id==='groq';
       const label = isGroq ? 'Groq' : id;
+      const signal = opts.signal;
+      if (signal?.aborted) throw Object.assign(new Error('لغو شد'), { status: 0, aborted: true });
       try{
-        const t = isGroq ? await queryGroq(blob) : await queryGemini(blob, id);
+        if (i === 0) {
+          Logger.setProgress({ state: 'trying', index: i, total: chain.length, label: `در حال تبدیل با ${label}…` });
+          Logger.toast(`در حال تبدیل با ${label}… (قدم ${i + 1} از ${chain.length})`, 3500);
+        } else {
+          Logger.setProgress({ state: 'trying', index: i, total: chain.length, label: `تلاش با ${label}…` });
+        }
+        const t = isGroq ? await queryGroq(blob, signal) : await queryGemini(blob, id, signal);
         rawText = t;
         usedEngine = label;
         if(i>0) Logger.log('info',`فالبک موفق: STT #${i+1}/${chain.length} → ${label}`);
+        Logger.setProgress({ state: 'done', index: i, total: chain.length, label: `با ${label} نشست` + (i>0?` (فالبک ${i+1}/${chain.length})`:'' ) });
+        if(i>0) Logger.toast(`✅ با ${label} نشست` + (i>0?` (فالبک ${i+1}/${chain.length})`:''), 2600);
         break;
       }catch(err){
+        if (err.aborted || signal?.aborted) throw err;
         lastErr=err;
         Logger.log('warn',`STT ${label} خطا (${i+1}/${chain.length})`,{msg:err.message, status:err.status});
+        Logger.setProgress({ state: 'failed', index: i, total: chain.length, label: `خطا ${label} — تلاش با بعدی…` });
+        if (err.status === 429) Logger.toast(`⚠️ سهمیه ${label} پر — تلاش با بعدی…`, 2000);
+        else if (err.status === 404) Logger.toast(`⚠️ ${label} پیدا نشد — بعدی…`, 2000);
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));
