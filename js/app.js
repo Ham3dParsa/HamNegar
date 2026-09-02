@@ -523,9 +523,9 @@ async function handleTranscription(blob, snap){
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const signal = transcribingAbort?.signal;
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
-    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { aborted:true }); }
-    if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { aborted:true }); }
-    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); throw Object.assign(new Error('متنی نیست'), { aborted:false }); }
+    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { code:'STALE', aborted:true }); }
+    if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { code:'ABORTED', aborted:true }); }
+    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); throw Object.assign(new Error('متنی نیست'), { code:'EMPTY', aborted:false }); }
     const s=Storage.getSettings();
     if(s.realtime && snap){
       const finalText = text.trim();
@@ -554,15 +554,15 @@ async function handleTranscription(blob, snap){
     Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); Logger.dismissProgress(2600); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
     Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
-    if (err.message === 'stale') {
+    if (err.code === 'STALE') {
       Logger.dismissProgress(0);
-    } else if (err.aborted || transcribingAbort?.signal.aborted) {
+    } else if (err.code === 'EMPTY') {
+      // already handled
+    } else if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
       Logger.log('info','transcribe aborted',{msg:err.message, snapId});
       Logger.toast('لغو شد', 1500);
-      Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
       Logger.dismissProgress(0);
       Logger.setStatus('لغو شد','warn');
-    } else if (err.message === 'متنی نیست') {
       // already handled toast/status above
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
