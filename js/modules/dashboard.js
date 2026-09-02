@@ -37,6 +37,9 @@ export const Dashboard = {
     </div>
   `;
     quotaGrid.parentNode.insertBefore(sec, quotaGrid);
+    // move quota-grid inside details to avoid floating outside report
+    const detailsEl = sec.querySelector('#report-details');
+    if (detailsEl && quotaGrid) detailsEl.appendChild(quotaGrid);
     sec.querySelectorAll('[data-period]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         sec.querySelectorAll('[data-period]').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
@@ -50,10 +53,8 @@ export const Dashboard = {
     const details=document.getElementById('report-details');
     const toggleBtn=document.getElementById('btn-toggle-report');
     const startCollapsed = Storage.getSettings().reportCollapsed;
-    const quotaGridEl=document.getElementById('quota-grid');
     function applyReportCollapsed(collapsed){
       details.hidden=collapsed;
-      if(quotaGridEl) quotaGridEl.style.display= collapsed ? 'none' : '';
       toggleBtn.textContent= collapsed ? 'نمایش جزئیات ▾' : 'پنهان‌سازی ▴';
       toggleBtn.setAttribute('aria-expanded', String(!collapsed));
       Storage.saveSettings({ reportCollapsed: collapsed });
