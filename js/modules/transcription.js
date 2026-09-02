@@ -66,10 +66,8 @@ async function queryPolishViaGemini(text, model){
   return out;
 }
 async function queryPolishViaOpenRouter(text, model){
-  const { openrouterKey: k, geminiKey: gk } = Storage.getSettings();
-  // if no openrouter key but gemini exists, fallback to gemini-flash-lite for polish
+  const { openrouterKey: k } = Storage.getSettings();
   if(!k){
-    if(gk) return queryPolishViaGemini(text, 'gemini-flash-lite-latest');
     throw Object.assign(new Error('کلید OpenRouter نیست'),{status:401});
   }
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
@@ -91,7 +89,7 @@ async function queryPolish(text, model){
 function hasKeyFor(id){
   const s=Storage.getSettings();
   if(id==='groq') return !!s.groqKey;
-  if(id.includes('/')) return !!s.openrouterKey || !!s.geminiKey;
+  if(id.includes('/')) return !!s.openrouterKey;
   return !!s.geminiKey;
 }
 export const Transcription = {

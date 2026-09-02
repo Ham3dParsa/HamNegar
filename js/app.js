@@ -414,10 +414,11 @@ async function startRecording(){
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
   let snap=null;
   try{
-    snap = { id: ++rtVersion, startMs: performance.now(), basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
+    snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
     rtSnap = snap;
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
+    snap.startMs = performance.now();
     isRecording=true; els.btnMic.textContent='⏹ پایان و تبدیل'; els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     startWave();

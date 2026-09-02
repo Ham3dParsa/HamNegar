@@ -110,11 +110,12 @@ describe('migration از QUOTA_USAGE', ()=>{
   beforeEach(reset);
   it('اگر STATS_HISTORY خالی و QUOTA_USAGE پر است، migrate کند', ()=>{
     Storage.saveQuotaRaw({_date:'2026-09-01', groq:3, 'gemini-flash-lite-latest':1});
-    // first getSummary should trigger migrate
     const s = Stats.getSummary('today');
-    // history should have at least migration entry or tolerate empty
     const hist = Storage.getStatsHistory();
-    // we accept either: migration created entry for old date, or at least not crash
     assert.ok(Array.isArray(hist));
+    assert.equal(hist.length, 1);
+    assert.equal(hist[0].date, '2026-09-01');
+    assert.equal(hist[0].counts.groq, 3);
+    assert.equal(hist[0].counts['gemini-flash-lite-latest'], 1);
   });
 });
