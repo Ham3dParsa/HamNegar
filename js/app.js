@@ -2,6 +2,7 @@
 import { Storage, STT_DEFAULTS, POLISH_DEFAULTS } from './modules/storage.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
+import { Dashboard } from './modules/dashboard.js';
 import { Audio } from './modules/audio.js';
 import { Realtime } from './modules/realtime.js';
 import { Transcription } from './modules/transcription.js';
@@ -201,8 +202,8 @@ function renderAllChains(){
 function persistChains(){
   Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish.checked });
   updateBadge();
-  Quota.render(els.quotaGrid, { period: activePeriod });
-  renderOverall();
+  Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+  Dashboard.renderOverall();
 }
 
 // --- settings wiring ---
@@ -239,7 +240,7 @@ function loadSettings(){
   if(els.togglePolish) els.togglePolish.checked=s.polishEnabled;
   els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
   renderAllChains();
-  updateBadge(); validate(); ensureReportUI(); Quota.render(els.quotaGrid, { period: activePeriod }); renderOverall();
+  updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
   if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
@@ -254,7 +255,7 @@ function saveSettings(){
     polishChain: polishChainState,
     polishEnabled: els.togglePolish?.checked ?? true,
   });
-  updateBadge(); validate(); Quota.render(els.quotaGrid, { period: activePeriod }); renderOverall();
+  updateBadge(); validate(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
 }
 els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
 if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
@@ -407,75 +408,14 @@ function makeOnInterim(snap){
   };
 }
 
-let isRecording=false, vadTimer=null, recStartMs=0;
-let activePeriod='today';
-function ensureReportUI(){
-  if(document.getElementById('report-overall')) return;
-  const quotaGrid = document.getElementById('quota-grid');
-  if(!quotaGrid) return;
-  const sec=document.createElement('section');
-  sec.id='report-overall';
-  sec.className='report-overall';
-  sec.innerHTML=`
-    <div class="report-head">
-      <h3 style="font-size:13px">📊 گزارش استفاده</h3>
-      <div class="segmented" role="tablist" aria-label="بازه زمانی">
-        <button data-period="today" class="active" role="tab" aria-selected="true">روز</button>
-        <button data-period="week" role="tab">هفته</button>
-        <button data-period="month" role="tab">ماه</button>
-        <button data-period="all" role="tab">کل</button>
-      </div>
-    </div>
-    <div class="overall-grid" id="overall-grid"></div>
-    <div class="fun-row" id="fun-row"></div>
-    <div class="series-strip" id="series-strip"></div>
-  `;
-  quotaGrid.parentNode.insertBefore(sec, quotaGrid);
-  sec.querySelectorAll('[data-period]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      sec.querySelectorAll('[data-period]').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
-      btn.classList.add('active'); btn.setAttribute('aria-selected','true');
-      activePeriod=btn.dataset.period;
-      renderOverall();
-      Quota.render(els.quotaGrid, { period: activePeriod });
-    });
-  });
-}
-function renderOverall(){
-  const grid=document.getElementById('overall-grid');
-  const funRow=document.getElementById('fun-row');
-  const seriesStrip=document.getElementById('series-strip');
-  if(!grid) return;
-  const s=Quota.getSummary(activePeriod);
-  const fmtMin=v=> v<1 ? Math.round(v*60)+' ثانیه' : v.toFixed(1)+' دقیقه';
-  grid.innerHTML=`
-    <div class="overall-card"><span>درخواست</span><b>${s.totals.count}</b><small>${s.rangeLabel}</small></div>
-    <div class="overall-card"><span>دقایق رونویسی</span><b>${fmtMin(s.totals.minutes)}</b><small>${s.totals.words} کلمه</small></div>
-    <div class="overall-card"><span>میانگین سرعت</span><b>${s.avgWpm||'—'} wpm</b><small>${s.speedBoost} سریع‌تر</small></div>
-    <div class="overall-card accent"><span>⏱ زمان ذخیره‌شده</span><b>${s.savedMinutes} دقیقه</b><small>نسبت به تایپ ۴۰ کلمه/دقیقه</small></div>
-  `;
-  if(funRow){
-    const favRaw = s.favorite ? `⭐ محبوب: ${s.favorite.label} (${s.favorite.count} بار)` : '—';
-    const longestRaw = s.fun.longestSessionMin ? `⏳ طولانی‌ترین: ${s.fun.longestSessionMin} دقیقه` : '';
-    const streakRaw = s.fun.streakDays ? `🔥 تداوم: ${s.fun.streakDays} روز` : '';
-    const busyRaw = s.fun.busiestDay ? `📌 شلوغ: ${s.fun.busiestDay.date}` : '';
-    funRow.innerHTML=`<span>${esc(favRaw)}</span><span>${esc(busyRaw)}</span><span>${esc(longestRaw)}</span><span>${esc(streakRaw)}</span>`;
-  }
-  if(seriesStrip){
-    const daysForStrip = activePeriod==='month' ? 30 : activePeriod==='all' ? 30 : activePeriod==='week' ? 7 : 7;
-    const series=Quota.getSeries(daysForStrip);
-    const max=Math.max(1, ...series.map(x=>x.count));
-    seriesStrip.innerHTML=series.map(d=> `<div class="series-bar" title="${esc(d.date)}: ${esc(String(d.count))}" style="height:${Math.max(8, Math.round(d.count/max*100))}%"><span>${esc(String(d.count))}</span></div>`).join('') || '<span style="color:var(--muted);font-size:11px">هنوز داده‌ای نیست</span>';
-  }
-}
+let isRecording=false, vadTimer=null;
 async function startRecording(){
   saveCursor();
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
   let snap=null;
   try{
-    snap = { id: ++rtVersion, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
+    snap = { id: ++rtVersion, startMs: performance.now(), basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
     rtSnap = snap;
-    recStartMs = performance.now();
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
     isRecording=true; els.btnMic.textContent='⏹ پایان و تبدیل'; els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
@@ -519,7 +459,7 @@ async function handleTranscription(blob, snap){
     return;
   }
   try{
-    const durationMs = recStartMs ? Math.round(performance.now() - recStartMs) : 0;
+    const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs });
     if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); return; }
     if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); if(snap && snapId===rtVersion) rtSnap=null; return; }
@@ -545,8 +485,8 @@ async function handleTranscription(blob, snap){
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
-    Quota.render(els.quotaGrid, { period: activePeriod });
-    renderOverall();
+    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+    Dashboard.renderOverall();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
     Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
     Logger.log('info','success',{engine, polishModel, len:text.length});
@@ -575,7 +515,7 @@ els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چی�
 els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 stopWave();
 const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
-ensureReportUI();
+Dashboard.ensureReportUI();
 Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
-Quota.render(els.quotaGrid, { period: activePeriod });
-renderOverall();
+Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+Dashboard.renderOverall();

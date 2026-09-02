@@ -15,12 +15,19 @@ export const LIMITS = {
   'gemini-1.5-flash': { label: 'Gemini 1.5 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
 };
 
+let _tehranFmt = null;
+let _tehranFmtFailed = false;
+function getTehranFmt(){
+  if(_tehranFmt || _tehranFmtFailed) return _tehranFmt;
+  try{ _tehranFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }); }catch{ _tehranFmtFailed = true; }
+  return _tehranFmt;
+}
 function tehranDate(d = new Date()) {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' }).format(d);
-  } catch {
-    return d.toISOString().slice(0, 10);
+  const fmt = getTehranFmt();
+  if(fmt){
+    try{ return fmt.format(d); }catch{}
   }
+  return d.toISOString().slice(0, 10);
 }
 
 function loadHistory() {

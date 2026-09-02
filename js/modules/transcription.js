@@ -88,12 +88,32 @@ async function queryPolish(text, model){
   return queryPolishViaGemini(text, model);
 }
 
+function hasKeyForStt(id){
+  const s=Storage.getSettings();
+  if(id==='groq') return !!s.groqKey;
+  return !!s.geminiKey;
+}
+function hasKeyForPolish(id){
+  const s=Storage.getSettings();
+  if(id.includes('/')) return !!s.openrouterKey || !!s.geminiKey;
+  return !!s.geminiKey;
+}
 export const Transcription = {
   async transcribe(blob, opts={}){
     // blob guard once before chain (REVIEW trap)
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const chain = (sttChain && sttChain.length) ? sttChain : ['groq','gemini-flash-lite-latest'];
+    const rawChain = (sttChain && sttChain.length) ? sttChain : ['groq','gemini-flash-lite-latest'];
+    // pre-filter to avoid token waste: skip engines without key before any fetch
+    const chain = rawChain.filter(hasKeyForStt);
+    if(chain.length===0){
+      // keep first error style for missing keys
+      throw Object.assign(new Error('کلید STT نیست — تنظیمات را چک کن'),{status:401});
+    }
+    if(chain.length !== rawChain.length){
+      const skipped = rawChain.filter(id=> !hasKeyForStt(id));
+      if(skipped.length) Logger.log('info','STT بی‌کلید حذف شد', { skipped });
+    }
     let lastErr=null, usedEngine='—', rawText='';
     for(let i=0;i<chain.length;i++){
       const id = chain[i];
@@ -108,31 +128,9 @@ export const Transcription = {
       }catch(err){
         lastErr=err;
         Logger.log('warn',`STT ${label} خطا (${i+1}/${chain.length})`,{msg:err.message, status:err.status});
-        if(err.status===401||err.status===403){
-          const s=Storage.getSettings();
-          const next = chain[i+1];
-          if(next){
-            const hasNext = next==='groq' ? !!s.groqKey : !!s.geminiKey;
-            if(!hasNext){ Logger.log('warn',`کلید ${next} نیست — فالبک متوقف`,{}); }
-          }
-          // skip missing-key engines: filter remaining chain for hasKey, if none left throw
-          const remaining = chain.slice(i+1);
-          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : !!s.geminiKey);
-          if(!hasAnyRemainingKey){ throw err; }
-          // if next engine lacks key, continue will skip to next iteration which will throw 401 again — but we already checked hasAny; loop will naturally skip? still continue
-        }
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));
-        // skip next if it has no key (avoid wasted 401)
-        const s2=Storage.getSettings();
-        let nxt = chain[i+1];
-        if(nxt && (nxt==='groq' ? !s2.groqKey : !s2.geminiKey)){
-          // find next with key
-          let found=false;
-          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : !!s2.geminiKey){ found=true; break; } }
-          if(!found) throw err;
-        }
         continue;
       }
     }
@@ -153,10 +151,15 @@ export const Transcription = {
     if(polishEnabled && polishChain && polishChain.length){
       // first always try rule-based quick fix for spec example, but still attempt model for broader polish
       const ruleFixed = rulePolish(rawText);
-      // try model chain
+      const usablePolish = polishChain.filter(hasKeyForPolish);
+      if(usablePolish.length !== polishChain.length){
+        const skippedP = polishChain.filter(id=> !hasKeyForPolish(id));
+        if(skippedP.length) Logger.log('info','پالیش بی‌کلید حذف شد', { skipped: skippedP });
+      }
+      // try model chain (pre-filtered)
       let polished=null;
-      for(let i=0;i<polishChain.length;i++){
-        const pm = polishChain[i];
+      for(let i=0;i<usablePolish.length;i++){
+        const pm = usablePolish[i];
         try{
           const out = await queryPolish(rawText, pm);
           if(out){
@@ -167,13 +170,8 @@ export const Transcription = {
           }
         }catch(e){
           Logger.log('warn',`پالیش ${pm} خطا`,{msg:e.message, status:e.status});
-          if(e.status===401||e.status===403){
-            const s=Storage.getSettings();
-            const isOR = pm.includes('/');
-            if(isOR && !s.openrouterKey){ Logger.log('warn','کلید OpenRouter نیست — پالیش فالبک متوقف'); break; }
-          }
           if(e.status===429) await new Promise(r=>setTimeout(r,500));
-          if(i===polishChain.length-1) break;
+          if(i===usablePolish.length-1) break;
         }
       }
       if(polished){
@@ -192,7 +190,9 @@ export const Transcription = {
     const ruleFixed = rulePolish(text);
     const { polishChain, polishEnabled } = Storage.getSettings();
     if(!polishEnabled) return ruleFixed;
-    const chain = polishChain?.length ? polishChain : ['qwen/qwen3-30b-a3b:free'];
+    const rawChain = polishChain?.length ? polishChain : ['qwen/qwen3-30b-a3b:free'];
+    const chain = rawChain.filter(hasKeyForPolish);
+    if(chain.length===0) return ruleFixed;
     for(const m of chain){
       try{ const out=await queryPolish(text,m); if(out) return rulePolish(out); }catch{}
     }
