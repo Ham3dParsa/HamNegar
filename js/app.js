@@ -281,14 +281,14 @@ $('btn-copy-log').onclick=async()=>{
   await navigator.clipboard.writeText(text);
   Logger.toast(visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
 };
-let logCollapsed = localStorage.getItem('LOG_COLLAPSED') !== '0';
+let logCollapsed = Storage.getSettings().logCollapsed;
 function applyLogCollapsed(collapsed){
   logCollapsed=collapsed;
   els.logPanel.classList.toggle('collapsed', collapsed);
   els.btnToggleLog.textContent= collapsed ? 'نمایش' : 'بستن';
   const splitter=document.getElementById('log-splitter');
   if(splitter) splitter.style.display = collapsed ? 'none' : 'flex';
-  localStorage.setItem('LOG_COLLAPSED', collapsed ? '1' : '0');
+  Storage.saveSettings({ logCollapsed: collapsed });
 }
 applyLogCollapsed(logCollapsed);
 els.btnToggleLog.onclick=()=>{
@@ -361,8 +361,11 @@ els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTim
   }
 })();
 els.output.addEventListener('dblclick', ()=>{
+  saveCursor();
   els.output.style.height='auto';
-  els.output.style.height=Math.min(els.output.scrollHeight, window.innerHeight*0.5)+'px';
+  const nh=Math.min(els.output.scrollHeight, window.innerHeight*0.5)+'px';
+  els.output.style.height=nh;
+  Storage.saveHeights({ out: nh });
 });
 
 // waveform

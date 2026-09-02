@@ -27,6 +27,8 @@ const KEYS = {
   STATS_HISTORY: 'STATS_HISTORY',
   H_OUT: 'OUTPUT_HEIGHT',
   H_LOG: 'LOG_HEIGHT',
+  LOG_COLLAPSED: 'LOG_COLLAPSED',
+  REPORT_COLLAPSED: 'REPORT_COLLAPSED',
 };
 
 function parseChain(raw, defaults){
@@ -56,6 +58,8 @@ export const Storage = {
       sttChain = [...set];
     }
     const peRaw = localStorage.getItem(KEYS.POLISH_ENABLED);
+    const logColRaw = localStorage.getItem(KEYS.LOG_COLLAPSED);
+    const repColRaw = localStorage.getItem(KEYS.REPORT_COLLAPSED);
     return {
       groqKey: localStorage.getItem(KEYS.GROQ) || '',
       geminiKey: localStorage.getItem(KEYS.GEMINI) || '',
@@ -68,6 +72,8 @@ export const Storage = {
       realtime: localStorage.getItem(KEYS.REALTIME) === '1',
       vad: localStorage.getItem(KEYS.VAD) !== '0',
       autocopy: localStorage.getItem(KEYS.AUTOCOPY) === '1',
+      logCollapsed: logColRaw === null ? true : logColRaw === '1',
+      reportCollapsed: repColRaw === null ? true : repColRaw === '1',
     };
   },
   saveSettings(patch) {
@@ -82,6 +88,8 @@ export const Storage = {
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');
     if ('vad' in patch) localStorage.setItem(KEYS.VAD, patch.vad ? '1' : '0');
     if ('autocopy' in patch) localStorage.setItem(KEYS.AUTOCOPY, patch.autocopy ? '1' : '0');
+    if ('logCollapsed' in patch) localStorage.setItem(KEYS.LOG_COLLAPSED, patch.logCollapsed ? '1' : '0');
+    if ('reportCollapsed' in patch) localStorage.setItem(KEYS.REPORT_COLLAPSED, patch.reportCollapsed ? '1' : '0');
   },
   getDraft() { return localStorage.getItem(KEYS.DRAFT) || ''; },
   saveDraft(text) { localStorage.setItem(KEYS.DRAFT, text); },

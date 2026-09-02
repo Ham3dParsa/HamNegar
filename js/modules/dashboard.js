@@ -2,6 +2,7 @@
 // Interface: Dashboard.ensureReportUI(), Dashboard.renderOverall()
 // Depth: hides Tehran period state, segmented UI, overall cards, fun row, 7/30-day series bar generation.
 import { Quota } from './quota.js';
+import { Storage } from './storage.js';
 
 let activePeriod = 'today';
 
@@ -48,15 +49,14 @@ export const Dashboard = {
     });
     const details=document.getElementById('report-details');
     const toggleBtn=document.getElementById('btn-toggle-report');
-    const saved=localStorage.getItem('REPORT_COLLAPSED');
-    const startCollapsed = saved ? saved==='1' : true;
+    const startCollapsed = Storage.getSettings().reportCollapsed;
     const quotaGridEl=document.getElementById('quota-grid');
     function applyReportCollapsed(collapsed){
       details.hidden=collapsed;
       if(quotaGridEl) quotaGridEl.style.display= collapsed ? 'none' : '';
       toggleBtn.textContent= collapsed ? 'نمایش جزئیات ▾' : 'پنهان‌سازی ▴';
       toggleBtn.setAttribute('aria-expanded', String(!collapsed));
-      localStorage.setItem('REPORT_COLLAPSED', collapsed ? '1' : '0');
+      Storage.saveSettings({ reportCollapsed: collapsed });
     }
     applyReportCollapsed(startCollapsed);
     toggleBtn.addEventListener('click', ()=>{
