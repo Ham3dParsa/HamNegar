@@ -232,8 +232,12 @@ function makeOnInterim(snap){
   return (preview, fin)=>{
     const finCum = fin || '';
     const interChunk = preview.slice(finCum.length);
-    // fin تجمعی است — ست مستقیم تا متن طولانی از اول شروع نکند (باگ طول)
-    if(finCum) snap.committed = finCum;
+    // fin تجمعی است — فقط وقتی واقعا جدید شد ست کن تا لاگ اسپم نشود
+    if(finCum && finCum !== snap.committed){
+      const newChunk = finCum.slice(snap.committed.length);
+      snap.committed = finCum;
+      if(newChunk.trim()) Logger.log('debug','realtime committed', newChunk.trim());
+    }
     snap.pending = interChunk;
     const fullPreview = snap.committed + snap.pending;
     if(els.liveFinal) els.liveFinal.textContent = snap.committed;
