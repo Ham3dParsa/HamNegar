@@ -57,4 +57,6 @@ powershell -File scripts/oc_ci_loop.ps1 -PR <n>
 - `opencode [info]` (+ `kilo SUGGESTION`) → fix if ≤5 lines or clearly better, else defer with follow-up ticket
 - Never silently ignore
 
-Done when deltas triaged, required checks `pass`, `mergeable == MERGEABLE`.
+## Completion
+
+Cycle ends only at **suggestion: merge / Approved** — every `[critical]/[warning]` fixed or explicitly waived, every `[info]` triaged, `gh pr checks` all `pass`, `mergeable == MERGEABLE` and reviewer summary is `APPROVED` (or `suggestion: merge`). Do not stop at `REQUEST_CHANGES` or at `pass` alone.
