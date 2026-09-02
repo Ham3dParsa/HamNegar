@@ -2,17 +2,12 @@
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
 // Depth: hides 10+ keys, serialization, defaults, and migration behind 6 functions.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
-export const POLISH_DEFAULTS = ['qwen/qwen3-30b-a3b:free','qwen/qwen3-32b:free','openai/gpt-oss-20b:free'];
-// canonical polish aliases — task spec uses dot notation; normalize to OpenRouter free ids
-const POLISH_ALIAS = {
-  'qwen/qwen3.6-27b': 'qwen/qwen3-30b-a3b:free',
-  'qwen/qwen3.8-27b': 'qwen/qwen3-32b:free',
-  'qwen/qwen3-6-27b': 'qwen/qwen3-30b-a3b:free',
-  'openai/gpt-oss-20b': 'openai/gpt-oss-20b:free',
-};
+// پالیش فقط از Groq — مدل‌های مدرن Qwen اولویت
+export const POLISH_DEFAULTS = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
+// بدون alias به OpenRouter — پالیش از Groq
 
 function normalizePolish(arr){
-  return arr.map(m=>POLISH_ALIAS[m]||m);
+  return [...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))];
 }
 
 const KEYS = {
