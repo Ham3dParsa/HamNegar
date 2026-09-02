@@ -188,19 +188,11 @@ function renderChain(container, chain, type){
         <button class="chain-btn" data-remove aria-label="حذف" title="حذف">✕</button>
       </div>
     `;
-    // toggle per-model (both STT and Polish)
+    // toggle per-model (both chains) — single path: ensure object form then set enabled
     item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
       const arr = type==='stt'? sttChainState : polishChainState;
-      if(typeof arr[idx]==='object') arr[idx].enabled = e.target.checked;
-      else if(e.target.checked===false){ /* legacy string → convert to disabled object */ arr[idx]={id:arr[idx], enabled:false}; } 
-      else { /* keep enabled */ }
-      // normalize STT string case: ensure object form for disabled
-      if(type==='stt' && typeof sttChainState[idx]==='string' && !e.target.checked){
-        sttChainState[idx]={id:sttChainState[idx], enabled:false};
-      } else if(type==='stt' && typeof sttChainState[idx]==='object'){
-        sttChainState[idx].enabled = e.target.checked;
-      }
-      if(type==='polish') polishChainState[idx].enabled = e.target.checked;
+      if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], enabled:e.target.checked};
+      else arr[idx].enabled = e.target.checked;
       persistChains();
       renderAllChains();
     });
@@ -386,9 +378,9 @@ els.btnSettings.addEventListener('click', ()=>{ if(!modelsFetched && (Storage.ge
 
 function detectPolishProvider(modelId){
   const id=modelId.toLowerCase();
+  if(id.includes(':free')) return 'openrouter';
   if(id.includes('gemini')) return 'gemini';
   if(id.startsWith('groq/') || id==='groq') return 'groq';
-  // qwen/oss/allam via Groq per screenshot (free 1K RPD)
   if(id.includes('qwen') || id.includes('gpt-oss') || id.includes('allam')) return 'groq';
   return 'groq';
 }
@@ -409,10 +401,7 @@ $('stt-add-input')?.addEventListener('keydown', (e)=>{
 });
 $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
 $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });
-$('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState.forEach(e=> { if(typeof e==='object') e.enabled=true; }); // legacy string stays enabled
-  // ensure objects form
-  sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,enabled:true}:e);
-  sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
+$('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
 $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
 loadSettings();

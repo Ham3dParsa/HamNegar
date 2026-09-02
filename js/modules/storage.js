@@ -83,21 +83,6 @@ const KEYS = {
   REPORT_COLLAPSED: 'REPORT_COLLAPSED',
 };
 
-function parseChain(raw, defaults){
-  // legacy string[] support
-  if(!raw) return [...defaults];
-  try{
-    const arr = JSON.parse(raw);
-    if(Array.isArray(arr) && arr.length) {
-      // detect object form (new) vs string form (legacy)
-      if(typeof arr[0]==='object') {
-        const norm=normalizeSTTChain(arr); if(norm.length) return norm.map(e=>e.id);
-      }
-      return normalizePolish([...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))]);
-    }
-  }catch{}
-  return [...defaults];
-}
 function parseSTTChain(raw, defaults){
   if(!raw) return defaults.map(id=>({id, enabled:true}));
   try{

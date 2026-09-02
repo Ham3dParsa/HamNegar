@@ -117,17 +117,17 @@ async function queryPolish(text, entry){
   return queryPolishViaOpenRouter(text, model);
 }
 
-function hasKeyFor(id){
+function hasKeyFor(entry){
   const s=Storage.getSettings();
-  const realId = typeof id === 'object' ? id.id : id;
-  if(realId==='groq') return !!s.groqKey;
-  if(typeof id === 'object' && id.provider) {
-    if(id.provider==='groq') return !!s.groqKey;
-    if(id.provider==='openrouter') return !!s.openrouterKey;
+  const id = typeof entry === 'object' ? entry.id : entry;
+  if(id==='groq') return !!s.groqKey;
+  if(typeof entry === 'object' && entry.provider){
+    if(entry.provider==='groq') return !!s.groqKey;
+    if(entry.provider==='openrouter') return !!s.openrouterKey;
     return !!s.geminiKey;
   }
-  if(typeof realId === 'string' && realId.includes('/')) {
-    if(realId.includes(':free')) return !!s.openrouterKey;
+  if(id.includes('/')){
+    if(id.includes(':free')) return !!s.openrouterKey;
     return !!s.groqKey;
   }
   return !!s.geminiKey;
