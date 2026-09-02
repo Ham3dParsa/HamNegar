@@ -110,7 +110,7 @@ export const Transcription = {
       const skipped = rawChain.filter(id => !hasKeyFor(id));
       if(skipped.length) Logger.log('info','STT بی‌کلید حذف شد', { skipped });
     }
-    try { Logger.rebuildProgress(chain); } catch {}
+    try { Logger.rebuildProgress(chain); } catch (e) { Logger.log('warn','rebuildProgress failed', { msg:e.message }); }
     let lastErr=null, usedEngine='—', rawText='';
     for(let i=0;i<chain.length;i++){
       const id = chain[i];

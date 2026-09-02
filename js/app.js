@@ -478,9 +478,6 @@ function stopRecording(){
   if(!isRecording) return;
   const snap = rtSnap;
   Audio.stop(); isRecording=false;
-  const labelEl = els.btnMic.querySelector('.mic-label');
-  const iconEl = els.btnMic.querySelector('.mic-icon');
-  // will be set to busy via setMicBusy in handleTranscription; keep spinner hint here
   setMicBusy(true);
   transcribingAbort = new AbortController();
   els.btnMic.classList.remove('recording','realtime-active');
@@ -496,22 +493,17 @@ els.btnMic.onclick=()=> {
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   isRecording?stopRecording():startRecording();
 };
-els.btnCancel?.addEventListener('click', ()=>{
+function cancelTranscription(){
   if (transcribingAbort) transcribingAbort.abort();
   // keep transcribingAbort until handleTranscription finally clears it — avoid losing aborted signal
   Logger.toast('لغو شد', 1500);
   Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
   Logger.dismissProgress(0);
   Logger.setStatus('لغو شد','warn');
-});
+}
+els.btnCancel?.addEventListener('click', cancelTranscription);
 document.addEventListener('keydown', (e)=>{
-  if (e.key === 'Escape' && isTranscribing && transcribingAbort) {
-    transcribingAbort.abort();
-    Logger.toast('لغو شد', 1500);
-    Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
-    Logger.dismissProgress(0);
-    Logger.setStatus('لغو شد','warn');
-  }
+  if (e.key === 'Escape' && isTranscribing && transcribingAbort) cancelTranscription();
 });
 function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
