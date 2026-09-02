@@ -85,14 +85,24 @@ function startWave(){
 }
 function stopWave(){ if(animId) cancelAnimationFrame(animId); waveCtx.clearRect(0,0,els.wave.width,els.wave.height); waveCtx.fillStyle='#333439'; waveCtx.fillRect(0,els.wave.height/2-1,els.wave.width,2); }
 
-// realtime live preview wiring
-let interimBasePos=null, interimText='';
+// realtime — الگوریتم تمیز: committed + pending + before/after ثابت
+let rtBasePos=null, rtBefore='', rtAfter='', rtCommitted='', rtPending='';
 function onInterim(preview, fin){
-  els.liveFinal.textContent=fin||''; els.liveInterim.textContent= preview.slice((fin||'').length);
-  els.output.value = els.output.value.slice(0, interimBasePos) + preview + els.output.value.slice(selEnd);
-  const np=interimBasePos+preview.length; els.output.setSelectionRange(np,np);
-  if(fin){ interimBasePos=np; selStart=selEnd=np; interimText=''; } else interimText=preview.slice((fin||'').length);
+  // fin = تکه نهایی جدید این ایونت، preview = fin+inter
+  const finChunk = fin || '';
+  const interChunk = preview.slice(finChunk.length);
+  if(finChunk) rtCommitted += finChunk;
+  rtPending = interChunk;
+  const fullPreview = rtCommitted + rtPending;
+  els.liveFinal.textContent = rtCommitted;
+  els.liveInterim.textContent = rtPending;
+  // رندر دقیق بدون درهم‌ریختگی: before ثابت + preview + after ثابت
+  els.output.value = rtBefore + fullPreview + rtAfter;
+  const cursor = rtBasePos + fullPreview.length;
+  els.output.setSelectionRange(cursor, cursor);
   updateCounts();
+  // برای لاگ دیباگ
+  if(finChunk) Logger.log('debug','realtime committed',finChunk.trim());
 }
 
 // recording + VAD
@@ -107,9 +117,10 @@ async function startRecording(){
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     startWave();
     if(s.realtime && Realtime.isSupported()){
-      interimBasePos=selStart; interimText=''; els.livePreview.classList.add('on'); els.liveBadge.classList.add('on'); els.liveFinal.textContent=''; els.liveInterim.textContent='';
-      Realtime.start(interimBasePos,{ onInterim:(p,f)=>onInterim(p,f), onFinal: f=> Logger.log('debug','final',f), onError:e=>Logger.log('warn','WebSpeech',e)});
-      Logger.log('info','حالت آنی روشن');
+      rtBasePos=selStart; rtBefore=els.output.value.slice(0, selStart); rtAfter=els.output.value.slice(selEnd); rtCommitted=''; rtPending='';
+      els.livePreview.classList.add('on'); els.liveBadge.classList.add('on'); els.liveFinal.textContent=''; els.liveInterim.textContent='';
+      Realtime.start(rtBasePos,{ onInterim:(p,f)=>onInterim(p,f), onFinal: f=> Logger.log('debug','final',f), onError:e=>Logger.log('warn','WebSpeech',e)});
+      Logger.log('info','حالت آنی روشن',{basePos: rtBasePos, beforeLen: rtBefore.length, afterLen: rtAfter.length});
     }
     if(s.vad) startVAD();
     Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad});
@@ -120,7 +131,11 @@ function stopRecording(){
   Audio.stop(); isRecording=false; els.btnMic.textContent='🎤 شروع صحبت'; els.btnMic.classList.remove('recording','realtime-active');
   stopVAD(); stopWave(); Realtime.stop();
   setTimeout(()=>{ els.livePreview.classList.remove('on'); els.liveBadge.classList.remove('on'); },900);
-  if(interimText){ interimBasePos=els.output.selectionStart; selStart=selEnd=interimBasePos; interimText=''; }
+  // اگر متنی نیمه‌کاره مانده، کرسر را آخر preview بگذار ولی rt vars را نگه دار تا handleTranscription جایگزین کند
+  if(rtBasePos!==null && (rtCommitted+rtPending)){
+    const cursor = rtBasePos + (rtCommitted+rtPending).length;
+    selStart=selEnd=cursor;
+  }
   Logger.setStatus('⏳ در حال تبدیل...','warn');
 }
 els.btnMic.onclick=()=> isRecording?stopRecording():startRecording();
@@ -128,21 +143,27 @@ function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser();
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
 async function handleTranscription(blob){
-  Logger.log('info','handleTrans',{size:blob.size});
-  if(blob.size<800){ Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست'); return; }
+  Logger.log('info','handleTrans',{size:blob.size, rtActive: rtBasePos!==null, rtPreviewLen: (rtCommitted+rtPending).length});
+  if(blob.size<800){ Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست'); // پاکسازی rt
+    rtBasePos=null; rtBefore=''; rtAfter=''; rtCommitted=''; rtPending=''; return; }
   try{
     const { text, engine } = await Transcription.transcribe(blob);
-    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); return; }
-    // insert with live correction
+    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); rtBasePos=null; return; }
     const s=Storage.getSettings();
-    if(s.realtime && interimBasePos!==null){
-      const before=els.output.value.slice(0, interimBasePos), len=interimText.length, after=els.output.value.slice(Math.min(interimBasePos+len, els.output.value.length));
-      if(len>0){ els.output.value=before+text+after; els.output.setSelectionRange(interimBasePos+text.length, interimBasePos+text.length); }
-      else { const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.slice(0,ps)+text+o.slice(pe); els.output.setSelectionRange(ps+text.length,ps+text.length); }
+    if(s.realtime && rtBasePos!==null){
+      // جایگزینی دقیق: هر چی preview بود (committed+pending) را با متن پولیش Groq/Gemini عوض کن
+      const finalText = text.trim();
+      els.output.value = rtBefore + finalText + rtAfter;
+      const cursor = rtBasePos + finalText.length;
+      els.output.setSelectionRange(cursor, cursor);
+      Logger.log('info','realtime polished',{preview:(rtCommitted+rtPending).slice(0,80), final: finalText.slice(0,80)});
     } else {
       const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.substring(0,ps)+text+o.substring(pe); els.output.setSelectionRange(ps+text.length,ps+text.length);
     }
-    els.output.focus(); saveCursor(); interimBasePos=null; interimText=''; els.liveFinal.textContent=''; els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
+    els.output.focus(); saveCursor();
+    // پاکسازی حالت آنی
+    rtBasePos=null; rtBefore=''; rtAfter=''; rtCommitted=''; rtPending='';
+    els.liveFinal.textContent=''; els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
     Quota.render(els.quotaGrid);
     Logger.setStatus(`✅ با ${engine} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
@@ -151,6 +172,7 @@ async function handleTranscription(blob){
     Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
     let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401) h='کلید نامعتبر';
     Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
+    // در خطا preview را نگه دار تا کاربر متن زنده را از دست ندهد، فقط rt را ریست نکن
   }
 }
 
@@ -158,6 +180,6 @@ async function handleTranscription(blob){
 $('btn-test-groq').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+e.message,'error'); } };
 $('btn-test-gemini').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+e.message,'error'); } };
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
-els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; interimBasePos=null; interimText=''; els.liveFinal.textContent=''; els.liveInterim.textContent=''; updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtBasePos=null; rtBefore=''; rtAfter=''; rtCommitted=''; rtPending=''; els.liveFinal.textContent=''; els.liveInterim.textContent=''; els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 stopWave(); Logger.log('info','ماژولار آماده', {hasRealtime: Realtime.isSupported(), proto: location.protocol});
 Quota.render(els.quotaGrid);
