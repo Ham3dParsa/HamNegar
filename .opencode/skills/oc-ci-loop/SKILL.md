@@ -29,7 +29,11 @@ gh api repos/Ham3dParsa/HamNegar/pulls/comments/<id> --jq '.body'
 gh api repos/Ham3dParsa/HamNegar/issues/comments/<id> --jq '.body'
 ```
 
-If `gh api` fails, skip seen-update. Sleep 90s, timeout 30m. Push fix commits to trigger re-review.
+If `gh api` fails, skip seen-update.
+
+**Sleep is only while waiting for new comments.** After a new delta arrives, do **not** sleep waiting for green — immediately triage it (see Triage below). If it contains any `[critical]/[warning]` must-fix, fix the code in the PR branch and `git push` right away to trigger a re-review, then go back to polling. Reaching green requires this fix-and-push; waiting alone never turns `REQUEST_CHANGES` into `APPROVED`.
+
+Sleep 90s between polls, timeout 30m total. Push fix commits to trigger re-review.
 
 ### 2. Poll CI
 

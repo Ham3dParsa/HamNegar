@@ -1,5 +1,5 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage } from './modules/storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS } from './modules/storage.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
 import { Audio } from './modules/audio.js';
@@ -11,9 +11,10 @@ const $ = s => document.getElementById(s);
 const els = {
   btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
-  modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'),
-  selectPrimary: $('select-primary'), selectModel: $('select-gemini-model'),
+  modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'), keyOpenrouter: $('key-openrouter'),
   toggleRealtime: $('toggle-realtime'), toggleVad: $('toggle-vad'), toggleAutocopy: $('toggle-autocopy'),
+  togglePolish: $('toggle-polish'),
+  sttChain: $('stt-chain'), polishChain: $('polish-chain'),
   engineBadge: $('engine-badge'), wave: $('wave'), fileWarn: $('file-warning'),
   logBody: $('log-body'), livePreview: $('live-preview'), liveFinal: $('live-final'), liveInterim: $('live-interim'), liveBadge: $('live-badge'),
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
@@ -83,7 +84,6 @@ function buildFilterUI() {
   header.insertBefore(filtersWrap, search);
 }
 buildFilterUI();
-// wrap Logger.log to hide new lines immediately using textContent after append (avoids detached innerText "")
 const _origLog = Logger.log.bind(Logger);
 Logger.log = (level, msg, data) => {
   _origLog(level, msg, data);
@@ -93,24 +93,178 @@ Logger.log = (level, msg, data) => {
 
 if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
 
+// --- preference chains UI ---
+const STT_LABELS = {
+  'groq': { label: 'Groq Whisper', sub: 'سریع • whisper-large-v3' },
+  'gemini-flash-latest': { label: 'gemini-flash-latest', sub: 'پیشنهادی' },
+  'gemini-flash-lite-latest': { label: 'gemini-flash-lite-latest', sub: 'سهم بیشتر ✓' },
+  'gemini-3.5-flash-lite': { label: 'gemini-3.5-flash-lite', sub: 'سهم بیشتر ✓' },
+  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'سهم بیشتر ✓' },
+  'gemini-2.5-flash': { label: 'gemini-2.5-flash', sub: 'قدیمی' },
+  'gemini-2.0-flash': { label: 'gemini-2.0-flash', sub: '' },
+  'gemini-1.5-flash': { label: 'gemini-1.5-flash', sub: '' },
+};
+const POLISH_LABELS = {
+  'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'Qwen سبک • رایگان' },
+  'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'Qwen دقیق • رایگان' },
+  'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'GPT-OSS • رایگان' },
+  // aliases for display
+  'qwen/qwen3.6-27b': { label: 'qwen/qwen3.6-27b', sub: 'Qwen' },
+  'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Qwen' },
+  'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: '' },
+};
+
+let sttChainState = [];
+let polishChainState = [];
+
+function hasKeyFor(id){
+  const s=Storage.getSettings();
+  if(id==='groq') return !!s.groqKey;
+  if(id.includes('/')) return !!s.openrouterKey || !!s.geminiKey; // openrouter or fallback gemini
+  return !!s.geminiKey;
+}
+
+function renderChain(container, chain, type){
+  if(!container) return;
+  container.innerHTML='';
+  const polishOff = type==='polish' && !els.togglePolish?.checked;
+  chain.forEach((id, idx)=>{
+    const meta = (type==='stt' ? STT_LABELS[id] : POLISH_LABELS[id]) || {label:id, sub:''};
+    const hasKey = hasKeyFor(id);
+    const item = document.createElement('div');
+    item.className = 'chain-item' + (hasKey?'':' missing') + (polishOff?' polish-off':'');
+    item.draggable = true;
+    item.dataset.id = id;
+    item.dataset.index = idx;
+    item.setAttribute('role','listitem');
+    item.setAttribute('aria-label', `${idx+1}. ${meta.label}`);
+    item.innerHTML = `
+      <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
+      <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
+        <span class="chain-label" style="font-size:13px">${meta.label}</span>
+        ${meta.sub?`<span style="font-size:11px;color:var(--muted)">${meta.sub}</span>`:''}
+      </div>
+      <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span>
+      <div class="chain-actions">
+        <button class="chain-btn" data-up aria-label="بالا" ${idx===0?'disabled':''}>▲</button>
+        <button class="chain-btn" data-down aria-label="پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
+      </div>
+    `;
+    // up/down
+    item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
+    item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
+    // drag
+    item.addEventListener('dragstart', e=>{
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+      e.dataTransfer.setData('text/plain', idx);
+    });
+    item.addEventListener('dragend', ()=> item.classList.remove('dragging'));
+    // click label to show engine info (optional)
+    container.appendChild(item);
+  });
+  // dragover reordering
+  container.ondragover = e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; };
+  container.ondrop = e=>{
+    e.preventDefault();
+    const from = parseInt(e.dataTransfer.getData('text/plain'),10);
+    const target = e.target.closest('.chain-item');
+    if(!target) return;
+    const to = parseInt(target.dataset.index,10);
+    if(isNaN(from)||isNaN(to)||from===to) return;
+    const arr = type==='stt'? sttChainState : polishChainState;
+    const [moved]=arr.splice(from,1);
+    arr.splice(to,0,moved);
+    renderAllChains();
+    persistChains();
+  };
+}
+
+function moveChain(type, idx, dir){
+  const arr = type==='stt'? sttChainState : polishChainState;
+  const n = idx+dir;
+  if(n<0||n>=arr.length) return;
+  [arr[idx], arr[n]] = [arr[n], arr[idx]];
+  renderAllChains();
+  persistChains();
+}
+
+function renderAllChains(){
+  renderChain(els.sttChain, sttChainState, 'stt');
+  renderChain(els.polishChain, polishChainState, 'polish');
+  const hint = document.getElementById('polish-disabled-hint');
+  if(hint) hint.style.display = els.togglePolish?.checked ? 'none' : 'block';
+}
+
+function persistChains(){
+  Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish.checked });
+  updateBadge();
+  Quota.render(els.quotaGrid);
+}
+
 // --- settings wiring ---
-function updateBadge(){ const s=Storage.getSettings(); els.engineBadge.textContent = s.primary==='groq' ? 'موتور: Groq' : `موتور: ${s.model}`; }
-function validate(){ const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(); const hg=$('hint-groq'), hgm=$('hint-gemini'); hg.className='hint'+(g&&!g.startsWith('gsk_')?' err':''); hg.innerHTML=g&&!g.startsWith('gsk_')?'⚠️ Groq باید با gsk_ شروع شود':'با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.'; const ok=gm.startsWith('AQ.')||gm.startsWith('AIza'); hgm.className='hint'+(gm&&!ok?' err':''); hgm.innerHTML=gm&&!ok?'⚠️ باید با AQ. یا AIza شروع شود':'کلید جدید با <code>AQ.</code> شروع می‌شود. از aistudio.google.com بگیر.'; }
+function updateBadge(){
+  const s=Storage.getSettings();
+  const first = s.sttChain?.[0] || s.primary || 'groq';
+  const label = first==='groq' ? 'Groq' : first;
+  const pol = s.polishEnabled ? ' • پالیش روشن' : ' • پالیش خاموش';
+  els.engineBadge.textContent = `موتور: ${label}${pol}`;
+  // fallback indicator in badge color?
+  els.engineBadge.style.opacity = hasKeyFor(first) ? '1' : '0.6';
+}
+function validate(){
+  const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(), or=els.keyOpenrouter?.value.trim()||'';
+  const hg=$('hint-groq'), hgm=$('hint-gemini'), hor=$('hint-openrouter');
+  hg.className='hint'+(g&&!g.startsWith('gsk_')?' err':'');
+  hg.innerHTML=g&&!g.startsWith('gsk_')?'⚠️ Groq باید با gsk_ شروع شود':'با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.';
+  const ok=gm.startsWith('AQ.')||gm.startsWith('AIza');
+  hgm.className='hint'+(gm&&!ok?' err':'');
+  hgm.innerHTML=gm&&!ok?'⚠️ باید با AQ. یا AIza شروع شود':'کلید جدید با <code>AQ.</code> شروع می‌شود. از aistudio.google.com بگیر.';
+  if(hor){
+    const okOr = !or || or.startsWith('sk-or-');
+    hor.className='hint'+(or&&!okOr?' err':'');
+    hor.innerHTML= or&&!okOr ? '⚠️ معمولا با sk-or-v1- شروع می‌شود' : 'از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Gemini انجام می‌شود. مدل‌های Qwen از اینجا استفاده می‌کنند.';
+  }
+  // re-render badges live
+  renderAllChains();
+}
 function loadSettings(){
   const s=Storage.getSettings();
-  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey; els.selectPrimary.value=s.primary; els.selectModel.value=s.model;
+  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey; if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey;
+  sttChainState=[...s.sttChain];
+  polishChainState=[...s.polishChain];
+  if(els.togglePolish) els.togglePolish.checked=s.polishEnabled;
   els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
+  renderAllChains();
   updateBadge(); validate(); Quota.render(els.quotaGrid);
   if(!s.groqKey&&!s.geminiKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
-function saveSettings(){ Storage.saveSettings({ groqKey: els.keyGroq.value, geminiKey: els.keyGemini.value, primary: els.selectPrimary.value, model: els.selectModel.value, realtime: els.toggleRealtime.checked, vad: els.toggleVad.checked, autocopy: els.toggleAutocopy.checked }); updateBadge(); validate(); Quota.render(els.quotaGrid); }
+function saveSettings(){
+  Storage.saveSettings({
+    groqKey: els.keyGroq.value,
+    geminiKey: els.keyGemini.value,
+    openrouterKey: els.keyOpenrouter?.value||'',
+    realtime: els.toggleRealtime.checked,
+    vad: els.toggleVad.checked,
+    autocopy: els.toggleAutocopy.checked,
+    sttChain: sttChainState,
+    polishChain: polishChainState,
+    polishEnabled: els.togglePolish?.checked ?? true,
+  });
+  updateBadge(); validate(); Quota.render(els.quotaGrid);
+}
 els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
+if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
+if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
+
 loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
 $('btn-save-modal').onclick=()=>{ saveSettings(); els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
+$('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
+$('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=[...POLISH_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
-els.selectPrimary.addEventListener('change',updateBadge); els.selectModel.addEventListener('change',updateBadge);
 els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
 els.toggleVad.addEventListener('change',()=> Storage.saveSettings({vad: els.toggleVad.checked}));
 els.toggleAutocopy.addEventListener('change',()=> Storage.saveSettings({autocopy: els.toggleAutocopy.checked}));
@@ -149,11 +303,9 @@ els.output.addEventListener('click',saveCursor); els.output.addEventListener('ke
 const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; };
 let draftTimer=null;
 els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
-// restore draft + heights + manual splitter wiring (saves H_LOG via Storage)
 (() => {
   const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('info','پیش‌نویس بارگذاری شد',{chars:d.length}); }
   const h=Storage.getHeights(); if(h.out) els.output.style.height=h.out; if(h.log) els.logPanel.style.height=h.log;
-  // inject splitter between output-meta and log-panel if missing (keeps seam: only app.js touches splitter)
   let splitter = document.getElementById('log-splitter');
   if(!splitter){
     splitter = document.createElement('div');
@@ -162,10 +314,8 @@ els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTim
     splitter.setAttribute('aria-orientation','horizontal');
     splitter.setAttribute('aria-label','تغییر ارتفاع لاگ');
     splitter.title = 'بکش تا ارتفاع لاگ عوض شود — ذخیره خودکار';
-    // place right before log-panel (after output-meta/resizer-hint)
     els.logPanel.parentNode.insertBefore(splitter, els.logPanel);
   }
-  // mouse/touch drag handling
   let dragging=false, startY=0, startH=0;
   const clamp = v => Math.max(80, Math.min(v, Math.floor(window.innerHeight*0.55)));
   const onMove = (e)=>{
@@ -203,7 +353,6 @@ els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTim
   };
   splitter.addEventListener('mousedown', onDown);
   splitter.addEventListener('touchstart', onDown, {passive:false});
-  // keep output height persistence via ResizeObserver (output only, log now via splitter)
   if(window.ResizeObserver){
     const roOut=new ResizeObserver(()=>{ clearTimeout(roOut._t); roOut._t=setTimeout(()=> Storage.saveHeights({out: getComputedStyle(els.output).height}),300); }); roOut.observe(els.output);
   }
@@ -224,7 +373,6 @@ function startWave(){
 }
 function stopWave(){ if(animId) cancelAnimationFrame(animId); waveCtx.clearRect(0,0,els.wave.width,els.wave.height); waveCtx.fillStyle='#333439'; waveCtx.fillRect(0,els.wave.height/2-1,els.wave.width,2); }
 
-// realtime — closure snapshot: هر ضبط snap خودش را دارد (id/version) تا race جهانی حذف شود
 let rtVersion = 0;
 let rtSnap = null;
 
@@ -233,7 +381,6 @@ function makeOnInterim(snap){
   return (preview, fin)=>{
     const finCum = fin || '';
     const interChunk = preview.slice(finCum.length);
-    // fin تجمعی است — فقط وقتی واقعا جدید شد ست کن تا لاگ اسپم نشود
     if(finCum && finCum !== snap.committed){
       const newChunk = finCum.slice(snap.committed.length);
       snap.committed = finCum;
@@ -243,14 +390,11 @@ function makeOnInterim(snap){
     const fullPreview = snap.committed + snap.pending;
     if(els.liveFinal) els.liveFinal.textContent = snap.committed;
     if(els.liveInterim) els.liveInterim.textContent = snap.pending;
-    // diff-merge: اگر کاربر وسط ضبط دستی ویرایش کرد، متن دستی را پاک نکن
     const expected = snap.before + lastPreview + snap.after;
     if(els.output.value !== expected){
-      // ویرایش دستی تشخیص داده شد — فقط پیش‌نمایش زنده را به‌روز کن، مقدار اصلی را ننویس
       Logger.log('debug','realtime manual edit detected — keep user edit', { expectedLen: expected.length, actualLen: els.output.value.length });
       lastPreview = fullPreview;
       updateCounts();
-      if(finChunk) Logger.log('debug','realtime committed',finChunk.trim());
       return;
     }
     els.output.value = snap.before + fullPreview + snap.after;
@@ -258,18 +402,15 @@ function makeOnInterim(snap){
     els.output.setSelectionRange(cursor, cursor);
     lastPreview = fullPreview;
     updateCounts();
-    if(finChunk) Logger.log('debug','realtime committed',finChunk.trim());
   };
 }
 
-// recording + VAD
 let isRecording=false, vadTimer=null;
 async function startRecording(){
   saveCursor();
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
   let snap=null;
   try{
-    // closure snapshot با id/version برای هر ضبط — از race گلوبال جلوگیری می‌کند
     snap = { id: ++rtVersion, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
     rtSnap = snap;
     const vadMs = s.vad ? 250 : undefined;
@@ -293,7 +434,6 @@ function stopRecording(){
   Audio.stop(); isRecording=false; els.btnMic.textContent='🎤 شروع صحبت'; els.btnMic.classList.remove('recording','realtime-active');
   stopVAD(); stopWave(); Realtime.stop();
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
-  // اگر متنی نیمه‌کاره مانده، کرسر را آخر preview بگذار ولی snap را نگه دار تا handleTranscription جایگزین کند
   if(snap && (snap.committed+snap.pending)){
     const cursor = snap.basePos + (snap.committed+snap.pending).length;
     selStart=selEnd=cursor;
@@ -305,7 +445,6 @@ function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser();
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
 async function handleTranscription(blob, snap){
-  // snap = closure snapshot این ضبط؛ stale را با id/version نادیده بگیر
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
@@ -317,17 +456,14 @@ async function handleTranscription(blob, snap){
     return;
   }
   try{
-    const { text, engine } = await Transcription.transcribe(blob);
-    // بعد از await هم stale چک کن — دو ضبط پشت هم race ندهد
+    const { text, engine, polishModel } = await Transcription.transcribe(blob);
     if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); return; }
     if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); if(snap && snapId===rtVersion) rtSnap=null; return; }
     const s=Storage.getSettings();
     if(s.realtime && snap){
-      // جایگزینی دقیق با diff-merge: اگر کاربر وسط ضبط ویرایش دستی کرده بود، متن دستی را پاک نکن
       const finalText = text.trim();
       const expected = snap.before + snap.committed + snap.pending + snap.after;
       if(els.output.value !== expected){
-        // ویرایش دستی — در موقعیت کرسر فعلی درج کن به جای بازنویسی before/after
         Logger.log('warn','realtime manual edit before final — fallback to cursor insert',{ snapId });
         const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length);
         els.output.value=o.substring(0,ps)+finalText+o.substring(pe);
@@ -342,24 +478,34 @@ async function handleTranscription(blob, snap){
       const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.substring(0,ps)+text+o.substring(pe); els.output.setSelectionRange(ps+text.length,ps+text.length);
     }
     els.output.focus(); saveCursor();
-    // پاکسازی فقط اگر همین snap فعال است — از پاک کردن ضبط جدیدتر جلوگیری کن
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
     Quota.render(els.quotaGrid);
-    Logger.setStatus(`✅ با ${engine} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
-    Logger.log('info','success',{engine, len:text.length});
+    const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
+    Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
+    Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
     Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
     let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401) h='کلید نامعتبر';
     Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
-    // در خطا preview را نگه دار تا کاربر متن زنده را از دست ندهد، فقط rt را ریست نکن
   }
 }
 
 // misc
 $('btn-test-groq').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+e.message,'error'); } };
 $('btn-test-gemini').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+e.message,'error'); } };
+$('btn-test-polish')?.addEventListener('click', async()=>{
+  saveSettings();
+  Logger.setStatus('تست پالیش...','warn');
+  const sample='رابطه کاربری زیبا است و می شود بهتر کرد';
+  try{
+    const out=await Transcription.polishText(sample);
+    Logger.setStatus(`✅ پالیش: ${out.slice(0,60)}`,'info');
+    Logger.log('info','polish test',{in:sample, out});
+    Logger.toast(`پالیش: ${out}`);
+  }catch(e){ Logger.setStatus('❌ پالیش: '+e.message,'error'); }
+});
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
 els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 stopWave();
