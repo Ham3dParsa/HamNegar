@@ -20,6 +20,76 @@ const els = {
 };
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
+
+// --- log filter/search UI lives in app.js (seam: logger stays 3-call log/setStatus/toast) ---
+let currentFilter = 'all';
+let searchQuery = '';
+function passes(level, text) {
+  if (currentFilter !== 'all' && level !== currentFilter) return false;
+  if (searchQuery && !text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+  return true;
+}
+function applyFilters() {
+  if (!els.logBody) return;
+  for (const el of els.logBody.children) {
+    const lvl = el.dataset.level || 'info';
+    const ok = passes(lvl, el.textContent);
+    el.classList.toggle('hidden', !ok);
+  }
+}
+function buildFilterUI() {
+  const header = document.getElementById('log-header');
+  if (!header || header.querySelector('.log-filters')) return;
+  const filtersWrap = document.createElement('div');
+  filtersWrap.className = 'log-filters';
+  filtersWrap.setAttribute('role', 'group');
+  filtersWrap.setAttribute('aria-label', 'فیلتر سطح لاگ');
+  const levels = [
+    ['all', 'همه'],
+    ['info', 'info'],
+    ['warn', 'warn'],
+    ['error', 'error'],
+    ['debug', 'debug'],
+  ];
+  for (const [lvl, label] of levels) {
+    const btn = document.createElement('button');
+    btn.className = 'log-filter' + (lvl === 'all' ? ' active' : '');
+    btn.dataset.level = lvl;
+    btn.textContent = label;
+    btn.type = 'button';
+    btn.addEventListener('click', () => {
+      currentFilter = lvl;
+      filtersWrap.querySelectorAll('.log-filter').forEach(b => b.classList.toggle('active', b.dataset.level === lvl));
+      applyFilters();
+    });
+    filtersWrap.appendChild(btn);
+  }
+  const search = document.createElement('input');
+  search.id = 'log-search';
+  search.type = 'search';
+  search.placeholder = 'جستجو…';
+  search.setAttribute('aria-label', 'جستجو در لاگ');
+  search.addEventListener('input', () => {
+    searchQuery = search.value.trim();
+    applyFilters();
+  });
+  let actionsDiv = header.querySelector('#log-actions');
+  if (!actionsDiv) {
+    const btns = header.querySelector('div');
+    if (btns) { btns.id = 'log-actions'; actionsDiv = btns; }
+  }
+  header.insertBefore(search, actionsDiv);
+  header.insertBefore(filtersWrap, search);
+}
+buildFilterUI();
+// wrap Logger.log to hide new lines immediately using textContent after append (avoids detached innerText "")
+const _origLog = Logger.log.bind(Logger);
+Logger.log = (level, msg, data) => {
+  _origLog(level, msg, data);
+  const el = els.logBody.lastElementChild;
+  if (el && !passes(level, el.textContent)) el.classList.add('hidden');
+};
+
 if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
 
 // --- settings wiring ---
@@ -48,12 +118,12 @@ els.toggleAutocopy.addEventListener('change',()=> Storage.saveSettings({autocopy
 $('btn-clear-log').onclick=()=> els.logBody.innerHTML='';
 $('btn-copy-log').onclick=async()=>{
   const visible = [...els.logBody.children].filter(el=> !el.classList.contains('hidden'));
-  const text = (visible.length ? visible : [...els.logBody.children]).map(e=>e.innerText).join('\n') || 'خالی';
+  const text = visible.map(e=>e.textContent).join('\n');
+  if (!text) { Logger.toast('چیزی برای کپی نیست'); return; }
   await navigator.clipboard.writeText(text);
-  Logger.toast(visible.length && visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
+  Logger.toast(visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
 };
 let logCollapsed=false;
-const _splitterEl = document.getElementById('log-splitter');
 els.btnToggleLog.onclick=()=>{
   logCollapsed=!logCollapsed;
   const splitter = document.getElementById('log-splitter');
