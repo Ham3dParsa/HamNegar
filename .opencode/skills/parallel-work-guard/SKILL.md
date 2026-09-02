@@ -9,12 +9,12 @@ description: Guard parallel work on HamNegar — check seam claims before lock a
 
 Run this skill at every Contract Lock and before any branch/worktree.
 
-## Worktree gate (always)
+## Worktree gate (always) — HamNegar: `C:\Python_Programming\HamNegar\.worktrees\`
 
-Every locked implementation runs in its own worktree — never in `main`.
+Every locked implementation runs in its own worktree under `.worktrees/<branch>` — never in `main`.
 
-- Before lock, confirm target branch has a worktree (`using-git-worktrees`).
-- Never leave uncommitted changes in `main`.
+- Before lock, confirm `C:\Python_Programming\HamNegar\.worktrees\<branch>` exists; if not, create via `git worktree add .worktrees/<branch> -b <branch> origin/main` (see `using-git-worktrees`).
+- Never leave uncommitted changes in `main` (`C:\Python_Programming\HamNegar`).
 - If `main` is dirty, treat it as read-only owned by another session — route work to your worktree and report it.
 
 ## Steps

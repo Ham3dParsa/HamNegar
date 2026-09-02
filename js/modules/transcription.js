@@ -66,27 +66,23 @@ async function queryPolishViaGemini(text, model){
   if(out) Quota.record(model);
   return out;
 }
-async function queryPolishViaOpenRouter(text, model){
-  const { openrouterKey: k, geminiKey: gk } = Storage.getSettings();
-  // if no openrouter key but gemini exists, fallback to gemini-flash-lite for polish
-  if(!k){
-    if(gk) return queryPolishViaGemini(text, 'gemini-flash-lite-latest');
-    throw Object.assign(new Error('کلید OpenRouter نیست'),{status:401});
-  }
+async function queryPolishViaGroq(text, model){
+  const { groqKey: k } = Storage.getSettings();
+  if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   let res; try{
-    res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`,'HTTP-Referer':'https://hamnegar.local','X-Title':'HamNegar'},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
+    res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
   if(out) Quota.record(model);
   return out;
 }
 async function queryPolish(text, model){
-  // model contains "/" -> OpenRouter/Kilo, else Gemini-style
-  if(model.includes('/')) return queryPolishViaOpenRouter(text, model);
+  // پالیش فقط از Groq — مدل‌های Qwen مدرن اولویت (طبق خواسته کاربر، نه OpenRouter)
+  if(model.includes('/')) return queryPolishViaGroq(text, model);
   return queryPolishViaGemini(text, model);
 }
 
@@ -165,7 +161,7 @@ export const Transcription = {
           if(e.status===401||e.status===403){
             const s=Storage.getSettings();
             const isOR = pm.includes('/');
-            if(isOR && !s.openrouterKey){ Logger.log('warn','کلید OpenRouter نیست — پالیش فالبک متوقف'); break; }
+            if(isOR && !s.groqKey){ Logger.log('warn','کلید Groq برای پالیش نیست — فالبک متوقف'); break; }
           }
           if(e.status===429) await new Promise(r=>setTimeout(r,500));
           if(i===polishChain.length-1) break;
