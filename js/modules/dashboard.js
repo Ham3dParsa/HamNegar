@@ -15,7 +15,7 @@ export const Dashboard = {
   ensureReportUI(){
     if(document.getElementById('report-overall')) return;
     const quotaGrid = document.getElementById('quota-grid');
-    if(!quotaGrid) return;
+    if(!quotaGrid?.parentNode) return;
     const sec=document.createElement('section');
     sec.id='report-overall';
     sec.className='report-overall';
@@ -39,7 +39,8 @@ export const Dashboard = {
     quotaGrid.parentNode.insertBefore(sec, quotaGrid);
     // move quota-grid inside details to avoid floating outside report
     const detailsEl = sec.querySelector('#report-details');
-    if (detailsEl && quotaGrid) detailsEl.appendChild(quotaGrid);
+    if(!detailsEl){ console.warn('report-details not found'); }
+    else if(quotaGrid) detailsEl.appendChild(quotaGrid);
     sec.querySelectorAll('[data-period]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         sec.querySelectorAll('[data-period]').forEach(b=>{ b.classList.remove('active'); b.setAttribute('aria-selected','false'); });
