@@ -88,13 +88,9 @@ async function queryPolish(text, model){
   return queryPolishViaGemini(text, model);
 }
 
-function hasKeyForStt(id){
+function hasKeyFor(id){
   const s=Storage.getSettings();
   if(id==='groq') return !!s.groqKey;
-  return !!s.geminiKey;
-}
-function hasKeyForPolish(id){
-  const s=Storage.getSettings();
   if(id.includes('/')) return !!s.openrouterKey || !!s.geminiKey;
   return !!s.geminiKey;
 }
@@ -105,13 +101,13 @@ export const Transcription = {
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
     const rawChain = (sttChain && sttChain.length) ? sttChain : ['groq','gemini-flash-lite-latest'];
     // pre-filter to avoid token waste: skip engines without key before any fetch
-    const chain = rawChain.filter(hasKeyForStt);
+    let chain = rawChain.filter(id => hasKeyFor(id));
     if(chain.length===0){
       // keep first error style for missing keys
       throw Object.assign(new Error('کلید STT نیست — تنظیمات را چک کن'),{status:401});
     }
     if(chain.length !== rawChain.length){
-      const skipped = rawChain.filter(id=> !hasKeyForStt(id));
+      const skipped = rawChain.filter(id => !hasKeyFor(id));
       if(skipped.length) Logger.log('info','STT بی‌کلید حذف شد', { skipped });
     }
     let lastErr=null, usedEngine='—', rawText='';
@@ -151,9 +147,9 @@ export const Transcription = {
     if(polishEnabled && polishChain && polishChain.length){
       // first always try rule-based quick fix for spec example, but still attempt model for broader polish
       const ruleFixed = rulePolish(rawText);
-      const usablePolish = polishChain.filter(hasKeyForPolish);
+      let usablePolish = polishChain.filter(id => hasKeyFor(id));
       if(usablePolish.length !== polishChain.length){
-        const skippedP = polishChain.filter(id=> !hasKeyForPolish(id));
+        const skippedP = polishChain.filter(id => !hasKeyFor(id));
         if(skippedP.length) Logger.log('info','پالیش بی‌کلید حذف شد', { skipped: skippedP });
       }
       // try model chain (pre-filtered)
@@ -191,7 +187,7 @@ export const Transcription = {
     const { polishChain, polishEnabled } = Storage.getSettings();
     if(!polishEnabled) return ruleFixed;
     const rawChain = polishChain?.length ? polishChain : ['qwen/qwen3-30b-a3b:free'];
-    const chain = rawChain.filter(hasKeyForPolish);
+    const chain = rawChain.filter(id => hasKeyFor(id));
     if(chain.length===0) return ruleFixed;
     for(const m of chain){
       try{ const out=await queryPolish(text,m); if(out) return rulePolish(out); }catch{}
