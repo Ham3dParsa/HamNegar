@@ -123,9 +123,10 @@ let isRecording=false, vadTimer=null;
 async function startRecording(){
   saveCursor();
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
+  let snap=null;
   try{
     // closure snapshot با id/version برای هر ضبط — از race گلوبال جلوگیری می‌کند
-    const snap = { id: ++rtVersion, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
+    snap = { id: ++rtVersion, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
     rtSnap = snap;
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
@@ -140,7 +141,7 @@ async function startRecording(){
     }
     if(s.vad) startVAD();
     Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad, snapId: snap.id});
-  }catch(e){ Logger.setStatus('میکروفون خطا: '+e.message,'error'); Logger.log('error','getUserMedia',e.message); Logger.toast(e.message); }
+  }catch(e){ if(snap && rtSnap?.id===snap.id) rtSnap=null; Logger.setStatus('میکروفون خطا: '+e.message,'error'); Logger.log('error','getUserMedia',e.message); Logger.toast(e.message); }
 }
 function stopRecording(){
   if(!isRecording) return;
@@ -161,7 +162,6 @@ function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
 async function handleTranscription(blob, snap){
   // snap = closure snapshot این ضبط؛ stale را با id/version نادیده بگیر
-  const activeId = rtSnap?.id;
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
@@ -181,7 +181,6 @@ async function handleTranscription(blob, snap){
     if(s.realtime && snap){
       // جایگزینی دقیق با diff-merge: اگر کاربر وسط ضبط ویرایش دستی کرده بود، متن دستی را پاک نکن
       const finalText = text.trim();
-      const previewLen = (snap.committed+snap.pending).length;
       const expected = snap.before + snap.committed + snap.pending + snap.after;
       if(els.output.value !== expected){
         // ویرایش دستی — در موقعیت کرسر فعلی درج کن به جای بازنویسی before/after

@@ -48,7 +48,16 @@ export const Transcription = {
       return { text, engine: primary==='groq'?'Groq':model };
     }catch(err){
       Logger.log('warn',`${primary} خطا`,{msg:err.message, status:err.status});
-      if(err.status===401||err.status===403) throw err; // auth -> no fallback, locality: fail fast
+      if(err.status===401||err.status===403){
+        const s=Storage.getSettings();
+        const hasSecondary = secondary==='groq' ? s.groqKey : s.geminiKey;
+        if(hasSecondary){
+          Logger.log('warn',`auth ${primary} 401/403 → fallback ${secondary}`,{hasSecondary:!!hasSecondary});
+          const text=await call(secondary);
+          return { text, engine: secondary==='groq'?'Groq':model };
+        }
+        throw err;
+      }
       if(err.status===404 && primary==='gemini'){
         Logger.log('warn','فالبک هوشمند: 404 مدل → groq');
         const text=await queryGroq(blob);
