@@ -455,16 +455,17 @@ function renderOverall(){
     <div class="overall-card accent"><span>⏱ زمان ذخیره‌شده</span><b>${s.savedMinutes} دقیقه</b><small>نسبت به تایپ ۴۰ کلمه/دقیقه</small></div>
   `;
   if(funRow){
-    const fav = s.favorite ? `⭐ محبوب: ${s.favorite.label} (${s.favorite.count} بار)` : '—';
-    const longest = s.fun.longestSessionMin ? `⏳ طولانی‌ترین: ${s.fun.longestSessionMin} دقیقه` : '';
-    const streak = s.fun.streakDays ? `🔥 تداوم: ${s.fun.streakDays} روز` : '';
-    const busy = s.fun.busiestDay ? `📌 شلوغ: ${s.fun.busiestDay.date}` : '';
-    funRow.innerHTML=`<span>${fav}</span><span>${busy}</span><span>${longest}</span><span>${streak}</span>`;
+    const favRaw = s.favorite ? `⭐ محبوب: ${s.favorite.label} (${s.favorite.count} بار)` : '—';
+    const longestRaw = s.fun.longestSessionMin ? `⏳ طولانی‌ترین: ${s.fun.longestSessionMin} دقیقه` : '';
+    const streakRaw = s.fun.streakDays ? `🔥 تداوم: ${s.fun.streakDays} روز` : '';
+    const busyRaw = s.fun.busiestDay ? `📌 شلوغ: ${s.fun.busiestDay.date}` : '';
+    funRow.innerHTML=`<span>${esc(favRaw)}</span><span>${esc(busyRaw)}</span><span>${esc(longestRaw)}</span><span>${esc(streakRaw)}</span>`;
   }
   if(seriesStrip){
-    const series=Quota.getSeries(7);
+    const daysForStrip = activePeriod==='month' ? 30 : activePeriod==='all' ? 30 : activePeriod==='week' ? 7 : 7;
+    const series=Quota.getSeries(daysForStrip);
     const max=Math.max(1, ...series.map(x=>x.count));
-    seriesStrip.innerHTML=series.map(d=> `<div class="series-bar" title="${d.date}: ${d.count}" style="height:${Math.max(8, Math.round(d.count/max*100))}%"><span>${d.count}</span></div>`).join('') || '<span style="color:var(--muted);font-size:11px">هنوز داده‌ای نیست</span>';
+    seriesStrip.innerHTML=series.map(d=> `<div class="series-bar" title="${esc(d.date)}: ${esc(String(d.count))}" style="height:${Math.max(8, Math.round(d.count/max*100))}%"><span>${esc(String(d.count))}</span></div>`).join('') || '<span style="color:var(--muted);font-size:11px">هنوز داده‌ای نیست</span>';
   }
 }
 async function startRecording(){

@@ -38,9 +38,14 @@ function migrateIfNeeded() {
   const q = Storage.getQuotaRaw();
   if (!q || !q._date) return;
   const counts = {};
+  const skipped = [];
   for (const k of Object.keys(LIMITS)) if (q[k]) counts[k] = q[k];
+  for (const k of Object.keys(q)) if (k !== '_date' && !LIMITS[k] && q[k]) skipped.push({ k, v: q[k] });
+  if (skipped.length) {
+    try { console.warn('[Stats] migration skipped unknown keys', skipped); } catch {}
+  }
   if (Object.keys(counts).length === 0) return;
-  // ignore live-transcribe if present
+  // ignore live-transcribe if present (already not in LIMITS, but guard)
   delete counts['live-transcribe'];
   if (Object.keys(counts).length === 0) return;
   hist.push({ date: q._date, counts, words: 0, chars: 0, durationMs: 0, sessions: Object.values(counts).reduce((a,b)=>a+b,0) });
@@ -63,15 +68,15 @@ function aggregate(period) {
   if (period === 'today') {
     filtered = hist.filter(h=> h.date === todayStr);
   } else if (period === 'week') {
-    // last 7 days inclusive
+    // last 7 days inclusive — use ms offset to avoid local TZ setDate drift vs Tehran
     const dates = new Set();
-    const now = new Date();
-    for (let i=0;i<7;i++){ const d=new Date(now); d.setDate(now.getDate()-i); dates.add(tehranDate(d)); }
+    const now = Date.now();
+    for (let i=0;i<7;i++){ const d=new Date(now - i*86400000); dates.add(tehranDate(d)); }
     filtered = hist.filter(h=> dates.has(h.date));
   } else if (period === 'month') {
     const dates = new Set();
-    const now = new Date();
-    for (let i=0;i<30;i++){ const d=new Date(now); d.setDate(now.getDate()-i); dates.add(tehranDate(d)); }
+    const now = Date.now();
+    for (let i=0;i<30;i++){ const d=new Date(now - i*86400000); dates.add(tehranDate(d)); }
     filtered = hist.filter(h=> dates.has(h.date));
   } else { // all
     filtered = hist;
@@ -97,6 +102,8 @@ export const Stats = {
     // only stt counts toward quota display; polish ignored for quota but words still maybe? For now count all stt
     if (kind !== 'stt') return;
     if (!success) return;
+    // avoid polluting totals with empty sessions (e.g. engine returned '' but duration>0)
+    if (!words && !chars) return;
     migrateIfNeeded();
     const date = tehranDate();
     const hist = loadHistory();
@@ -130,23 +137,29 @@ export const Stats = {
       favorite={ model: byModel[0].model, label: byModel[0].label, count: byModel[0].count };
     }
     const minutes = totals.minutes;
-    const avgWpm = totals.durationMs>0 ? Math.round(totals.words / (totals.durationMs/60000)) : 0;
+    const avgWpm = totals.durationMs>=1000 ? Math.min(600, Math.round(totals.words / (totals.durationMs/60000))) : 0;
     const savedMinutes = Math.round(totals.words/40);
     const speedBoost = avgWpm>0 ? (avgWpm/40).toFixed(1)+'×' : '—';
     // fun stats
     const histForFun = fullHistory || history;
     let busiestDay=null, longestSessionMin=0;
     if (histForFun && histForFun.length){
-      busiestDay = histForFun.reduce((a,b)=> (a.words||0)>(b.words||0)?a:b, histForFun[0]);
+      // prefer words; if all words==0 fallback to sessions count
+      const maxWords = Math.max(0, ...histForFun.map(d=> d.words||0));
+      if (maxWords > 0) {
+        busiestDay = histForFun.reduce((a,b)=> (b.words||0)>(a.words||0)?b:a, histForFun[0]);
+      } else {
+        busiestDay = histForFun.reduce((a,b)=> (b.sessions||0)>(a.sessions||0)?b:a, histForFun[0]);
+      }
       longestSessionMin = Math.max(0, ...histForFun.map(d=> (d.durationMs||0)/60000));
       longestSessionMin = +longestSessionMin.toFixed(2);
     }
-    // streak: consecutive days with sessions>0 ending today
+    // streak: consecutive days with sessions>0 ending today — Tehran timezone
     let streakDays=0;
     if (histForFun && histForFun.length){
       const dateSet = new Set(histForFun.filter(h=> (h.sessions||0)>0).map(h=>h.date));
-      const now=new Date();
-      for(let i=0;i<365;i++){ const d=new Date(now); d.setDate(now.getDate()-i); const ds=tehranDate(d); if(dateSet.has(ds)) streakDays++; else break; }
+      const baseMs = Date.now();
+      for(let i=0;i<365;i++){ const d=new Date(baseMs - i*86400000); const ds=tehranDate(d); if(dateSet.has(ds)) streakDays++; else break; }
     }
     const rangeLabel = period==='today'?'امروز': period==='week'?'هفته': period==='month'?'ماه':'کل';
     return {

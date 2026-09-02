@@ -8,23 +8,29 @@ export { LIMITS };
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
+// keep expanded state per container so period switch doesn't collapse unexpectedly
+const expandedMap = new WeakMap();
+
 export const Quota = {
   record(model, meta={}) {
     if (!model) return;
-    // dual write: keep legacy QUOTA_USAGE for migrate, plus Stats history
-    try{
-      const q = Storage.getQuotaRaw();
-      const today = Stats._tehranDate();
-      if (q._date !== today) { q._date = today; Object.keys(LIMITS).forEach(k => q[k]=0); }
-      q[model]=(q[model]||0)+1;
-      Storage.saveQuotaRaw(q);
-    }catch{}
-    Stats.record({ model, durationMs: meta.durationMs, words: meta.words, chars: meta.chars, success:true, kind:'stt' });
+    const words = meta.words||0;
+    const chars = meta.chars||0;
+    // skip empty payload to avoid polluting totals (Kilo suggestion)
+    if (!words && !chars) return;
+    // drop dual-write drift: Stats is source of truth; QUOTA_USAGE is legacy read-only for migrateIfNeeded
+    // do not write legacy on new records — migration is one-way
+    Stats.record({ model, durationMs: meta.durationMs, words, chars, success: meta.success!==false, kind: meta.kind||'stt' });
   },
   render(container, opts={}) {
     if (!container) return;
     const period = opts.period || 'today';
-    const expanded = !!opts.expanded;
+    // persist expanded across period switches unless explicitly collapsed
+    let expanded = !!opts.expanded;
+    if (opts.expanded === undefined && expandedMap.has(container)) {
+      expanded = expandedMap.get(container);
+    }
+    expandedMap.set(container, expanded);
     const summary = Stats.getSummary(period);
     let byModel = summary.byModel;
 
@@ -57,7 +63,11 @@ export const Quota = {
     if (!expanded && byModel.length>3){
       container.insertAdjacentHTML('beforeend', `<button class="btn-ghost btn-sm" data-expand-quota>نمایش همه (${byModel.length})</button>`);
       const btn = container.querySelector('[data-expand-quota]');
-      if (btn) btn.addEventListener('click', ()=> Quota.render(container, { ...opts, expanded:true }));
+      if (btn) btn.addEventListener('click', ()=> Quota.render(container, { period, expanded:true }));
+    } else if (expanded && byModel.length>3) {
+      container.insertAdjacentHTML('beforeend', `<button class="btn-ghost btn-sm" data-collapse-quota>نمایش کمتر</button>`);
+      const btn2 = container.querySelector('[data-collapse-quota]');
+      if (btn2) btn2.addEventListener('click', ()=> Quota.render(container, { period, expanded:false }));
     }
   },
   // for dashboard / tests
