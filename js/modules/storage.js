@@ -126,30 +126,29 @@ export const Storage = {
     };
   },
   saveSettings(patch) {
-    // BaseURL سفارشی مجاز است per spec — https enforced, host allowlist در fetch-time با confirm (transcription.js: assertTrustedBase). Waiver: Contract lock polish-dual-provider Rule #5
-    const allowedGroq = ['api.groq.com'];
-    const allowedOR = ['api.openrouter.ai','openrouter.ai'];
-    if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
+    // validate BaseURLs first — atomic: no partial persist on throw (waiver: custom host allowed, confirm at fetch)
+    let groqBaseNorm = null, orBaseNorm = null;
     if ('groqBaseURL' in patch) {
       const v = (patch.groqBaseURL||'').trim();
       if(v){
         let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'groqBaseURL'}); }
         if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400, field:'groqBaseURL'});
-        // custom host allowed per spec — fetch-time confirm in transcription.js
-        localStorage.setItem(KEYS.GROQ_BASE, v.replace(/\/+$/,''));
-      } else localStorage.setItem(KEYS.GROQ_BASE, GROQ_BASE_DEFAULT);
+        groqBaseNorm = v.replace(/\/+$/,'');
+      } else groqBaseNorm = GROQ_BASE_DEFAULT;
     }
-    if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
-    if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
     if ('openrouterBaseURL' in patch) {
       const v = (patch.openrouterBaseURL||'').trim();
       if(v){
         let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'openrouterBaseURL'}); }
         if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400, field:'openrouterBaseURL'});
-        // custom host allowed per spec — fetch-time confirm in transcription.js
-        localStorage.setItem(KEYS.OPENROUTER_BASE, v.replace(/\/+$/,''));
-      } else localStorage.setItem(KEYS.OPENROUTER_BASE, OPENROUTER_BASE_DEFAULT);
+        orBaseNorm = v.replace(/\/+$/,'');
+      } else orBaseNorm = OPENROUTER_BASE_DEFAULT;
     }
+    if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
+    if ('groqBaseURL' in patch) localStorage.setItem(KEYS.GROQ_BASE, groqBaseNorm);
+    if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
+    if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
+    if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizePolish(patch.sttChain)));
