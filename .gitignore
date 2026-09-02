@@ -12,3 +12,6 @@ Thumbs.db
 
 # logs
 *.log
+
+# worktrees (parallel-work-guard)
+.worktrees/
