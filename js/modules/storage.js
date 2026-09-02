@@ -17,7 +17,7 @@ function normalizePolishEntry(x){
     const id = x.trim();
     if(!id) return null;
     // legacy :free → openrouter, else groq (qwen/oss via Groq per new spec)
-    const provider = id.includes(':free') ? 'openrouter' : (id.includes('/') ? 'groq' : 'groq');
+    const provider = id.includes(':free') ? 'openrouter' : 'groq';
     const cleanId = id.replace(':free','');
     return { id: cleanId, provider, enabled:true };
   }
@@ -130,7 +130,8 @@ export const Storage = {
     if ('groqBaseURL' in patch) {
       const v = (patch.groqBaseURL||'').trim();
       if(v){
-        const u=new URL(v); if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400});
         localStorage.setItem(KEYS.GROQ_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.GROQ_BASE, GROQ_BASE_DEFAULT);
     }
@@ -139,7 +140,8 @@ export const Storage = {
     if ('openrouterBaseURL' in patch) {
       const v = (patch.openrouterBaseURL||'').trim();
       if(v){
-        const u=new URL(v); if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400});
         localStorage.setItem(KEYS.OPENROUTER_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.OPENROUTER_BASE, OPENROUTER_BASE_DEFAULT);
     }

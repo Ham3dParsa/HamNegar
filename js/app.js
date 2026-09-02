@@ -304,19 +304,27 @@ function loadSettings(){
   if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
-  Storage.saveSettings({
-    groqKey: els.keyGroq.value,
-    geminiKey: els.keyGemini.value,
-    openrouterKey: els.keyOpenrouter?.value||'',
-    groqBaseURL: els.groqBaseUrl?.value||'',
-    openrouterBaseURL: els.openrouterBaseUrl?.value||'',
-    realtime: els.toggleRealtime.checked,
-    vad: els.toggleVad.checked,
-    autocopy: els.toggleAutocopy.checked,
-    sttChain: sttChainState,
-    polishChain: polishChainState,
-    polishEnabled: els.togglePolish?.checked ?? true,
-  });
+  try{
+    Storage.saveSettings({
+      groqKey: els.keyGroq.value,
+      geminiKey: els.keyGemini.value,
+      openrouterKey: els.keyOpenrouter?.value||'',
+      groqBaseURL: els.groqBaseUrl?.value||'',
+      openrouterBaseURL: els.openrouterBaseUrl?.value||'',
+      realtime: els.toggleRealtime.checked,
+      vad: els.toggleVad.checked,
+      autocopy: els.toggleAutocopy.checked,
+      sttChain: sttChainState,
+      polishChain: polishChainState,
+      polishEnabled: els.togglePolish?.checked ?? true,
+    });
+  }catch(e){
+    Logger.toast(e.message || 'BaseURL نامعتبر');
+    if(e.message && e.message.includes('Groq')) els.groqBaseUrl.style.borderColor='var(--danger)';
+    if(e.message && e.message.includes('OpenRouter')) els.openrouterBaseUrl.style.borderColor='var(--danger)';
+    else if(els.groqBaseUrl) els.groqBaseUrl.style.borderColor='var(--danger)';
+    throw e;
+  }
   updateBadge(); validate(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
 }
 els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
@@ -377,7 +385,7 @@ $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEac
 loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
-$('btn-save-modal').onclick=()=>{ saveSettings(); els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
+$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch{ return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
 $('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
 $('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
