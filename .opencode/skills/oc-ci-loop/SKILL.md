@@ -18,6 +18,7 @@ Loop that turns a pushed PR into `MERGEABLE`. Primary reviewer is `opencode-agen
 ### 1. Poll reviewer delta (token-tight)
 
 ```powershell
+# --repo تا بیرون از .git هم کار کند؛ // "" تا body خالی Substring نترکد
 gh api repos/Ham3dParsa/HamNegar/pulls/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 gh api repos/Ham3dParsa/HamNegar/issues/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 ```
@@ -25,8 +26,10 @@ gh api repos/Ham3dParsa/HamNegar/issues/<n>/comments --jq '.[] | select(.user.lo
 Save `id->h` to `$env:TEMP/opencode/reviewer_seen_<n>.json`. Only fetch full body for new/changed `h`:
 
 ```powershell
-gh api repos/Ham3dParsa/HamNegar/pulls/comments/<id> --jq '.body'
-gh api repos/Ham3dParsa/HamNegar/issues/comments/<id> --jq '.body'
+gh api repos/Ham3dParsa/HamNegar/pulls/comments/<id> --jq '.body // ""'
+gh api repos/Ham3dParsa/HamNegar/issues/comments/<id> --jq '.body // ""'
+# snippet امن حتی اگر body خالی باشد:
+# $body = gh api ... --jq '.body // ""'; $snippet = if ([string]::IsNullOrEmpty($body)) { "" } else { $body.Substring(0, [Math]::Min(200,$body.Length)) }
 ```
 
 If `gh api` fails, skip seen-update.
@@ -38,7 +41,8 @@ Sleep 90s between polls, timeout 30m total. Push fix commits to trigger re-revie
 ### 2. Poll CI
 
 ```powershell
-gh pr checks <n>
+gh pr checks <n> --repo Ham3dParsa/HamNegar
+# یا از داخل پوشه HamNegar بدون --repo: gh pr checks <n>
 ```
 
 Require `review` (opencode-review) `pass` and `Kilo Code Review` `pass` only if Kilo is enabled; otherwise require only `review`. Match with `(?m)^\s*review(?!\w)\s+pass`.
