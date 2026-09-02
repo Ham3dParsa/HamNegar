@@ -1,11 +1,22 @@
 // Module: logger
-// Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) — keeps 3-call surface small.
-// Depth: hides DOM creation, truncation, timestamps, console mirroring behind 3 calls.
+// Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) + setProgress/dismissProgress — small surface, hides DOM/progress behind calls.
+// Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock behind 5 calls.
 let logBody, statusText, statusDot, toastEl;
+
+let progressEl = null;
+let progressBar = null;
+let progressLabel = null;
+let progressStep = null;
+let progressSteps = null;
 
 export const Logger = {
   init({ logBodyEl, statusTextEl, statusDotEl, toastEl: t }) {
     logBody = logBodyEl; statusText = statusTextEl; statusDot = statusDotEl; toastEl = t;
+    progressEl = document.getElementById('stt-progress');
+    progressBar = document.getElementById('progress-bar');
+    progressLabel = document.getElementById('progress-label');
+    progressStep = document.getElementById('progress-step');
+    progressSteps = document.getElementById('progress-steps');
   },
   log(level, msg, data) {
     if (!logBody) return;
@@ -35,6 +46,63 @@ export const Logger = {
     toastEl.textContent = msg;
     toastEl.classList.add('show');
     setTimeout(() => toastEl.classList.remove('show'), ms);
+  },
+  setProgress({ state, index, total, label, engine }) {
+    if (!progressEl) progressEl = document.getElementById('stt-progress');
+    if (!progressEl) return;
+    if (!progressBar) progressBar = document.getElementById('progress-bar');
+    if (!progressLabel) progressLabel = document.getElementById('progress-label');
+    if (!progressStep) progressStep = document.getElementById('progress-step');
+    if (!progressSteps) progressSteps = document.getElementById('progress-steps');
+    progressEl.hidden = false;
+    if (progressLabel && label) progressLabel.textContent = label;
+    if (progressStep && typeof index === 'number' && typeof total === 'number') {
+      progressStep.textContent = `قدم ${index + 1} از ${total}`;
+      if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
+      if (progressBar) progressBar.parentElement.setAttribute('aria-valuenow', String(Math.round(((index + 1) / total) * 100)));
+    }
+    if (progressSteps && typeof index === 'number') {
+      const items = [...progressSteps.children];
+      items.forEach((li, i) => {
+        li.classList.remove('is-trying', 'is-current', 'is-failed', 'is-done');
+        if (i < index) li.classList.add('is-failed');
+        if (i === index) {
+          if (state === 'failed') li.classList.add('is-failed');
+          else if (state === 'done') li.classList.add('is-done');
+          else { li.classList.add('is-trying', 'is-current'); }
+        }
+      });
+    }
+    // sync dot
+    if (state === 'trying' && statusDot) statusDot.className = 'dot warn';
+    if (state === 'done' && statusDot) statusDot.className = 'dot';
+    if (state === 'failed' && statusDot) statusDot.className = 'dot warn';
+  },
+  rebuildProgress(chain) {
+    if (!progressSteps) progressSteps = document.getElementById('progress-steps');
+    if (!progressSteps || !Array.isArray(chain)) return;
+    progressSteps.innerHTML = '';
+    chain.forEach((id, idx) => {
+      const li = document.createElement('li');
+      li.className = 'chain-step';
+      const rank = document.createElement('span');
+      rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
+      rank.textContent = String(idx + 1);
+      const label = document.createElement('span');
+      label.textContent = id === 'groq' ? 'Groq' : id;
+      label.style.fontSize = '12px';
+      const icon = document.createElement('span');
+      icon.className = 'step-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      li.append(rank, label, icon);
+      progressSteps.appendChild(li);
+    });
+  },
+  dismissProgress(delay = 0) {
+    const el = progressEl || document.getElementById('stt-progress');
+    if (!el) return;
+    const hide = () => { el.hidden = true; };
+    if (delay) setTimeout(hide, delay); else hide();
   },
 };
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

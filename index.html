@@ -11,7 +11,10 @@
 <div class="header">
   <div class="brand"><div class="brand-icon">⌨️</div><div><h1>هم‌نگار <span id="app-version" style="font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);vertical-align:middle">v0.3.1</span></h1><p>تایپ صوتی فارسی • <a href="https://github.com/Ham3dParsa" target="_blank" style="color:var(--accent2);text-decoration:none">Ham3dParsa</a> • <a href="CHANGELOG.md" target="_blank" style="color:var(--muted)">تغییرات</a></p></div></div>
   <div class="toolbar">
-    <button id="btn-mic">🎤 شروع صحبت</button>
+    <div class="mic-group">
+      <button id="btn-mic" aria-busy="false"><span class="mic-icon">🎤</span><span class="mic-label">شروع صحبت</span></button>
+      <button id="btn-cancel-stt" class="btn-ghost mic-cancel" hidden aria-label="انصراف">✕ انصراف</button>
+    </div>
     <button id="btn-copy" class="btn-ghost">📋 کپی</button>
     <button id="btn-clear" class="btn-ghost">🗑️ پاک</button>
     <button id="btn-settings" class="btn-icon" title="تنظیمات">⚙️</button>
@@ -35,6 +38,16 @@
     <div class="status-right"><span id="status-dot" class="dot"></span><span id="status-text">آماده به کار — کلیدها را در ⚙️ چک کن</span><span id="live-badge" class="live-badge">● زنده</span></div>
     <span id="char-count" style="color:var(--muted);font-size:12px">0 کاراکتر</span>
   </div>
+  <section id="stt-progress" hidden role="status" aria-live="polite" aria-label="پیشرفت تبدیل">
+    <div class="stt-progress__head"><span id="progress-label">در حال تبدیل…</span><span id="progress-step"></span></div>
+    <ol class="stt-progress__steps" id="progress-steps">
+      <li class="chain-step"><span class="rank">۱</span> Groq <span class="step-icon" aria-hidden="true"></span></li>
+      <li class="chain-step"><span class="rank fallback">۲</span> gemini-flash-lite</li>
+      <li class="chain-step"><span class="rank fallback">۳</span> gemini-3.5</li>
+      <li class="chain-step"><span class="rank fallback">۴</span> gemini-3.1</li>
+    </ol>
+    <div class="stt-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="25"><i id="progress-bar" style="width:25%"></i></div>
+  </section>
   <div class="quota-grid" id="quota-grid"></div>
   <textarea id="output" placeholder="نشانگر را هر جا بگذار، صدا همون جا می‌شینه. حالت آنی روشنه متن زنده بالا می‌آد و آخرش پولیش می‌شه..."></textarea>
   <div class="resizer-hint"><span>↕ بکش تا اندازه کادر عوض شود — ذخیره خودکار</span></div>

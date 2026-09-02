@@ -20,6 +20,7 @@ const els = {
   logBody: $('log-body'), livePreview: $('live-preview'), liveFinal: $('live-final'), liveInterim: $('live-interim'), liveBadge: $('live-badge'),
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
+  btnCancel: $('btn-cancel-stt'),
 };
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
@@ -416,7 +417,36 @@ function makeOnInterim(snap){
 }
 
 let isRecording=false, vadTimer=null;
+let isTranscribing=false;
+let transcribingAbort=null;
+function setMicBusy(busy){
+  isTranscribing = busy;
+  if (els.btnMic) {
+    els.btnMic.disabled = busy;
+    els.btnMic.classList.toggle('transcribing', busy);
+    els.btnMic.setAttribute('aria-busy', busy ? 'true' : 'false');
+    const icon = els.btnMic.querySelector('.mic-icon');
+    const label = els.btnMic.querySelector('.mic-label');
+    if (busy) {
+      if (label) label.textContent = 'در حال تبدیل…';
+      if (icon) icon.textContent = '';
+    } else {
+      if (label) label.textContent = isRecording ? '⏹ پایان و تبدیل' : 'شروع صحبت';
+      if (icon) icon.textContent = '🎤';
+    }
+  }
+  if (els.btnCancel) els.btnCancel.hidden = !busy;
+  if (els.output) els.output.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+function shakeMic(){
+  if (!els.btnMic) return;
+  els.btnMic.classList.remove('shake');
+  void els.btnMic.offsetWidth;
+  els.btnMic.classList.add('shake');
+  setTimeout(()=> els.btnMic.classList.remove('shake'), 400);
+}
 async function startRecording(){
+  if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
   let snap=null;
@@ -426,7 +456,12 @@ async function startRecording(){
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
     snap.startMs = performance.now();
-    isRecording=true; els.btnMic.textContent='⏹ پایان و تبدیل'; els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
+    isRecording=true;
+    const labelEl = els.btnMic.querySelector('.mic-label');
+    const iconEl = els.btnMic.querySelector('.mic-icon');
+    if (labelEl) labelEl.textContent = '⏹ پایان و تبدیل'; else els.btnMic.textContent = '⏹ پایان و تبدیل';
+    if (iconEl) iconEl.textContent = '⏹';
+    els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     startWave();
     if(s.realtime && Realtime.isSupported()){
@@ -442,7 +477,10 @@ async function startRecording(){
 function stopRecording(){
   if(!isRecording) return;
   const snap = rtSnap;
-  Audio.stop(); isRecording=false; els.btnMic.textContent='🎤 شروع صحبت'; els.btnMic.classList.remove('recording','realtime-active');
+  Audio.stop(); isRecording=false;
+  setMicBusy(true);
+  transcribingAbort = new AbortController();
+  els.btnMic.classList.remove('recording','realtime-active');
   stopVAD(); stopWave(); Realtime.stop();
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
   if(snap && (snap.committed+snap.pending)){
@@ -451,7 +489,18 @@ function stopRecording(){
   }
   Logger.setStatus('⏳ در حال تبدیل...','warn');
 }
-els.btnMic.onclick=()=> isRecording?stopRecording():startRecording();
+els.btnMic.onclick=()=> {
+  if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
+  isRecording?stopRecording():startRecording();
+};
+function cancelTranscription(){
+  if (transcribingAbort) transcribingAbort.abort();
+  // UI handled in handleTranscription catch — keep abort signal until finally
+}
+els.btnCancel?.addEventListener('click', cancelTranscription);
+document.addEventListener('keydown', (e)=>{
+  if (e.key === 'Escape' && isTranscribing && transcribingAbort) cancelTranscription();
+});
 function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
@@ -459,18 +508,24 @@ async function handleTranscription(blob, snap){
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
+  // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
+  if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); }
   Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? (snap.committed+snap.pending).length : 0});
   if(blob.size<800){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
-    if(snap && snapId===rtVersion){ rtSnap=null; }
-    else if(!snap){ rtSnap=null; }
+    Logger.dismissProgress(800);
+    setMicBusy(false); transcribingAbort = null;
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
   }
   try{
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
-    const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs });
-    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); return; }
-    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); if(snap && snapId===rtVersion) rtSnap=null; return; }
+    const signal = transcribingAbort?.signal;
+    const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
+    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { code:'STALE', aborted:true }); }
+    if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { code:'ABORTED', aborted:true }); }
+    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); throw Object.assign(new Error('متنی نیست'), { code:'EMPTY', aborted:false }); }
     const s=Storage.getSettings();
     if(s.realtime && snap){
       const finalText = text.trim();
@@ -496,12 +551,33 @@ async function handleTranscription(blob, snap){
     Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
     Dashboard.renderOverall();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
-    Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
+    Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); Logger.dismissProgress(2600); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
     Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
-    Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
-    let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401) h='کلید نامعتبر';
-    Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
+    if (err.code === 'STALE') {
+      Logger.dismissProgress(0);
+    } else if (err.code === 'EMPTY') {
+      // already handled
+    } else if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
+      Logger.log('info','transcribe aborted',{msg:err.message, snapId});
+      Logger.toast('لغو شد', 1500);
+      Logger.dismissProgress(0);
+      Logger.setStatus('لغو شد','warn');
+      // already handled toast/status above
+    } else {
+      Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
+      let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
+      Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
+      Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
+      Logger.dismissProgress(3500);
+    }
+  } finally {
+    setMicBusy(false);
+    transcribingAbort = null;
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent='';
+    if(els.liveInterim) els.liveInterim.textContent='';
+    if(els.livePreview) els.livePreview.classList.remove('on');
   }
 }
 
