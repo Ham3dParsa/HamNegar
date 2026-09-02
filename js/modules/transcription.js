@@ -66,27 +66,23 @@ async function queryPolishViaGemini(text, model){
   if(out) Quota.record(model);
   return out;
 }
-async function queryPolishViaOpenRouter(text, model){
-  const { openrouterKey: k, geminiKey: gk } = Storage.getSettings();
-  // if no openrouter key but gemini exists, fallback to gemini-flash-lite for polish
-  if(!k){
-    if(gk) return queryPolishViaGemini(text, 'gemini-flash-lite-latest');
-    throw Object.assign(new Error('کلید OpenRouter نیست'),{status:401});
-  }
+async function queryPolishViaGroq(text, model){
+  const { groqKey: k } = Storage.getSettings();
+  if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   let res; try{
-    res=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`,'HTTP-Referer':'https://hamnegar.local','X-Title':'HamNegar'},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
+    res=await fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
   if(out) Quota.record(model);
   return out;
 }
 async function queryPolish(text, model){
-  // model contains "/" -> OpenRouter/Kilo, else Gemini-style
-  if(model.includes('/')) return queryPolishViaOpenRouter(text, model);
+  // پالیش فقط از Groq — مدل‌های Qwen مدرن اولویت (طبق خواسته کاربر، نه OpenRouter)
+  if(model.includes('/')) return queryPolishViaGroq(text, model);
   return queryPolishViaGemini(text, model);
 }
 
@@ -114,25 +110,25 @@ export const Transcription = {
           const s=Storage.getSettings();
           const next = chain[i+1];
           if(next){
-            const hasNext = next==='groq' ? !!s.groqKey : !!s.geminiKey;
+            const hasNext = next==='groq' ? !!s.groqKey : next.includes('/') ? !!s.openrouterKey : !!s.geminiKey;
             if(!hasNext){ Logger.log('warn',`کلید ${next} نیست — فالبک متوقف`,{}); }
           }
           // skip missing-key engines: filter remaining chain for hasKey, if none left throw
           const remaining = chain.slice(i+1);
-          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : !!s.geminiKey);
+          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : rid.includes('/') ? !!s.openrouterKey : !!s.geminiKey);
           if(!hasAnyRemainingKey){ throw err; }
           // if next engine lacks key, continue will skip to next iteration which will throw 401 again — but we already checked hasAny; loop will naturally skip? still continue
         }
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));
-        // skip next if it has no key (avoid wasted 401)
+        // skip next if it has no key (avoid wasted 401) — align to hasKeyFor: groq->groqKey, OR / -> openrouterKey, else geminiKey
         const s2=Storage.getSettings();
         let nxt = chain[i+1];
-        if(nxt && (nxt==='groq' ? !s2.groqKey : !s2.geminiKey)){
+        if(nxt && (nxt==='groq' ? !s2.groqKey : nxt.includes('/') ? !s2.openrouterKey : !s2.geminiKey)){
           // find next with key
           let found=false;
-          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : !!s2.geminiKey){ found=true; break; } }
+          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : chain[j].includes('/') ? !!s2.openrouterKey : !!s2.geminiKey){ found=true; break; } }
           if(!found) throw err;
         }
         continue;
@@ -165,7 +161,7 @@ export const Transcription = {
           if(e.status===401||e.status===403){
             const s=Storage.getSettings();
             const isOR = pm.includes('/');
-            if(isOR && !s.openrouterKey){ Logger.log('warn','کلید OpenRouter نیست — پالیش فالبک متوقف'); break; }
+            if(isOR && !s.groqKey){ Logger.log('warn','کلید Groq برای پالیش نیست — فالبک متوقف'); break; }
           }
           if(e.status===429) await new Promise(r=>setTimeout(r,500));
           if(i===polishChain.length-1) break;

@@ -2,6 +2,15 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [Unreleased] — Post-merge gate compliance (follow-up for PR #4)
+
+### Added
+- **Gate compensation:** follow-up branch `fix/followup-pr4-gate` addressing premature merge of PR #4 (`eb666f4`) with 5 must-fix warnings open and direct-to-`main` fix `82fe4aa` that bypassed review gate (violates `AGENTS.md`/`REVIEW.md`). This PR re-documents the bypass in `README.md` (§ Post-merge gate compliance) and here, and records evidence for the 5 fixes in `REVIEW.md` + `docs/PR4_FOLLOWUP_EVIDENCE.md`.
+- **Policy:** future merges require OC review `APPROVED`; no direct `main` pushes for review fixes.
+
+### Fixed (applied in 82fe4aa, now gate-tracked here)
+- `js/app.js:123` XSS esc, `js/modules/quota.js:29` sttChain seam, `js/modules/transcription.js:114-123` 401 skip, `js/modules/storage.js:40` parseChain filter, manual 5s transcription test obligation.
+
 ## [0.3.1] - 2026-09-02
 ### Fixed
 - باگ متن طولانی در حالت آنی: `fin` تجمعی باعث تکرار از ابتدا می‌شد — حل با `snap.committed = fin` (cumulative) به جای `+=`
