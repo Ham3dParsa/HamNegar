@@ -498,19 +498,19 @@ els.btnMic.onclick=()=> {
 };
 els.btnCancel?.addEventListener('click', ()=>{
   if (transcribingAbort) transcribingAbort.abort();
+  // keep transcribingAbort until handleTranscription finally clears it — avoid losing aborted signal
   Logger.toast('لغو شد', 1500);
+  Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
   Logger.dismissProgress(0);
-  setMicBusy(false);
-  transcribingAbort = null;
   Logger.setStatus('لغو شد','warn');
 });
 document.addEventListener('keydown', (e)=>{
   if (e.key === 'Escape' && isTranscribing && transcribingAbort) {
     transcribingAbort.abort();
     Logger.toast('لغو شد', 1500);
+    Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
     Logger.dismissProgress(0);
-    setMicBusy(false);
-    transcribingAbort = null;
+    Logger.setStatus('لغو شد','warn');
   }
 });
 function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
@@ -534,9 +534,9 @@ async function handleTranscription(blob, snap){
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const signal = transcribingAbort?.signal;
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
-    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); return; }
-    if (signal?.aborted) { Logger.log('info','transcribe aborted', { snapId }); return; }
-    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); if(snap && snapId===rtVersion) rtSnap=null; return; }
+    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); Logger.dismissProgress(0); if(!snap || snapId===rtVersion){ rtSnap=null; } setMicBusy(false); transcribingAbort=null; return; }
+    if (signal?.aborted) { Logger.log('info','transcribe aborted', { snapId }); Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' }); Logger.dismissProgress(0); if(!snap || snapId===rtVersion){ rtSnap=null; } setMicBusy(false); transcribingAbort=null; return; }
+    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); if(!snap || snapId===rtVersion) rtSnap=null; setMicBusy(false); transcribingAbort=null; return; }
     const s=Storage.getSettings();
     if(s.realtime && snap){
       const finalText = text.trim();
@@ -568,6 +568,7 @@ async function handleTranscription(blob, snap){
     if (err.aborted || transcribingAbort?.signal.aborted) {
       Logger.log('info','transcribe aborted',{msg:err.message, snapId});
       Logger.toast('لغو شد', 1500);
+      Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
       Logger.dismissProgress(0);
       Logger.setStatus('لغو شد','warn');
     } else {
@@ -577,9 +578,11 @@ async function handleTranscription(blob, snap){
       Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
       Logger.dismissProgress(3500);
     }
+    if(!snap || snapId===rtVersion){ rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); }
   } finally {
     setMicBusy(false);
     transcribingAbort = null;
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
   }
 }
 
