@@ -306,9 +306,22 @@ let selStart=0, selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionSt
 els.output.addEventListener('click',saveCursor); els.output.addEventListener('keyup',saveCursor); els.output.addEventListener('select',saveCursor);
 const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; };
 let draftTimer=null;
-els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
+const history={stack:[], index:-1, max:50, pushing:false, push(v){ if(this.pushing) return; if(this.stack[this.index]===v) return; this.stack=this.stack.slice(0,this.index+1); this.stack.push(v); if(this.stack.length>this.max){ this.stack.shift(); } else { this.index++; } this.index=Math.min(this.index,this.stack.length-1); updateHistoryButtons(); }, undo(){ if(this.index<=0) return null; this.index--; updateHistoryButtons(); return this.stack[this.index]; }, redo(){ if(this.index>=this.stack.length-1) return null; this.index++; updateHistoryButtons(); return this.stack[this.index]; }, canUndo(){return this.index>0}, canRedo(){return this.index<this.stack.length-1}};
+function updateHistoryButtons(){ const u=document.getElementById('btn-undo'), r=document.getElementById('btn-redo'); if(u) u.disabled=!history.canUndo(); if(r) r.disabled=!history.canRedo(); }
+function applyHistoryValue(v){ history.pushing=true; els.output.value=v; els.output.dispatchEvent(new Event('input')); saveCursor(); updateCounts(); Storage.saveDraft(v); history.pushing=false; updateHistoryButtons(); }
+els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); if(!history.pushing) history.push(els.output.value); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
+document.getElementById('btn-undo')?.addEventListener('click', ()=>{ const v=history.undo(); if(v!==null) applyHistoryValue(v); });
+document.getElementById('btn-redo')?.addEventListener('click', ()=>{ const v=history.redo(); if(v!==null) applyHistoryValue(v); });
+els.output.addEventListener('keydown', (e)=>{
+  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){
+    if(e.shiftKey){ const v=history.redo(); if(v!==null){ e.preventDefault(); applyHistoryValue(v); } }
+    else { const v=history.undo(); if(v!==null){ e.preventDefault(); applyHistoryValue(v); } }
+  } else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ const v=history.redo(); if(v!==null){ e.preventDefault(); applyHistoryValue(v); } }
+});
 (() => {
   const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('info','پیش‌نویس بارگذاری شد',{chars:d.length}); }
+  history.push(els.output.value);
+  updateHistoryButtons();
   const h=Storage.getHeights(); if(h.out) els.output.style.height=h.out; if(h.log) els.logPanel.style.height=h.log;
   let splitter = document.getElementById('log-splitter');
   if(!splitter){
@@ -596,7 +609,7 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
   }catch(e){ Logger.setStatus('❌ پالیش: '+e.message,'error'); }
 });
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
-els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); history.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 stopWave();
 const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
