@@ -18,12 +18,17 @@
   </div>
 </div>
 <div id="file-warning">⚠️ با <code>file://</code> باز شده — روی <code>localhost</code> اجرا کن: <code>python -m http.server</code></div>
-<div class="controls-row">
-  <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
-  <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
-  <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+<div class="controls-row" style="gap:8px">
   <div id="vis"><canvas id="wave" width="360" height="36"></canvas></div>
   <span class="chip" id="engine-badge">موتور: Groq</span>
+  <details id="options-drawer" class="options-drawer">
+    <summary class="drawer-handle">≡ گزینه‌ها</summary>
+    <div class="drawer-body">
+      <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
+      <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
+      <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+    </div>
+  </details>
 </div>
 <div class="main">
   <div class="status-bar">

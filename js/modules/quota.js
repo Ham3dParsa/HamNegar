@@ -53,11 +53,11 @@ export const Quota = {
       if (m.color==='warn') barCls='warn';
       else if (m.color==='warn-orange') barCls='warn-orange';
       else if (m.color==='danger') barCls='danger';
-      const cardCls = m.color==='danger' ? 'quota-card danger pulse' : 'quota-card';
-      const favBadge = m.isFavorite ? ' <span class="fav">⭐ محبوب</span>' : '';
+      const cardCls = (m.color==='danger' ? 'quota-card danger pulse' : 'quota-card') + ' quota-card--minimal' + (m.isFavorite?' is-fav':'');
+      const favRibbon = m.isFavorite ? '<span class="ribbon">محبوب</span>' : '';
       const warnIcon = m.isNearLimit ? ' ⚠' : '';
       const badge = typeof lim.rpd==='number' ? lim.rpd+' /روز' : 'نامحدود';
-      container.innerHTML += `<div class="${cardCls}" data-model="${esc(m.model)}"><h4>${esc(m.label)} <span class="badge">${esc(badge)}</span>${favBadge}</h4><div class="bar"><i class="${barCls}" style="width:${pct}%"></i></div><div class="meta"><span>امروز: <b>${m.count}</b> (${pct}٪)${warnIcon}</span><span>${esc(String(lim.rpm))} /دقیقه • ${esc(String(lim.tpm))} /دقیقه</span></div></div>`;
+      container.innerHTML += `<div class="${cardCls}" data-model="${esc(m.model)}">${favRibbon}<h4>${esc(m.label)} <span class="badge">${esc(badge)}</span></h4><div class="bar"><i class="${barCls}" style="width:${pct}%"></i></div><div class="meta"><span>امروز: <b>${m.count}</b> (${pct}٪)${warnIcon}</span><span></span></div></div>`;
     });
 
     if (!expanded && byModel.length>3){
