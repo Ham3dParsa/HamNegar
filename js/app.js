@@ -336,15 +336,22 @@ async function fetchAndShowModels(provider){
     const ids = isGroq ? await Transcription.listGroqModels() : await Transcription.listOpenRouterModels();
     if(listEl){
       listEl.style.display='block';
+      listEl.innerHTML='';
       const filtered = ids.filter(id=> /qwen|gpt-oss|allam|llama/i.test(id)).slice(0,30);
-      listEl.innerHTML = `<b>مدل‌های یافت‌شده (${filtered.length}):</b><br>` + filtered.map(id=>`<code style="display:inline-block;margin:2px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer" data-add="${esc(id)}">${esc(id)}</code>`).join(' ') + `<div style="margin-top:6px"><span class="hint-inline">کلیک روی مدل → به زنجیره پالیش اضافه می‌شود</span></div>`;
-      listEl.querySelectorAll('[data-add]')?.forEach(el=> el.addEventListener('click', ()=>{
-        const mid = el.dataset.add;
-        const prov = isGroq ? 'groq' : 'openrouter';
-        if(polishChainState.some(e=>e.id===mid && e.provider===prov)) { Logger.toast('قبلاً هست'); return; }
-        polishChainState.push({ id:mid, provider:prov, enabled:true });
-        persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid}`);
-      }));
+      const title=document.createElement('b'); title.textContent=`مدل‌های یافت‌شده (${filtered.length}):`; listEl.appendChild(title); listEl.appendChild(document.createElement('br'));
+      filtered.forEach(id=>{
+        const code=document.createElement('code');
+        code.style.cssText='display:inline-block;margin:2px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer';
+        code.dataset.add=id; code.textContent=id;
+        code.addEventListener('click', ()=>{
+          const prov = isGroq ? 'groq' : 'openrouter';
+          if(polishChainState.some(e=>e.id===code.dataset.add && e.provider===prov)) { Logger.toast('قبلاً هست'); return; }
+          polishChainState.push({ id:code.dataset.add, provider:prov, enabled:true });
+          persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${code.dataset.add}`);
+        });
+        listEl.appendChild(code);
+      });
+      const hint=document.createElement('div'); hint.style.marginTop='6px'; hint.innerHTML='<span class="hint-inline">کلیک روی مدل → به زنجیره پالیش اضافه می‌شود</span>'; listEl.appendChild(hint);
     }
     Logger.toast(`مدل‌ها: ${ids.length}`);
   }catch(e){ Logger.toast(e.message.slice(0,80)); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+e.message; } }

@@ -7,6 +7,18 @@ import { Quota } from './quota.js';
 import { Logger } from './logger.js';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
+function assertTrustedBase(base, allowed){
+  try{
+    const h = new URL(base).hostname.toLowerCase();
+    if(!allowed.includes(h)){
+      const msg = `کلید به ${h} ارسال می‌شود — ادامه می‌دهی؟`;
+      if(typeof window !== 'undefined' && typeof window.confirm === 'function'){
+        if(!window.confirm(msg)) throw Object.assign(new Error('لغو — BaseURL نامعتبر'),{status:400});
+      }
+      Logger.log('warn','untrusted BaseURL', { base, host:h });
+    }
+  }catch(e){ if(e.status===400) throw e; /* invalid URL handled elsewhere */ }
+}
 async function parseErr(res){ let b=''; try{ b=await res.text(); try{ const j=JSON.parse(b); return {text:b, msg:j.error?.message||j.error||j.message||b.slice(0,600)} }catch{ return {text:b, msg:b.slice(0,600)} } }catch{ return {text:'', msg:res.statusText} } }
 function blobToB64(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(new Error('خواندن صدا خطا')); r.onloadend=()=>{ try{ res(r.result.split(',')[1]); }catch(e){ rej(e); } }; r.readAsDataURL(blob); }); }
 function rulePolish(text){
@@ -26,6 +38,7 @@ async function queryGroq(blob, externalSignal){
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),35000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   const base = (groqBaseURL || 'https://api.groq.com/openai/v1').replace(/\/+$/,'');
+  assertTrustedBase(base, ['api.groq.com']);
   let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : 'تایم‌اوت Groq'),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error('شبکه Groq: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); Logger.log('error','Groq fail',{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
@@ -53,6 +66,7 @@ async function queryPolishViaGroq(text, model){
   if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
   if(!k.startsWith('gsk_')) throw Object.assign(new Error('Groq باید gsk_ باشد'),{status:401});
   const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
+  assertTrustedBase(base, ['api.groq.com']);
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   let res; try{
@@ -82,6 +96,7 @@ async function queryPolishViaOpenRouter(text, model){
   const { openrouterKey: k, openrouterBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید OpenRouter نیست'),{status:401});
   const base = (openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,'');
+  assertTrustedBase(base, ['api.openrouter.ai','openrouter.ai']);
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   let res; try{
@@ -249,6 +264,7 @@ export const Transcription = {
     const { groqKey: k, groqBaseURL } = Storage.getSettings();
     if(!k) throw new Error('کلید Groq نیست');
     const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
+    assertTrustedBase(base, ['api.groq.com']);
     const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     const j=await r.json(); return j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
@@ -257,6 +273,7 @@ export const Transcription = {
     const { openrouterKey: k, openrouterBaseURL } = Storage.getSettings();
     if(!k) throw new Error('کلید OpenRouter نیست');
     const base = (openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,'');
+    assertTrustedBase(base, ['api.openrouter.ai','openrouter.ai']);
     const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     const j=await r.json(); return j.data?.map(m=>m.id) || [];
@@ -265,6 +282,7 @@ export const Transcription = {
     const { groqKey: k, groqBaseURL }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!k.startsWith('gsk_')) throw new Error('باید gsk_ باشد');
     const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
+    assertTrustedBase(base, ['api.groq.com']);
     const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return true;

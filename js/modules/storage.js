@@ -10,7 +10,7 @@ export const POLISH_DEFAULTS = [
   { id:'qwen/qwen3.8-27b', provider:'groq', enabled:true },
   { id:'openai/gpt-oss-20b', provider:'groq', enabled:true },
 ];
-export const POLISH_DEFAULTS_LEGACY = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
+const POLISH_DEFAULTS_LEGACY = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
 
 function normalizePolishEntry(x){
   if(typeof x === 'string'){
@@ -130,7 +130,8 @@ export const Storage = {
     if ('groqBaseURL' in patch) {
       const v = (patch.groqBaseURL||'').trim();
       if(v){
-        try{ const u=new URL(v); if(u.protocol!=='https:') throw new Error('https only'); localStorage.setItem(KEYS.GROQ_BASE, v.replace(/\/+$/,'')); }catch{ /* keep old on invalid */ }
+        const u=new URL(v); if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
+        localStorage.setItem(KEYS.GROQ_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.GROQ_BASE, GROQ_BASE_DEFAULT);
     }
     if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
@@ -138,7 +139,8 @@ export const Storage = {
     if ('openrouterBaseURL' in patch) {
       const v = (patch.openrouterBaseURL||'').trim();
       if(v){
-        try{ const u=new URL(v); if(u.protocol!=='https:') throw new Error('https only'); localStorage.setItem(KEYS.OPENROUTER_BASE, v.replace(/\/+$/,'')); }catch{}
+        const u=new URL(v); if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
+        localStorage.setItem(KEYS.OPENROUTER_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.OPENROUTER_BASE, OPENROUTER_BASE_DEFAULT);
     }
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
