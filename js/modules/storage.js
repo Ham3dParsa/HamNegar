@@ -126,12 +126,13 @@ export const Storage = {
     };
   },
   saveSettings(patch) {
+    // BaseURL سفارشی مجاز است per spec — https enforced, host allowlist در fetch-time با confirm (transcription.js: assertTrustedBase)
     if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
     if ('groqBaseURL' in patch) {
       const v = (patch.groqBaseURL||'').trim();
       if(v){
-        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
-        if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400});
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'groqBaseURL'}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400, field:'groqBaseURL'});
         localStorage.setItem(KEYS.GROQ_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.GROQ_BASE, GROQ_BASE_DEFAULT);
     }
@@ -140,8 +141,8 @@ export const Storage = {
     if ('openrouterBaseURL' in patch) {
       const v = (patch.openrouterBaseURL||'').trim();
       if(v){
-        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
-        if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400});
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'openrouterBaseURL'}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400, field:'openrouterBaseURL'});
         localStorage.setItem(KEYS.OPENROUTER_BASE, v.replace(/\/+$/,''));
       } else localStorage.setItem(KEYS.OPENROUTER_BASE, OPENROUTER_BASE_DEFAULT);
     }

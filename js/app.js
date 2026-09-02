@@ -319,10 +319,14 @@ function saveSettings(){
       polishEnabled: els.togglePolish?.checked ?? true,
     });
   }catch(e){
+    Logger.log('error','saveSettings failed',{msg:e.message, field:e.field});
     Logger.toast(e.message || 'BaseURL نامعتبر');
-    if(e.message && e.message.includes('Groq')) els.groqBaseUrl.style.borderColor='var(--danger)';
-    if(e.message && e.message.includes('OpenRouter')) els.openrouterBaseUrl.style.borderColor='var(--danger)';
-    else if(els.groqBaseUrl) els.groqBaseUrl.style.borderColor='var(--danger)';
+    if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)';
+    else if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)';
+    else {
+      if(els.groqBaseUrl) els.groqBaseUrl.style.borderColor='';
+      if(els.openrouterBaseUrl) els.openrouterBaseUrl.style.borderColor='';
+    }
     throw e;
   }
   updateBadge(); validate(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
@@ -385,7 +389,7 @@ $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEac
 loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
-$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch{ return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
+$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
 $('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
 $('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
