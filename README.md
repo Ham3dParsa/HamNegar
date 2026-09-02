@@ -1,6 +1,8 @@
-# دستیار صوتی هوشمند — Voice Assistant Modular
+# هم‌نگار — تایپ صوتی هوشمند
 
-تبدیل گفتار به متن زنده و دقیق با Groq Whisper + Gemini Live. معماری ماژولار بر اساس `codebase-design` — هر بخش پشت یک اینترفیس کوچک و عمیق.
+> تایپ صوتی فارسی/انگلیسی، زنده و دقیق با Groq Whisper + Gemini Live
+
+ساخته شده توسط [Ham3dParsa](https://github.com/Ham3dParsa) — معماری ماژولار بر اساس `codebase-design`، هر بخش پشت یک اینترفیس کوچک و عمیق.
 
 ## ویژگی‌ها
 
@@ -29,7 +31,7 @@
 ## ساختار پوشه
 
 ```
-voice-assistant-modular/
+ham-negar/
 ├── index.html          # پوسته نازک
 ├── css/app.css         # استایل جدا
 ├── js/
@@ -81,12 +83,16 @@ python -m http.server 8000
 ## توسعه
 
 ```bash
-git clone <repo>
-cd voice-assistant-modular
+git clone https://github.com/Ham3dParsa/ham-negar
+cd ham-negar
 python -m http.server 8000
 ```
 
 ویرایش هر بخش: فقط همان ماژول. مثلا سهمیه → `quota.js`, مدل جدید → `transcription.js`.
+
+## سازنده
+
+[Ham3dParsa](https://github.com/Ham3dParsa)
 
 ## لایسنس
 
