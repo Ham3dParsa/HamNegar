@@ -18,13 +18,15 @@ export const Realtime = {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onresult = e => {
-      if (activeId !== myId) return; // stale recording — ignore
+      if (activeId !== myId) return;
+      // برای متن طولانی: cumulative finals از 0 تا آخر، نه فقط از resultIndex — وگرنه وقتی مرورگر از 0 ری‌استارت کند دوبار اضافه می‌شود و متن از اول شروع می‌کند
       let fin = '', inter = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) fin += t + ' '; else inter += t;
+        if (e.results[i].isFinal) fin += t + ' '; else inter = t;
       }
       if (fin) handlers.onFinal?.(fin);
+      // fin تجمعی است، inter فقط آخرین interim
       if (inter || fin) handlers.onInterim?.(fin + inter, fin);
     };
     recognition.onerror = e => { if (activeId !== myId) return; handlers.onError?.(e.error || e.message); };

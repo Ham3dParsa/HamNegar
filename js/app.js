@@ -230,13 +230,14 @@ let rtSnap = null;
 function makeOnInterim(snap){
   let lastPreview = snap.committed + snap.pending;
   return (preview, fin)=>{
-    const finChunk = fin || '';
-    const interChunk = preview.slice(finChunk.length);
-    if(finChunk) snap.committed += finChunk;
+    const finCum = fin || '';
+    const interChunk = preview.slice(finCum.length);
+    // fin تجمعی است — ست مستقیم تا متن طولانی از اول شروع نکند (باگ طول)
+    if(finCum) snap.committed = finCum;
     snap.pending = interChunk;
     const fullPreview = snap.committed + snap.pending;
-    els.liveFinal.textContent = snap.committed;
-    els.liveInterim.textContent = snap.pending;
+    if(els.liveFinal) els.liveFinal.textContent = snap.committed;
+    if(els.liveInterim) els.liveInterim.textContent = snap.pending;
     // diff-merge: اگر کاربر وسط ضبط دستی ویرایش کرد، متن دستی را پاک نکن
     const expected = snap.before + lastPreview + snap.after;
     if(els.output.value !== expected){
@@ -272,7 +273,7 @@ async function startRecording(){
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     startWave();
     if(s.realtime && Realtime.isSupported()){
-      els.livePreview.classList.add('on'); els.liveBadge.classList.add('on'); els.liveFinal.textContent=''; els.liveInterim.textContent='';
+      if(els.livePreview) els.livePreview.classList.add('on'); if(els.liveBadge) els.liveBadge.classList.add('on'); if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent='';
       const onInterim = makeOnInterim(snap);
       Realtime.start(snap.basePos, { onInterim:(p,f)=> onInterim(p,f), onFinal: f=> Logger.log('debug','final',f), onError:e=>Logger.log('warn','WebSpeech',e)}, snap.id);
       Logger.log('info','حالت آنی روشن',{snapId: snap.id, basePos: snap.basePos, beforeLen: snap.before.length, afterLen: snap.after.length});
@@ -286,7 +287,7 @@ function stopRecording(){
   const snap = rtSnap;
   Audio.stop(); isRecording=false; els.btnMic.textContent='🎤 شروع صحبت'; els.btnMic.classList.remove('recording','realtime-active');
   stopVAD(); stopWave(); Realtime.stop();
-  setTimeout(()=>{ els.livePreview.classList.remove('on'); els.liveBadge.classList.remove('on'); },900);
+  setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
   // اگر متنی نیمه‌کاره مانده، کرسر را آخر preview بگذار ولی snap را نگه دار تا handleTranscription جایگزین کند
   if(snap && (snap.committed+snap.pending)){
     const cursor = snap.basePos + (snap.committed+snap.pending).length;
@@ -338,7 +339,7 @@ async function handleTranscription(blob, snap){
     els.output.focus(); saveCursor();
     // پاکسازی فقط اگر همین snap فعال است — از پاک کردن ضبط جدیدتر جلوگیری کن
     if(!snap || snapId===rtVersion){ rtSnap=null; }
-    els.liveFinal.textContent=''; els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
+    if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
     Quota.render(els.quotaGrid);
     Logger.setStatus(`✅ با ${engine} نشست`,'info'); Logger.toast('درج شد'); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
@@ -355,6 +356,6 @@ async function handleTranscription(blob, snap){
 $('btn-test-groq').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+e.message,'error'); } };
 $('btn-test-gemini').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+e.message,'error'); } };
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
-els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; els.liveFinal.textContent=''; els.liveInterim.textContent=''; els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 stopWave(); Logger.log('info','ماژولار آماده', {hasRealtime: Realtime.isSupported(), proto: location.protocol});
 Quota.render(els.quotaGrid);
