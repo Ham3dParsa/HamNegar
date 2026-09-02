@@ -1,20 +1,16 @@
 @echo off
-chcp 65001 >nul
-setlocal
-cd /d "%~dp0"
+pushd "%~dp0"
 set PORT=8000
 where python >nul 2>nul
 if %errorlevel%==0 set PYTHON=python & goto :run
 where py >nul 2>nul
 if %errorlevel%==0 set PYTHON=py & goto :run
-echo [khta] python peyda nashod - az python.org nasb kon
+echo python not found - install from python.org
 pause
 exit /b 1
 :run
-echo ham-negar - http://localhost:%PORT%/index.html
-echo poshe: %cd%
-echo baraye khoroj Ctrl+C bezan
+echo ham-negar at http://localhost:%PORT%/index.html
 timeout /t 1 /nobreak >nul
 start "" "http://localhost:%PORT%/index.html"
-%PYTHON% -m http.server %PORT% --directory "%~dp0"
+%PYTHON% -m http.server %PORT%
 pause
