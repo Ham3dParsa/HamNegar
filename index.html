@@ -60,15 +60,44 @@
 <div id="settings-modal">
   <div class="modal-box modal-wide">
     <h3>⚙️ تنظیمات</h3>
-    <label>Groq API Key (Whisper):</label>
-    <div class="key-row"><input type="password" id="key-groq" placeholder="gsk_..."><button class="btn-ghost" id="btn-test-groq">تست Groq</button></div>
-    <div id="hint-groq" class="hint">با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.</div>
-    <label>Gemini API Key (Auth):</label>
-    <div class="key-row"><input type="password" id="key-gemini" placeholder="AQ...."><button class="btn-ghost" id="btn-test-gemini">تست Gemini</button></div>
-    <div id="hint-gemini" class="hint">کلید جدید با <code>AQ.</code> شروع می‌شود. قدیمی <code>AIza</code> هم فعلا کار می‌کند.</div>
-    <label>OpenRouter API Key (برای پالیش):</label>
-    <div class="key-row"><input type="password" id="key-openrouter" placeholder="sk-or-v1-..."><button class="btn-ghost" id="btn-test-polish">تست پالیش</button></div>
-    <div id="hint-openrouter" class="hint">از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Gemini انجام می‌شود. مدل‌های Qwen از اینجا استفاده می‌کنند.</div>
+    <!-- Groq provider -->
+    <section class="pref-section" aria-labelledby="groq-title">
+      <div class="pref-head"><h4 id="groq-title">Groq — Whisper + Chat</h4><span class="pref-sub">پالیش Qwen/OSS و STT</span></div>
+      <label for="key-groq">Groq API Key:</label>
+      <div class="key-row"><input type="password" id="key-groq" placeholder="gsk_..."><button class="btn-ghost" id="btn-test-groq">تست Groq</button></div>
+      <div id="hint-groq" class="hint">با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.</div>
+      <label for="groq-base-url">Groq Base URL (قابل تنظیم):</label>
+      <div class="key-row"><input type="text" id="groq-base-url" placeholder="https://api.groq.com/openai/v1"><button class="btn-ghost btn-sm" id="btn-groq-models">لیست مدل‌ها</button></div>
+      <div id="groq-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
+      <details class="hint" style="cursor:pointer"><summary>محدودیت‌های رایگان Groq — Chat Completions (30 RPM)</summary>
+        <table style="width:100%;font-size:11px;margin-top:6px;border-collapse:collapse"><thead><tr style="color:var(--muted)"><th style="text-align:right">مدل</th><th>RPM</th><th>RPD</th><th>TPM</th><th>TPD</th></tr></thead><tbody>
+        <tr><td>allam-2-7b</td><td>30</td><td>7K</td><td>6K</td><td>500K</td></tr>
+        <tr><td>qwen/qwen3.6-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+        <tr><td>qwen/qwen3.8-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+        <tr><td>openai/gpt-oss-20b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+        <tr><td>openai/gpt-oss-120b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+        </tbody></table>
+      </details>
+    </section>
+
+    <!-- Gemini provider -->
+    <section class="pref-section" aria-labelledby="gemini-title">
+      <div class="pref-head"><h4 id="gemini-title">Gemini — STT & پالیش جایگزین</h4></div>
+      <label for="key-gemini">Gemini API Key (Auth):</label>
+      <div class="key-row"><input type="password" id="key-gemini" placeholder="AQ...."><button class="btn-ghost" id="btn-test-gemini">تست Gemini</button></div>
+      <div id="hint-gemini" class="hint">کلید جدید با <code>AQ.</code> شروع می‌شود. قدیمی <code>AIza</code> هم فعلا کار می‌کند.</div>
+    </section>
+
+    <!-- OpenRouter provider -->
+    <section class="pref-section" aria-labelledby="or-title">
+      <div class="pref-head"><h4 id="or-title">OpenRouter — پالیش جایگزین</h4></div>
+      <label for="key-openrouter">OpenRouter API Key:</label>
+      <div class="key-row"><input type="password" id="key-openrouter" placeholder="sk-or-v1-..."><button class="btn-ghost" id="btn-test-polish">تست پالیش</button></div>
+      <div id="hint-openrouter" class="hint">از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Groq انجام می‌شود.</div>
+      <label for="openrouter-base-url">OpenRouter Base URL:</label>
+      <div class="key-row"><input type="text" id="openrouter-base-url" placeholder="https://openrouter.ai/api/v1"><button class="btn-ghost btn-sm" id="btn-or-models">لیست مدل‌ها</button></div>
+      <div id="or-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
+    </section>
 
     <div class="pref-divider"></div>
 
@@ -88,10 +117,30 @@
     <!-- Polish chain -->
     <section class="pref-section" aria-labelledby="polish-title">
       <div class="pref-head">
-        <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی</h4>
+        <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی (Groq/OpenRouter)</h4>
         <label class="chip chip-toggle"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی روشن</strong></label>
       </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn-ghost btn-sm" id="btn-polish-all-on">همه روشن</button>
+        <button class="btn-ghost btn-sm" id="btn-polish-all-off">همه خاموش</button>
+        <span class="hint-inline">هر مدل را با سوییچ خاموش/روشن یا با ✕ حذف کن — ترتیب فالبک با ⋮⋮/▲▼</span>
+      </div>
       <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <select id="polish-add-model" style="flex:1;min-width:180px;background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
+          <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b</option>
+          <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b</option>
+          <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+          <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
+          <option value="openai/gpt-oss-safeguard-20b">openai/gpt-oss-safeguard-20b</option>
+          <option value="allam-2-7b">allam-2-7b</option>
+        </select>
+        <select id="polish-add-provider" style="background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
+          <option value="groq">Groq</option>
+          <option value="openrouter">OpenRouter</option>
+        </select>
+        <button class="btn-ghost btn-sm" id="btn-polish-add">➕ افزودن مدل</button>
+      </div>
       <div class="chain-foot">
         <span class="hint-inline">نمونه: «رابطه کاربری» → «رابط کاربری» اصلاح می‌شود</span>
         <button class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پالیش</button>

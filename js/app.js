@@ -1,5 +1,5 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage, STT_DEFAULTS, POLISH_DEFAULTS } from './modules/storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './modules/storage.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
 import { Dashboard } from './modules/dashboard.js';
@@ -13,6 +13,7 @@ const els = {
   btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
   modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'), keyOpenrouter: $('key-openrouter'),
+  groqBaseUrl: $('groq-base-url'), openrouterBaseUrl: $('openrouter-base-url'),
   toggleRealtime: $('toggle-realtime'), toggleVad: $('toggle-vad'), toggleAutocopy: $('toggle-autocopy'),
   togglePolish: $('toggle-polish'),
   sttChain: $('stt-chain'), polishChain: $('polish-chain'),
@@ -21,6 +22,9 @@ const els = {
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
+  btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'),
+  groqModelsList: $('groq-models-list'), orModelsList: $('or-models-list'),
+  polishAddModel: $('polish-add-model'), polishAddProvider: $('polish-add-provider'),
 };
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
@@ -110,10 +114,12 @@ const POLISH_LABELS = {
   'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'Qwen سبک • رایگان' },
   'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'Qwen دقیق • رایگان' },
   'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'GPT-OSS • رایگان' },
-  // aliases for display
-  'qwen/qwen3.6-27b': { label: 'qwen/qwen3.6-27b', sub: 'Qwen' },
-  'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Qwen' },
-  'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: '' },
+  'qwen/qwen3.6-27b': { label: 'qwen/qwen3.6-27b', sub: 'Groq • 1K RPD' },
+  'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Groq • 1K RPD' },
+  'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: 'Groq • 1K RPD' },
+  'openai/gpt-oss-120b': { label: 'openai/gpt-oss-120b', sub: 'Groq • 1K RPD' },
+  'openai/gpt-oss-safeguard-20b': { label: 'openai/gpt-oss-safeguard-20b', sub: 'Groq • 1K RPD' },
+  'allam-2-7b': { label: 'allam-2-7b', sub: 'Groq • 7K RPD' },
 };
 
 let sttChainState = [];
@@ -121,8 +127,27 @@ let polishChainState = [];
 
 function hasKeyFor(id){
   const s=Storage.getSettings();
-  if(id==='groq') return !!s.groqKey;
-  if(id.includes('/')) return !!s.openrouterKey; // OR models require openrouterKey only; gemini fallback is decided in chain loop
+  if(typeof id === 'object' && id.provider){
+    if(id.provider==='groq') return !!s.groqKey;
+    if(id.provider==='openrouter') return !!s.openrouterKey;
+    return !!s.geminiKey;
+  }
+  if(typeof id === 'string'){
+    if(id==='groq') return !!s.groqKey;
+    if(id.includes('/')) {
+      // legacy slash ids now default to Groq per screenshot (qwen/oss via Groq)
+      if(id.includes(':free')) return !!s.openrouterKey;
+      return !!s.groqKey;
+    }
+    return !!s.geminiKey;
+  }
+  return false;
+}
+function hasKeyForPolish(entry){
+  const s=Storage.getSettings();
+  const p = entry.provider || 'groq';
+  if(p==='groq') return !!s.groqKey;
+  if(p==='openrouter') return !!s.openrouterKey;
   return !!s.geminiKey;
 }
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
@@ -131,16 +156,22 @@ function renderChain(container, chain, type){
   if(!container) return;
   container.innerHTML='';
   const polishOff = type==='polish' && !els.togglePolish?.checked;
-  chain.forEach((id, idx)=>{
+  chain.forEach((entry, idx)=>{
+    const id = typeof entry === 'string' ? entry : entry.id;
+    const provider = typeof entry === 'object' ? entry.provider : null;
+    const enabled = typeof entry === 'object' ? entry.enabled!==false : true;
     const meta = (type==='stt' ? STT_LABELS[id] : POLISH_LABELS[id]) || {label:id, sub:''};
-    const hasKey = hasKeyFor(id);
+    const hasKey = hasKeyFor(entry);
+    const isPolish = type==='polish';
     const item = document.createElement('div');
-    item.className = 'chain-item' + (hasKey?'':' missing') + (polishOff?' polish-off':'');
+    item.className = 'chain-item' + (hasKey?'':' missing') + (polishOff?' polish-off':'') + (!enabled?' polish-off':'');
     item.draggable = true;
     item.dataset.id = id;
     item.dataset.index = idx;
     item.setAttribute('role','listitem');
     item.setAttribute('aria-label', `${idx+1}. ${meta.label}`);
+    const providerBadge = isPolish ? `<span class="chain-badge ${provider==='openrouter'?'':'ok'}" style="font-size:10px">${esc(provider||'groq')}</span>` : '';
+    const toggleHtml = isPolish ? `<label class="chip" style="padding:4px 8px;gap:4px"><input type="checkbox" data-toggle ${enabled?'checked':''} aria-label="فعال"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>` : '';
     item.innerHTML = `
       <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
@@ -148,12 +179,28 @@ function renderChain(container, chain, type){
         <span class="chain-label" style="font-size:13px">${esc(meta.label)}</span>
         ${meta.sub?`<span style="font-size:11px;color:var(--muted)">${esc(meta.sub)}</span>`:''}
       </div>
+      ${providerBadge}
+      ${toggleHtml}
       <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span>
       <div class="chain-actions">
         <button class="chain-btn" data-up aria-label="بالا" ${idx===0?'disabled':''}>▲</button>
         <button class="chain-btn" data-down aria-label="پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
+        ${isPolish?`<button class="chain-btn" data-remove aria-label="حذف" title="حذف">✕</button>`:''}
       </div>
     `;
+    // toggle per-model
+    if(isPolish){
+      item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
+        polishChainState[idx].enabled = e.target.checked;
+        persistChains();
+        renderAllChains();
+      });
+      item.querySelector('[data-remove]')?.addEventListener('click', ()=>{
+        polishChainState.splice(idx,1);
+        persistChains();
+        renderAllChains();
+      });
+    }
     // up/down
     item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
     item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
@@ -164,7 +211,6 @@ function renderChain(container, chain, type){
       e.dataTransfer.setData('text/plain', idx);
     });
     item.addEventListener('dragend', ()=> item.classList.remove('dragging'));
-    // click label to show engine info (optional)
     container.appendChild(item);
   });
   // dragover reordering
@@ -228,7 +274,18 @@ function validate(){
   if(hor){
     const okOr = !or || or.startsWith('sk-or-');
     hor.className='hint'+(or&&!okOr?' err':'');
-    hor.innerHTML= or&&!okOr ? '⚠️ معمولا با sk-or-v1- شروع می‌شود' : 'از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Gemini انجام می‌شود. مدل‌های Qwen از اینجا استفاده می‌کنند.';
+    hor.innerHTML= or&&!okOr ? '⚠️ معمولا با sk-or-v1- شروع می‌شود' : 'از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Groq انجام می‌شود.';
+  }
+  // validate BaseURLs https
+  const hgBase=$('hint-groq'), horBase=$('hint-openrouter');
+  // reuse hint area for base validation
+  if(els.groqBaseUrl){
+    const v=els.groqBaseUrl.value.trim();
+    if(v){ try{ const u=new URL(v); if(u.protocol!=='https:') throw 0; els.groqBaseUrl.style.borderColor=''; }catch{ els.groqBaseUrl.style.borderColor='var(--danger)'; } } else els.groqBaseUrl.style.borderColor='';
+  }
+  if(els.openrouterBaseUrl){
+    const v=els.openrouterBaseUrl.value.trim();
+    if(v){ try{ const u=new URL(v); if(u.protocol!=='https:') throw 0; els.openrouterBaseUrl.style.borderColor=''; }catch{ els.openrouterBaseUrl.style.borderColor='var(--danger)'; } } else els.openrouterBaseUrl.style.borderColor='';
   }
   // re-render badges live
   renderAllChains();
@@ -236,8 +293,10 @@ function validate(){
 function loadSettings(){
   const s=Storage.getSettings();
   els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey; if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey;
+  if(els.groqBaseUrl) els.groqBaseUrl.value=s.groqBaseURL || GROQ_BASE_DEFAULT;
+  if(els.openrouterBaseUrl) els.openrouterBaseUrl.value=s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT;
   sttChainState=[...s.sttChain];
-  polishChainState=[...s.polishChain];
+  polishChainState=s.polishChain.map(e=>({ ...e }));
   if(els.togglePolish) els.togglePolish.checked=s.polishEnabled;
   els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
   renderAllChains();
@@ -249,6 +308,8 @@ function saveSettings(){
     groqKey: els.keyGroq.value,
     geminiKey: els.keyGemini.value,
     openrouterKey: els.keyOpenrouter?.value||'',
+    groqBaseURL: els.groqBaseUrl?.value||'',
+    openrouterBaseURL: els.openrouterBaseUrl?.value||'',
     realtime: els.toggleRealtime.checked,
     vad: els.toggleVad.checked,
     autocopy: els.toggleAutocopy.checked,
@@ -260,14 +321,58 @@ function saveSettings(){
 }
 els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
 if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
+if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
+if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
 if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
+
+// --- polish provider helpers: fetch models + add/remove + master toggle ---
+async function fetchAndShowModels(provider){
+  const isGroq = provider==='groq';
+  const btn = isGroq ? els.btnGroqModels : els.btnOrModels;
+  const listEl = isGroq ? els.groqModelsList : els.orModelsList;
+  if(btn) btn.textContent='...';
+  try{
+    saveSettings();
+    const ids = isGroq ? await Transcription.listGroqModels() : await Transcription.listOpenRouterModels();
+    if(listEl){
+      listEl.style.display='block';
+      const filtered = ids.filter(id=> /qwen|gpt-oss|allam|llama/i.test(id)).slice(0,30);
+      listEl.innerHTML = `<b>مدل‌های یافت‌شده (${filtered.length}):</b><br>` + filtered.map(id=>`<code style="display:inline-block;margin:2px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer" data-add="${esc(id)}">${esc(id)}</code>`).join(' ') + `<div style="margin-top:6px"><span class="hint-inline">کلیک روی مدل → به زنجیره پالیش اضافه می‌شود</span></div>`;
+      listEl.querySelectorAll('[data-add]')?.forEach(el=> el.addEventListener('click', ()=>{
+        const mid = el.dataset.add;
+        const prov = isGroq ? 'groq' : 'openrouter';
+        if(polishChainState.some(e=>e.id===mid && e.provider===prov)) { Logger.toast('قبلاً هست'); return; }
+        polishChainState.push({ id:mid, provider:prov, enabled:true });
+        persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid}`);
+      }));
+    }
+    Logger.toast(`مدل‌ها: ${ids.length}`);
+  }catch(e){ Logger.toast(e.message.slice(0,80)); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+e.message; } }
+  finally{ if(btn) btn.textContent='لیست مدل‌ها'; }
+}
+els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
+els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
+// auto fetch on first modal open (cached by browser)
+let modelsFetched=false;
+els.btnSettings.addEventListener('click', ()=>{ if(!modelsFetched && (Storage.getSettings().groqKey || Storage.getSettings().openrouterKey)){ modelsFetched=true; /* silent prefetch */ } });
+
+$('btn-polish-add')?.addEventListener('click', ()=>{
+  const selM = $('polish-add-model'), selP = $('polish-add-provider');
+  const mid = selM?.value?.trim(), prov = selP?.value || 'groq';
+  if(!mid) return;
+  if(polishChainState.some(e=>e.id===mid && e.provider===prov)){ Logger.toast('قبلاً هست'); return; }
+  polishChainState.push({ id:mid, provider:prov, enabled:true });
+  persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid} (${prov})`);
+});
+$('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
+$('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });
 
 loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
 $('btn-save-modal').onclick=()=>{ saveSettings(); els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
 $('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
-$('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=[...POLISH_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
+$('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
 els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
 els.toggleVad.addEventListener('change',()=> Storage.saveSettings({vad: els.toggleVad.checked}));
