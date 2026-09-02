@@ -495,11 +495,7 @@ els.btnMic.onclick=()=> {
 };
 function cancelTranscription(){
   if (transcribingAbort) transcribingAbort.abort();
-  // keep transcribingAbort until handleTranscription finally clears it — avoid losing aborted signal
-  Logger.toast('لغو شد', 1500);
-  Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
-  Logger.dismissProgress(0);
-  Logger.setStatus('لغو شد','warn');
+  // UI handled in handleTranscription catch — keep abort signal until finally
 }
 els.btnCancel?.addEventListener('click', cancelTranscription);
 document.addEventListener('keydown', (e)=>{
@@ -520,15 +516,16 @@ async function handleTranscription(blob, snap){
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
     if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
   }
   try{
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const signal = transcribingAbort?.signal;
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
-    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); Logger.dismissProgress(0); if(!snap || snapId===rtVersion){ rtSnap=null; } setMicBusy(false); transcribingAbort=null; return; }
-    if (signal?.aborted) { Logger.log('info','transcribe aborted', { snapId }); Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' }); Logger.dismissProgress(0); if(!snap || snapId===rtVersion){ rtSnap=null; } setMicBusy(false); transcribingAbort=null; return; }
-    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); if(!snap || snapId===rtVersion) rtSnap=null; setMicBusy(false); transcribingAbort=null; return; }
+    if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { aborted:true }); }
+    if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { aborted:true }); }
+    if(!text){ Logger.setStatus('متنی برنگشت','warn'); Logger.toast('متنی نیست'); Logger.dismissProgress(800); throw Object.assign(new Error('متنی نیست'), { aborted:false }); }
     const s=Storage.getSettings();
     if(s.realtime && snap){
       const finalText = text.trim();
@@ -557,12 +554,16 @@ async function handleTranscription(blob, snap){
     Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); Logger.dismissProgress(2600); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
     Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
-    if (err.aborted || transcribingAbort?.signal.aborted) {
+    if (err.message === 'stale') {
+      Logger.dismissProgress(0);
+    } else if (err.aborted || transcribingAbort?.signal.aborted) {
       Logger.log('info','transcribe aborted',{msg:err.message, snapId});
       Logger.toast('لغو شد', 1500);
       Logger.setProgress({ state:'failed', index: 0, total: 1, label: 'لغو شد' });
       Logger.dismissProgress(0);
       Logger.setStatus('لغو شد','warn');
+    } else if (err.message === 'متنی نیست') {
+      // already handled toast/status above
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
       let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
@@ -570,11 +571,13 @@ async function handleTranscription(blob, snap){
       Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
       Logger.dismissProgress(3500);
     }
-    if(!snap || snapId===rtVersion){ rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); }
   } finally {
     setMicBusy(false);
     transcribingAbort = null;
     if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent='';
+    if(els.liveInterim) els.liveInterim.textContent='';
+    if(els.livePreview) els.livePreview.classList.remove('on');
   }
 }
 
