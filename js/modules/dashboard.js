@@ -86,11 +86,20 @@ export const Dashboard = {
     <div class="overall-card accent"><span>⏱ زمان ذخیره‌شده</span><b>${s.savedMinutes} دقیقه</b><small>نسبت به تایپ ۴۰ کلمه/دقیقه</small></div>
   `;
     if(funRow){
-      const favRaw = s.favorite ? `⭐ محبوب: ${s.favorite.label} (${s.favorite.count} بار)` : '—';
-      const longestRaw = s.fun.longestSessionMin ? `⏳ طولانی‌ترین: ${s.fun.longestSessionMin} دقیقه` : '';
-      const streakRaw = s.fun.streakDays ? `🔥 تداوم: ${s.fun.streakDays} روز` : '';
-      const busyRaw = s.fun.busiestDay ? `📌 شلوغ: ${s.fun.busiestDay.date}` : '';
-      funRow.innerHTML=`<span>${esc(favRaw)}</span><span>${esc(busyRaw)}</span><span>${esc(longestRaw)}</span><span>${esc(streakRaw)}</span>`;
+      const favLabel = s.favorite ? esc(s.favorite.label) : '—';
+      const favCount = s.favorite ? `${s.favorite.count} بار` : '';
+      const busyDate = s.fun.busiestDay ? esc(s.fun.busiestDay.date) : '—';
+      const longest = s.fun.longestSessionMin ? `${s.fun.longestSessionMin} دقیقه` : '—';
+      const streak = s.fun.streakDays ? `${s.fun.streakDays} روز` : '—';
+      funRow.innerHTML=`
+        <div class="fun-grid">
+          <div class="fun-card" title="محبوب‌ترین مدل"><span class="fun-icon" aria-hidden="true">⭐</span><span class="fun-label">محبوب</span><span class="fun-value">${favLabel} <small>${esc(favCount)}</small></span></div>
+          <div class="fun-card" title="شلوغ‌ترین روز"><span class="fun-icon" aria-hidden="true">📌</span><span class="fun-label">شلوغ</span><span class="fun-value">${busyDate}</span></div>
+          <div class="fun-card" title="طولانی‌ترین جلسه"><span class="fun-icon" aria-hidden="true">⏳</span><span class="fun-label">طولانی‌ترین</span><span class="fun-value">${longest}</span></div>
+          <div class="fun-card" title="تداوم روزانه"><span class="fun-icon" aria-hidden="true">🔥</span><span class="fun-label">تداوم</span><span class="fun-value">${streak}</span></div>
+        </div>
+        <div class="fun-legend" aria-hidden="true">راهنما: ⭐ محبوب · 📌 شلوغ · ⏳ طولانی · 🔥 تداوم</div>
+      `;
     }
     if(seriesStrip){
       const daysForStrip = activePeriod==='month' ? 30 : activePeriod==='all' ? 30 : activePeriod==='week' ? 7 : 7;
