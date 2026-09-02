@@ -114,25 +114,25 @@ export const Transcription = {
           const s=Storage.getSettings();
           const next = chain[i+1];
           if(next){
-            const hasNext = next==='groq' ? !!s.groqKey : !!s.geminiKey;
+            const hasNext = next==='groq' ? !!s.groqKey : next.includes('/') ? !!s.openrouterKey : !!s.geminiKey;
             if(!hasNext){ Logger.log('warn',`کلید ${next} نیست — فالبک متوقف`,{}); }
           }
           // skip missing-key engines: filter remaining chain for hasKey, if none left throw
           const remaining = chain.slice(i+1);
-          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : !!s.geminiKey);
+          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : rid.includes('/') ? !!s.openrouterKey : !!s.geminiKey);
           if(!hasAnyRemainingKey){ throw err; }
           // if next engine lacks key, continue will skip to next iteration which will throw 401 again — but we already checked hasAny; loop will naturally skip? still continue
         }
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));
-        // skip next if it has no key (avoid wasted 401)
+        // skip next if it has no key (avoid wasted 401) — align to hasKeyFor: groq->groqKey, OR / -> openrouterKey, else geminiKey
         const s2=Storage.getSettings();
         let nxt = chain[i+1];
-        if(nxt && (nxt==='groq' ? !s2.groqKey : !s2.geminiKey)){
+        if(nxt && (nxt==='groq' ? !s2.groqKey : nxt.includes('/') ? !s2.openrouterKey : !s2.geminiKey)){
           // find next with key
           let found=false;
-          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : !!s2.geminiKey){ found=true; break; } }
+          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : chain[j].includes('/') ? !!s2.openrouterKey : !!s2.geminiKey){ found=true; break; } }
           if(!found) throw err;
         }
         continue;

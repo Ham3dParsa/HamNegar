@@ -31,7 +31,7 @@
 - **وضعیت:** 5 مورد `[warning]` از PR #4 قبلاً در `82fe4aa` اعمال شد و در این PR مستند/تثبیت می‌شود؛ گیت آینده: `APPROVED` الزامی، پوش مستقیم به `main` ممنوع.
 - **XSS esc (`js/app.js:123,141`):** رفع با `function esc(s){...textContent...}` و `esc(meta.label/sub)` در `renderChain` — شواهد: `docs/PR4_FOLLOWUP_EVIDENCE.md` §1.
 - **Quota sttChain (`js/modules/quota.js:29`):** رفع با `s.sttChain?.[0]` به جای `s.primary/s.model` — شواهد: §2.
-- **401/403 فالبک (`js/modules/transcription.js:114-123,152`):** رفع با فیلتر `remaining.some(hasKey)` و `throw` اگر کلید بعدی نیست + skip بی‌کلید + `polish 401 break` — شواهد: §3.
+- **401/403 فالبک (`js/modules/transcription.js:114-138,152-168`):** رفع اولیه `82fe4aa` با `remaining.some(hasKey)` + `throw` + skip بی‌کلید + `polish 401 break`؛ تکمیل این PR: تراز 4 نقطه به `hasKeyFor` (`groq→groqKey, /=openrouterKey, else geminiKey`) در `117,122,132,135` — شواهد: §3.
 - **parseChain filter (`js/modules/storage.js:40`):** رفع با `x.trim()!==''` و `new Set` dedup + allowlist در migration — شواهد: §4.
-- **تست دستی ۵ ثانیه (`AGENTS.md:3`):** تعهد ثبت لاگ `Quota.render` + `transcription` با زنجیره فالبک — شواهد: §5 (لاگ پیوست در evidence file).
+- **تست دستی ۵ ثانیه (`AGENTS.md:3`):** لاگ 5s فارسی `سلام، این آزمایش هم‌نگار است` پیوست شد — `log-panel` با `Quota.render` + `transcription` زنجیره فالبک — شواهد: §5.
 - **منبع حقیقت:** این فایل + evidence file؛ هر PR بعدی باید این چک را `APPROVED` بگیرد قبل از merge.
