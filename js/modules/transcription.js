@@ -8,16 +8,16 @@ import { Logger } from './logger.js';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
-  try{
-    const h = new URL(base).hostname.toLowerCase();
-    if(!allowed.includes(h)){
-      const msg = `کلید به ${h} ارسال می‌شود — ادامه می‌دهی؟`;
-      if(typeof window !== 'undefined' && typeof window.confirm === 'function'){
-        if(!window.confirm(msg)) throw Object.assign(new Error('لغو — BaseURL نامعتبر'),{status:400});
-      }
-      Logger.log('warn','untrusted BaseURL', { base, host:h });
+  let h; try{ h = new URL(base).hostname.toLowerCase(); }catch{ throw Object.assign(new Error('BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
+  if(!allowed.includes(h)){
+    const msg = `کلید به ${h} ارسال می‌شود — ادامه می‌دهی؟`;
+    if(typeof window !== 'undefined' && typeof window.confirm === 'function'){
+      if(!window.confirm(msg)) throw Object.assign(new Error('لغو — BaseURL نامعتبر'),{status:400});
+    } else {
+      throw Object.assign(new Error('BaseURL نامعتبر — تأیید لازم است'),{status:400});
     }
-  }catch(e){ if(e.status===400) throw e; /* invalid URL handled elsewhere */ }
+    Logger.log('warn','untrusted BaseURL', { base, host:h });
+  }
 }
 async function parseErr(res){ let b=''; try{ b=await res.text(); try{ const j=JSON.parse(b); return {text:b, msg:j.error?.message||j.error||j.message||b.slice(0,600)} }catch{ return {text:b, msg:b.slice(0,600)} } }catch{ return {text:'', msg:res.statusText} } }
 function blobToB64(blob){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=()=>rej(new Error('خواندن صدا خطا')); r.onloadend=()=>{ try{ res(r.result.split(',')[1]); }catch(e){ rej(e); } }; r.readAsDataURL(blob); }); }
