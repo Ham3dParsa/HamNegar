@@ -82,7 +82,8 @@ export const Logger = {
     if (!progressSteps) progressSteps = document.getElementById('progress-steps');
     if (!progressSteps || !Array.isArray(chain)) return;
     progressSteps.innerHTML = '';
-    chain.forEach((id, idx) => {
+    chain.forEach((entry, idx) => {
+      const id = typeof entry === 'object' ? entry.id : entry;
       const li = document.createElement('li');
       li.className = 'chain-step';
       const rank = document.createElement('span');

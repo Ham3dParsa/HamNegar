@@ -105,11 +105,26 @@
     <section class="pref-section" aria-labelledby="stt-title">
       <div class="pref-head">
         <h4 id="stt-title">🎙️ زنجیرهٔ ترجیح STT</h4>
-        <span class="pref-sub">اولویت از بالا به پایین — فالبک خودکار با نشانگر</span>
+        <div style="display:flex;gap:6px">
+          <button class="btn-ghost btn-sm" id="btn-stt-all-on">همه روشن</button>
+          <button class="btn-ghost btn-sm" id="btn-stt-all-off">همه خاموش</button>
+        </div>
       </div>
+      <p class="pref-sub" style="font-size:11px;color:var(--muted);margin:4px 0">اولویت از بالا به پایین — بکش ⋮⋮ یا ▲▼ برای جابجایی، سوییچ برای خاموش/روشن، ✕ برای حذف</p>
       <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="stt-add-input" list="stt-models" placeholder="🔍 نام مدل STT را تایپ کن و Enter بزن..." style="flex:1;min-width:180px;background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
+        <datalist id="stt-models">
+          <option value="groq"></option>
+          <option value="gemini-flash-lite-latest"></option>
+          <option value="gemini-3.5-flash-lite"></option>
+          <option value="gemini-3.1-flash-lite"></option>
+          <option value="gemini-flash-latest"></option>
+        </datalist>
+        <span class="hint-inline">Enter برای افزودن</span>
+      </div>
       <div class="chain-foot">
-        <span class="hint-inline">بکش تا جابه‌جا شود یا ▲/▼ بزن</span>
+        <span class="hint-inline">هر مدل را با سوییچ خاموش/روشن کن</span>
         <button class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی STT</button>
       </div>
     </section>
@@ -123,23 +138,20 @@
       <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
         <button class="btn-ghost btn-sm" id="btn-polish-all-on">همه روشن</button>
         <button class="btn-ghost btn-sm" id="btn-polish-all-off">همه خاموش</button>
-        <span class="hint-inline">هر مدل را با سوییچ خاموش/روشن یا با ✕ حذف کن — ترتیب فالبک با ⋮⋮/▲▼</span>
+        <span class="hint-inline">سوییچ هر ردیف را خاموش/روشن یا ✕ حذف — ترتیب با ⋮⋮/▲▼</span>
       </div>
       <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-        <select id="polish-add-model" style="flex:1;min-width:180px;background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
-          <option value="qwen/qwen3.6-27b">qwen/qwen3.6-27b</option>
-          <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b</option>
-          <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
-          <option value="openai/gpt-oss-120b">openai/gpt-oss-120b</option>
-          <option value="openai/gpt-oss-safeguard-20b">openai/gpt-oss-safeguard-20b</option>
-          <option value="allam-2-7b">allam-2-7b</option>
-        </select>
-        <select id="polish-add-provider" style="background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
-          <option value="groq">Groq</option>
-          <option value="openrouter">OpenRouter</option>
-        </select>
-        <button class="btn-ghost btn-sm" id="btn-polish-add">➕ افزودن مدل</button>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <input id="polish-add-input" list="polish-models" placeholder="🔍 نام مدل پالیش را تایپ کن (qwen/...) و Enter بزن..." style="flex:1;min-width:180px;background:#111113;border:1px solid var(--border);color:#fff;padding:8px;border-radius:8px">
+        <datalist id="polish-models">
+          <option value="qwen/qwen3.6-27b"></option>
+          <option value="qwen/qwen3.8-27b"></option>
+          <option value="openai/gpt-oss-20b"></option>
+          <option value="openai/gpt-oss-120b"></option>
+          <option value="openai/gpt-oss-safeguard-20b"></option>
+          <option value="allam-2-7b"></option>
+        </datalist>
+        <span class="hint-inline">Enter برای افزودن — provider خودکار</span>
       </div>
       <div class="chain-foot">
         <span class="hint-inline">نمونه: «رابطه کاربری» → «رابط کاربری» اصلاح می‌شود</span>

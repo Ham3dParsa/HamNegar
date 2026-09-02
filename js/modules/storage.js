@@ -42,6 +42,20 @@ function normalizePolishChain(arr){
   }
   return out;
 }
+function normalizeSTTEntry(x){
+  if(typeof x === 'string'){
+    const id=x.trim(); if(!id) return null; return { id, enabled:true };
+  }
+  if(x && typeof x === 'object' && typeof x.id==='string' && x.id.trim()){
+    return { id:x.id.trim(), enabled: x.enabled===false?false:true };
+  }
+  return null;
+}
+function normalizeSTTChain(arr){
+  const seen=new Set(); const out=[];
+  for(const raw of arr){ const e=normalizeSTTEntry(raw); if(!e||seen.has(e.id)) continue; seen.add(e.id); out.push(e); }
+  return out;
+}
 function normalizePolish(arr){
   return [...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))];
 }
@@ -70,12 +84,35 @@ const KEYS = {
 };
 
 function parseChain(raw, defaults){
+  // legacy string[] support
   if(!raw) return [...defaults];
   try{
     const arr = JSON.parse(raw);
-    if(Array.isArray(arr) && arr.length) return normalizePolish([...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))]);
+    if(Array.isArray(arr) && arr.length) {
+      // detect object form (new) vs string form (legacy)
+      if(typeof arr[0]==='object') {
+        const norm=normalizeSTTChain(arr); if(norm.length) return norm.map(e=>e.id);
+      }
+      return normalizePolish([...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))]);
+    }
   }catch{}
   return [...defaults];
+}
+function parseSTTChain(raw, defaults){
+  if(!raw) return defaults.map(id=>({id, enabled:true}));
+  try{
+    const arr=JSON.parse(raw);
+    if(Array.isArray(arr) && arr.length){
+      // if already objects with enabled, use them
+      if(typeof arr[0]==='object' && arr[0].id){
+        const norm=normalizeSTTChain(arr); if(norm.length) return norm;
+      }
+      // legacy string[] → objects enabled:true
+      const strings=arr.filter(x=>typeof x==='string'&&x.trim()!=='');
+      if(strings.length){ const norm=normalizeSTTChain(strings); if(norm.length) return norm; }
+    }
+  }catch{}
+  return defaults.map(id=>({id, enabled:true}));
 }
 function parsePolishChain(raw, defaults){
   if(!raw) return defaults.map(e=>({ ...e }));
@@ -93,7 +130,7 @@ export const Storage = {
   getSettings() {
     const rawStt = localStorage.getItem(KEYS.STT_CHAIN);
     const rawPolish = localStorage.getItem(KEYS.POLISH_CHAIN);
-    let sttChain = parseChain(rawStt, STT_DEFAULTS);
+    let sttChain = parseSTTChain(rawStt, STT_DEFAULTS);
     let polishChain = parsePolishChain(rawPolish, POLISH_DEFAULTS);
     if(!rawStt && (localStorage.getItem(KEYS.PRIMARY) || localStorage.getItem(KEYS.MODEL))){
       const p = localStorage.getItem(KEYS.PRIMARY) || 'groq';
@@ -151,7 +188,7 @@ export const Storage = {
     if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
-    if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizePolish(patch.sttChain)));
+    if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
     if ('polishChain' in patch) localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(normalizePolishChain(patch.polishChain)));
     if ('polishEnabled' in patch) localStorage.setItem(KEYS.POLISH_ENABLED, patch.polishEnabled ? '1' : '0');
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');

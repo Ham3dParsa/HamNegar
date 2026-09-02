@@ -119,15 +119,15 @@ async function queryPolish(text, entry){
 
 function hasKeyFor(id){
   const s=Storage.getSettings();
-  if(id==='groq') return !!s.groqKey;
+  const realId = typeof id === 'object' ? id.id : id;
+  if(realId==='groq') return !!s.groqKey;
   if(typeof id === 'object' && id.provider) {
     if(id.provider==='groq') return !!s.groqKey;
     if(id.provider==='openrouter') return !!s.openrouterKey;
     return !!s.geminiKey;
   }
-  if(typeof id === 'string' && id.includes('/')) {
-    // legacy: treat slash ids as groq unless :free
-    if(id.includes(':free')) return !!s.openrouterKey;
+  if(typeof realId === 'string' && realId.includes('/')) {
+    if(realId.includes(':free')) return !!s.openrouterKey;
     return !!s.groqKey;
   }
   return !!s.geminiKey;
@@ -143,8 +143,10 @@ export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = (sttChain && sttChain.length) ? sttChain : ['groq','gemini-flash-lite-latest'];
-    let chain = rawChain.filter(id => hasKeyFor(id));
+    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',enabled:true},{id:'gemini-flash-lite-latest',enabled:true}];
+    // support both string[] legacy and object[] new
+    const enabledChain = rawChain.filter(e=> typeof e==='object' ? e.enabled!==false : true);
+    let chain = enabledChain.filter(id => hasKeyFor(id));
     if(chain.length===0){
       throw Object.assign(new Error('کلید STT نیست — تنظیمات را چک کن'),{status:401});
     }
@@ -155,7 +157,8 @@ export const Transcription = {
     try { Logger.rebuildProgress(chain); } catch (e) { Logger.log('warn','rebuildProgress failed', { msg:e.message }); }
     let lastErr=null, usedEngine='—', rawText='';
     for(let i=0;i<chain.length;i++){
-      const id = chain[i];
+      const entry = chain[i];
+      const id = typeof entry === 'object' ? entry.id : entry;
       const isGroq = id==='groq';
       const label = isGroq ? 'Groq' : id;
       const signal = opts.signal;
