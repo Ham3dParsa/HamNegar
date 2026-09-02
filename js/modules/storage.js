@@ -2,18 +2,56 @@
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
 // Depth: hides 10+ keys, serialization, defaults, and migration behind 6 functions.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
-// پالیش فقط از Groq — مدل‌های مدرن Qwen اولویت
-export const POLISH_DEFAULTS = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
-// بدون alias به OpenRouter — پالیش از Groq
+export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
+export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
+// پالیش دو-کلیده: هر ورودی {id,provider,enabled} — provider: groq|openrouter
+export const POLISH_DEFAULTS = [
+  { id:'qwen/qwen3.6-27b', provider:'groq', enabled:true },
+  { id:'qwen/qwen3.8-27b', provider:'groq', enabled:true },
+  { id:'openai/gpt-oss-20b', provider:'groq', enabled:true },
+];
+const POLISH_DEFAULTS_LEGACY = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
 
+function normalizePolishEntry(x){
+  if(typeof x === 'string'){
+    const id = x.trim();
+    if(!id) return null;
+    // legacy :free → openrouter, else groq (qwen/oss via Groq per new spec)
+    const provider = id.includes(':free') ? 'openrouter' : 'groq';
+    const cleanId = id.replace(':free','');
+    return { id: cleanId, provider, enabled:true };
+  }
+  if(x && typeof x === 'object' && typeof x.id === 'string' && x.id.trim()){
+    const id = x.id.trim();
+    const provider = x.provider === 'openrouter' ? 'openrouter' : x.provider === 'gemini' ? 'gemini' : 'groq';
+    const enabled = x.enabled === false ? false : true;
+    return { id, provider, enabled };
+  }
+  return null;
+}
+function normalizePolishChain(arr){
+  const seen = new Set();
+  const out = [];
+  for(const raw of arr){
+    const e = normalizePolishEntry(raw);
+    if(!e) continue;
+    const key = `${e.provider}:${e.id}`;
+    if(seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
 function normalizePolish(arr){
   return [...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))];
 }
 
 const KEYS = {
   GROQ: 'KEY_GROQ',
+  GROQ_BASE: 'GROQ_BASE_URL',
   GEMINI: 'KEY_GEMINI',
   OPENROUTER: 'KEY_OPENROUTER',
+  OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
   STT_CHAIN: 'STT_CHAIN',
@@ -39,15 +77,24 @@ function parseChain(raw, defaults){
   }catch{}
   return [...defaults];
 }
+function parsePolishChain(raw, defaults){
+  if(!raw) return defaults.map(e=>({ ...e }));
+  try{
+    const arr = JSON.parse(raw);
+    if(Array.isArray(arr) && arr.length){
+      const norm = normalizePolishChain(arr);
+      if(norm.length) return norm;
+    }
+  }catch{}
+  return defaults.map(e=>({ ...e }));
+}
 
 export const Storage = {
   getSettings() {
-    // migration: if new chain keys missing but legacy PRIMARY/MODEL exist, build chain respecting primary order
     const rawStt = localStorage.getItem(KEYS.STT_CHAIN);
     const rawPolish = localStorage.getItem(KEYS.POLISH_CHAIN);
     let sttChain = parseChain(rawStt, STT_DEFAULTS);
-    let polishChain = parseChain(rawPolish, POLISH_DEFAULTS);
-    // legacy migration for stt — filter legacy model against allowlist before prepending
+    let polishChain = parsePolishChain(rawPolish, POLISH_DEFAULTS);
     if(!rawStt && (localStorage.getItem(KEYS.PRIMARY) || localStorage.getItem(KEYS.MODEL))){
       const p = localStorage.getItem(KEYS.PRIMARY) || 'groq';
       const m = localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest';
@@ -62,8 +109,10 @@ export const Storage = {
     const repColRaw = localStorage.getItem(KEYS.REPORT_COLLAPSED);
     return {
       groqKey: localStorage.getItem(KEYS.GROQ) || '',
+      groqBaseURL: localStorage.getItem(KEYS.GROQ_BASE) || GROQ_BASE_DEFAULT,
       geminiKey: localStorage.getItem(KEYS.GEMINI) || '',
       openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
+      openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
       primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
       model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
       sttChain,
@@ -77,13 +126,33 @@ export const Storage = {
     };
   },
   saveSettings(patch) {
+    // validate BaseURLs first — atomic: no partial persist on throw (waiver: custom host allowed, confirm at fetch)
+    let groqBaseNorm = null, orBaseNorm = null;
+    if ('groqBaseURL' in patch) {
+      const v = (patch.groqBaseURL||'').trim();
+      if(v){
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'groqBaseURL'}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400, field:'groqBaseURL'});
+        groqBaseNorm = v.replace(/\/+$/,'');
+      } else groqBaseNorm = GROQ_BASE_DEFAULT;
+    }
+    if ('openrouterBaseURL' in patch) {
+      const v = (patch.openrouterBaseURL||'').trim();
+      if(v){
+        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'openrouterBaseURL'}); }
+        if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400, field:'openrouterBaseURL'});
+        orBaseNorm = v.replace(/\/+$/,'');
+      } else orBaseNorm = OPENROUTER_BASE_DEFAULT;
+    }
     if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
+    if ('groqBaseURL' in patch) localStorage.setItem(KEYS.GROQ_BASE, groqBaseNorm);
     if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
     if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
+    if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizePolish(patch.sttChain)));
-    if ('polishChain' in patch) localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(normalizePolish(patch.polishChain)));
+    if ('polishChain' in patch) localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(normalizePolishChain(patch.polishChain)));
     if ('polishEnabled' in patch) localStorage.setItem(KEYS.POLISH_ENABLED, patch.polishEnabled ? '1' : '0');
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');
     if ('vad' in patch) localStorage.setItem(KEYS.VAD, patch.vad ? '1' : '0');
