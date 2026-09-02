@@ -110,19 +110,31 @@ export const Transcription = {
       }catch(err){
         lastErr=err;
         Logger.log('warn',`STT ${label} خطا (${i+1}/${chain.length})`,{msg:err.message, status:err.status});
-        // REVIEW trap: auth fallback only if next has key; we iterate anyway, but skip if no key present for next
         if(err.status===401||err.status===403){
           const s=Storage.getSettings();
-          // peek next has key?
           const next = chain[i+1];
           if(next){
             const hasNext = next==='groq' ? !!s.groqKey : !!s.geminiKey;
             if(!hasNext){ Logger.log('warn',`کلید ${next} نیست — فالبک متوقف`,{}); }
           }
+          // skip missing-key engines: filter remaining chain for hasKey, if none left throw
+          const remaining = chain.slice(i+1);
+          const hasAnyRemainingKey = remaining.some(rid => rid==='groq' ? !!s.groqKey : !!s.geminiKey);
+          if(!hasAnyRemainingKey){ throw err; }
+          // if next engine lacks key, continue will skip to next iteration which will throw 401 again — but we already checked hasAny; loop will naturally skip? still continue
         }
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));
+        // skip next if it has no key (avoid wasted 401)
+        const s2=Storage.getSettings();
+        let nxt = chain[i+1];
+        if(nxt && (nxt==='groq' ? !s2.groqKey : !s2.geminiKey)){
+          // find next with key
+          let found=false;
+          for(let j=i+1;j<chain.length;j++){ if(chain[j]==='groq' ? !!s2.groqKey : !!s2.geminiKey){ found=true; break; } }
+          if(!found) throw err;
+        }
         continue;
       }
     }
@@ -151,7 +163,9 @@ export const Transcription = {
         }catch(e){
           Logger.log('warn',`پالیش ${pm} خطا`,{msg:e.message, status:e.status});
           if(e.status===401||e.status===403){
-            // if OpenRouter key missing, next will also fail — but continue
+            const s=Storage.getSettings();
+            const isOR = pm.includes('/');
+            if(isOR && !s.openrouterKey){ Logger.log('warn','کلید OpenRouter نیست — پالیش فالبک متوقف'); break; }
           }
           if(e.status===429) await new Promise(r=>setTimeout(r,500));
           if(i===polishChain.length-1) break;
@@ -197,9 +211,7 @@ export const Transcription = {
     return r.json();
   },
   async testPolish(){
-    const { polishChain } = Storage.getSettings();
-    const m = polishChain?.[0] || 'qwen/qwen3-30b-a3b:free';
-    const out = await queryPolish('رابطه کاربری زیبا است', m);
-    return out;
+    // keep for backwards compat — delegates to polishText which respects polishEnabled and chain fallback
+    return this.polishText('رابطه کاربری زیبا است');
   }
 };

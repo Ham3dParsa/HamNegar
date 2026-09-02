@@ -26,7 +26,8 @@ export const Quota = {
     if (!container) return;
     const q = Storage.getQuotaRaw();
     const s = Storage.getSettings();
-    const keys = [s.primary === 'groq' ? 'groq' : s.model, s.primary === 'groq' ? s.model : 'groq', 'live-transcribe'];
+    const chain = s.sttChain?.length ? s.sttChain : [s.primary, s.model];
+    const keys = [chain[0] || s.primary, chain[1] || (chain[0]==='groq' ? s.model : 'groq'), 'live-transcribe'];
     container.innerHTML = '';
     keys.forEach(k => {
       const lim = LIMITS[k] || { label: k, rpd: '—', rpm: '—', tpm: '—' };

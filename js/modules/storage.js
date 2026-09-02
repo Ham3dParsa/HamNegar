@@ -37,7 +37,7 @@ function parseChain(raw, defaults){
   if(!raw) return [...defaults];
   try{
     const arr = JSON.parse(raw);
-    if(Array.isArray(arr) && arr.length) return normalizePolish(arr.filter(x=>typeof x==='string' && x.trim()));
+    if(Array.isArray(arr) && arr.length) return normalizePolish([...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))]);
   }catch{}
   return [...defaults];
 }
@@ -49,12 +49,13 @@ export const Storage = {
     const rawPolish = localStorage.getItem(KEYS.POLISH_CHAIN);
     let sttChain = parseChain(rawStt, STT_DEFAULTS);
     let polishChain = parseChain(rawPolish, POLISH_DEFAULTS);
-    // legacy migration for stt
+    // legacy migration for stt — filter legacy model against allowlist before prepending
     if(!rawStt && (localStorage.getItem(KEYS.PRIMARY) || localStorage.getItem(KEYS.MODEL))){
       const p = localStorage.getItem(KEYS.PRIMARY) || 'groq';
       const m = localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest';
+      const allowed = new Set([...STT_DEFAULTS, 'groq']);
       const set = new Set();
-      if(p==='groq'){ set.add('groq'); set.add(m); } else { set.add(m); set.add('groq'); }
+      if(p==='groq'){ set.add('groq'); if(allowed.has(m)) set.add(m); } else { if(allowed.has(m)) set.add(m); set.add('groq'); }
       for(const d of STT_DEFAULTS) set.add(d);
       sttChain = [...set];
     }

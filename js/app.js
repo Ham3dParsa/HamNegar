@@ -120,9 +120,10 @@ let polishChainState = [];
 function hasKeyFor(id){
   const s=Storage.getSettings();
   if(id==='groq') return !!s.groqKey;
-  if(id.includes('/')) return !!s.openrouterKey || !!s.geminiKey; // openrouter or fallback gemini
+  if(id.includes('/')) return !!s.openrouterKey; // OR models require openrouterKey only; gemini fallback is decided in chain loop
   return !!s.geminiKey;
 }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
 function renderChain(container, chain, type){
   if(!container) return;
@@ -142,8 +143,8 @@ function renderChain(container, chain, type){
       <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-        <span class="chain-label" style="font-size:13px">${meta.label}</span>
-        ${meta.sub?`<span style="font-size:11px;color:var(--muted)">${meta.sub}</span>`:''}
+        <span class="chain-label" style="font-size:13px">${esc(meta.label)}</span>
+        ${meta.sub?`<span style="font-size:11px;color:var(--muted)">${esc(meta.sub)}</span>`:''}
       </div>
       <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span>
       <div class="chain-actions">
@@ -238,7 +239,7 @@ function loadSettings(){
   els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
   renderAllChains();
   updateBadge(); validate(); Quota.render(els.quotaGrid);
-  if(!s.groqKey&&!s.geminiKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   Storage.saveSettings({
@@ -408,7 +409,7 @@ function makeOnInterim(snap){
 let isRecording=false, vadTimer=null;
 async function startRecording(){
   saveCursor();
-  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
+  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
   let snap=null;
   try{
     snap = { id: ++rtVersion, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
