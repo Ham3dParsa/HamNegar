@@ -32,7 +32,7 @@ async function queryGroq(blob){
   let res; try{ res=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq'),{status:408}); throw Object.assign(new Error('شبکه Groq: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); Logger.log('error','Groq fail',{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
-  const j=await res.json(); Logger.log('info','Groq ok',j); Quota.record('groq'); return (j.text||'').trim();
+  const j=await res.json(); Logger.log('info','Groq ok',j); return (j.text||'').trim();
 }
 async function queryGemini(blob, model){
   const { geminiKey: k } = Storage.getSettings();
@@ -46,7 +46,7 @@ async function queryGemini(blob, model){
   let res; try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:"Transcribe verbatim in original language(s). Only transcription, no summary."},{inlineData:{mimeType:blob.type||"audio/webm",data:b64}}]}],generationConfig:{temperature:0.1}}),signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Gemini'),{status:408}); throw Object.assign(new Error('شبکه Gemini: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error','Gemini fail',{status:res.status, model, body:er.text}); throw err; }
-  const j=await res.json(); Logger.log('debug','Gemini raw',j); Quota.record(model); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
+  const j=await res.json(); Logger.log('debug','Gemini raw',j); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
 }
 
 // Polish adapters
@@ -63,7 +63,6 @@ async function queryPolishViaGemini(text, model){
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Gemini polish fail',{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
-  if(out) Quota.record(model);
   return out;
 }
 async function queryPolishViaOpenRouter(text, model){
@@ -81,7 +80,6 @@ async function queryPolishViaOpenRouter(text, model){
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
-  if(out) Quota.record(model);
   return out;
 }
 async function queryPolish(text, model){
@@ -91,7 +89,7 @@ async function queryPolish(text, model){
 }
 
 export const Transcription = {
-  async transcribe(blob){
+  async transcribe(blob, opts={}){
     // blob guard once before chain (REVIEW trap)
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
@@ -141,6 +139,13 @@ export const Transcription = {
     if(!rawText){
       if(lastErr) throw lastErr;
       throw new Error('متنی برنگشت');
+    }
+    // record STT usage with metrics (deep)
+    {
+      const words = rawText.trim() ? rawText.trim().split(/\s+/).filter(Boolean).length : 0;
+      const chars = rawText.length;
+      const durationMs = typeof opts.durationMs === 'number' ? opts.durationMs : 0;
+      try{ Quota.record(usedEngine === 'Groq' ? 'groq' : usedEngine, { durationMs, words, chars }); }catch{}
     }
     // Polish chain if enabled
     let finalText = rawText;
