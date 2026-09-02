@@ -281,24 +281,24 @@ $('btn-copy-log').onclick=async()=>{
   await navigator.clipboard.writeText(text);
   Logger.toast(visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
 };
-let logCollapsed=false;
+let logCollapsed = Storage.getSettings().logCollapsed;
+function applyLogCollapsed(collapsed){
+  logCollapsed=collapsed;
+  els.logPanel.classList.toggle('collapsed', collapsed);
+  els.btnToggleLog.textContent= collapsed ? 'نمایش' : 'بستن';
+  const splitter=document.getElementById('log-splitter');
+  if(splitter) splitter.style.display = collapsed ? 'none' : 'flex';
+  Storage.saveSettings({ logCollapsed: collapsed });
+}
+applyLogCollapsed(logCollapsed);
 els.btnToggleLog.onclick=()=>{
-  logCollapsed=!logCollapsed;
-  const splitter = document.getElementById('log-splitter');
-  if(logCollapsed){
-    els.logPanel.dataset.prevHeight=els.logPanel.style.height||getComputedStyle(els.logPanel).height;
-    els.logPanel.style.display='none';
-    if(splitter) splitter.style.display='none';
-    els.btnToggleLog.textContent='نمایش';
-    Logger.log('info','لاگ بسته شد');
-  } else {
-    els.logPanel.style.display='flex';
-    els.logPanel.style.height=els.logPanel.dataset.prevHeight||Storage.getHeights().log||'180px';
-    if(splitter) splitter.style.display='flex';
-    els.btnToggleLog.textContent='بستن';
-    Logger.log('info','لاگ باز شد');
-  }
+  applyLogCollapsed(!logCollapsed);
+  Logger.log('info', logCollapsed ? 'لاگ بسته شد' : 'لاگ باز شد');
 };
+document.getElementById('log-header')?.addEventListener('click', (e)=>{
+  if(e.target.closest('button') || e.target.closest('input')) return;
+  applyLogCollapsed(!logCollapsed);
+});
 
 // output draft + counters + heights
 let selStart=0, selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart; selEnd=els.output.selectionEnd; };
@@ -360,6 +360,13 @@ els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTim
     const roOut=new ResizeObserver(()=>{ clearTimeout(roOut._t); roOut._t=setTimeout(()=> Storage.saveHeights({out: getComputedStyle(els.output).height}),300); }); roOut.observe(els.output);
   }
 })();
+els.output.addEventListener('dblclick', ()=>{
+  saveCursor();
+  els.output.style.height='auto';
+  const nh=Math.min(els.output.scrollHeight, window.innerHeight*0.5)+'px';
+  els.output.style.height=nh;
+  Storage.saveHeights({ out: nh });
+});
 
 // waveform
 const waveCtx=els.wave.getContext('2d'); let animId=null;

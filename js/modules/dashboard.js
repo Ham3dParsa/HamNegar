@@ -2,6 +2,7 @@
 // Interface: Dashboard.ensureReportUI(), Dashboard.renderOverall()
 // Depth: hides Tehran period state, segmented UI, overall cards, fun row, 7/30-day series bar generation.
 import { Quota } from './quota.js';
+import { Storage } from './storage.js';
 
 let activePeriod = 'today';
 
@@ -28,9 +29,12 @@ export const Dashboard = {
         <button data-period="all" role="tab">کل</button>
       </div>
     </div>
-    <div class="overall-grid" id="overall-grid"></div>
-    <div class="fun-row" id="fun-row"></div>
-    <div class="series-strip" id="series-strip"></div>
+    <div class="report-summary" id="report-summary"><span id="report-summary-text">—</span><button class="btn-ghost btn-sm" id="btn-toggle-report" aria-expanded="false">نمایش جزئیات ▾</button></div>
+    <div id="report-details" hidden>
+      <div class="overall-grid" id="overall-grid"></div>
+      <div class="fun-row" id="fun-row"></div>
+      <div class="series-strip" id="series-strip"></div>
+    </div>
   `;
     quotaGrid.parentNode.insertBefore(sec, quotaGrid);
     sec.querySelectorAll('[data-period]').forEach(btn=>{
@@ -43,15 +47,36 @@ export const Dashboard = {
         if(qg) Quota.render(qg, { period: activePeriod });
       });
     });
+    const details=document.getElementById('report-details');
+    const toggleBtn=document.getElementById('btn-toggle-report');
+    const startCollapsed = Storage.getSettings().reportCollapsed;
+    const quotaGridEl=document.getElementById('quota-grid');
+    function applyReportCollapsed(collapsed){
+      details.hidden=collapsed;
+      if(quotaGridEl) quotaGridEl.style.display= collapsed ? 'none' : '';
+      toggleBtn.textContent= collapsed ? 'نمایش جزئیات ▾' : 'پنهان‌سازی ▴';
+      toggleBtn.setAttribute('aria-expanded', String(!collapsed));
+      Storage.saveSettings({ reportCollapsed: collapsed });
+    }
+    applyReportCollapsed(startCollapsed);
+    toggleBtn.addEventListener('click', ()=>{
+      const willShow=details.hidden;
+      applyReportCollapsed(!willShow);
+    });
   },
 
   renderOverall(){
     const grid=document.getElementById('overall-grid');
     const funRow=document.getElementById('fun-row');
     const seriesStrip=document.getElementById('series-strip');
+    const summaryText=document.getElementById('report-summary-text');
     if(!grid) return;
     const s=Quota.getSummary(activePeriod);
     const fmtMin=v=> v<1 ? Math.round(v*60)+' ثانیه' : v.toFixed(1)+' دقیقه';
+    if(summaryText){
+      const fav=s.favorite? s.favorite.label : '—';
+      summaryText.textContent=`${s.totals.count} درخواست ${s.rangeLabel} — ${fav} • ${fmtMin(s.totals.minutes)}`;
+    }
     grid.innerHTML=`
     <div class="overall-card"><span>درخواست</span><b>${s.totals.count}</b><small>${s.rangeLabel}</small></div>
     <div class="overall-card"><span>دقایق رونویسی</span><b>${fmtMin(s.totals.minutes)}</b><small>${s.totals.words} کلمه</small></div>
