@@ -1,0 +1,68 @@
+name: opencode-review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: read
+  id-token: write
+
+jobs:
+  review:
+    # Rule 1 & 4: only ready PRs, skip bots & forks (secrets not passed on forks)
+    if: |
+      github.event.pull_request.draft == false &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'renovate[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          # Rule 2: Muse Spark 1.2 free via Zen (free, 82.9% Terminal, 1M/131K)
+          model: opencode/muse-spark-1.2-contributor-free
+          # Rule 3: Strict + all focus + gate Warnings+ + REVIEW.md + fast
+          prompt: |
+            You are the HamNegar PR reviewer (تایپ صوتی). Be STRICT: flag all potential issues, prioritize quality and security.
+            PR Gate Threshold is "Warnings and above" — mark every finding as [critical], [warning] or [info]. Fail the check if any [critical] or [warning] exists.
+
+            Focus Areas (all enabled):
+            - Security (XSS via innerHTML, key exposure, CORS file://)
+            - Performance (audio blob size, token waste, blocking fetch)
+            - Bug detection (realtime race rtBefore/rtAfter, fallback 401/404/429, \u200blocalStorage seam breaks)
+            - Code style (modular seam discipline — one module per file)
+            - Test coverage (require manual test notes for transcription)
+            - Documentation (persian UI strings)
+
+            First read ./REVIEW.md from the base branch (git show origin/main:REVIEW.md); if present, treat it as the source of truth for repo-specific traps:
+            - Gemini Auth: must use x-goog-api-key header for AQ. keys, never ?key= query
+            - file:// warning: app must warn and require http://localhost
+            - Audio guard: blob.size <800 must throw TOO_SHORT before fetch
+            - Storage seam: never touch localStorage directly, use Storage module
+            - Realtime race: rtBefore/rtAfter must be closure snapshot, not globals
+            - Secrets: never commit .env, only .env.example with UPPERCASE placeholders
+            - No Live Transcribe: do not add BidiGenerateContent WebSocket — use Web Speech only
+
+            Output format (human + agent readable, keep concise for speed):
+            Status: REQUEST_CHANGES | APPROVED — N [warning/critical] must be fixed before merge, M [info] optional
+            Must fix before merge:
+            - [ ] file_path:line_number [severity] description — positive fix
+            Optional / defer:
+            - [ ] file_path:line_number [info] description — defer reason
+            Traps checked: list REVIEW.md traps verified (or "none relevant")
+            Update the summary comment in place. Set status to APPROVED only if zero [critical]/[warning].
