@@ -5,6 +5,7 @@ import { Quota } from './modules/quota.js';
 import { Audio } from './modules/audio.js';
 import { Realtime } from './modules/realtime.js';
 import { Transcription } from './modules/transcription.js';
+import { VERSION, BUILD } from './modules/version.js';
 
 const $ = s => document.getElementById(s);
 const els = {
@@ -361,5 +362,7 @@ $('btn-test-groq').onclick=async()=>{ saveSettings(); Logger.setStatus('تست G
 $('btn-test-gemini').onclick=async()=>{ saveSettings(); Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+e.message,'error'); } };
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
 els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
-stopWave(); Logger.log('info','ماژولار آماده', {hasRealtime: Realtime.isSupported(), proto: location.protocol});
+stopWave();
+const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
+Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
 Quota.render(els.quotaGrid);
