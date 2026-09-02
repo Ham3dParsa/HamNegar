@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype — Fallback Visibility (shared css)</title>
+<link href="css/app.css" rel="stylesheet">
+<!-- No duplicate styles — uses css/app.css directly to minimize drift -->
+</head>
+<body>
+<div class="header"><div class="brand"><div class="brand-icon">🎙️</div><div><h1>هم‌نگار — پروتوتایپ فالبک (shared)</h1><p>میک قفل + داک + توست — بدون CSS تکراری</p></div></div></div>
+
+<div style="padding:10px 14px;display:flex;gap:8px;flex-wrap:wrap">
+  <button class="btn-ghost" onclick="demo(0)">۱. شروع Groq…</button>
+  <button class="btn-ghost" onclick="demo(1)">۲. Groq fail → Gemini</button>
+  <button class="btn-ghost" onclick="demo(2)">۳. موفقیت (فالبک ۲/۴)</button>
+  <button class="btn-ghost" onclick="demo(3)">۴. همه خطا</button>
+  <button class="btn-ghost" onclick="demo(4)">۵. idle</button>
+  <button class="btn-ghost" onclick="shakeDemo()">تست shake</button>
+</div>
+
+<div style="padding:0 14px;display:flex;flex-direction:column;gap:8px">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <div class="mic-group">
+      <button id="btn-mic" aria-busy="false"><span class="mic-icon">🎤</span><span class="mic-label">شروع صحبت</span></button>
+      <button id="btn-cancel-stt" class="btn-ghost mic-cancel" hidden>✕ انصراف</button>
+    </div>
+    <div id="vis"><canvas width="200" height="36"></canvas></div>
+  </div>
+  <div class="status-bar"><div class="status-right"><span class="dot" id="dot"></span><span id="status-text">آماده</span></div></div>
+  <!-- Same dock markup as index.html — dynamic via JS, no hardcoded drift -->
+  <section id="stt-progress" hidden role="status" aria-live="polite" aria-label="پیشرفت تبدیل">
+    <div class="stt-progress__head"><span id="progress-label">در حال تبدیل…</span><span id="progress-step"></span></div>
+    <ol class="stt-progress__steps" id="progress-steps"></ol>
+    <div class="stt-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar" style="width:0%"></i></div>
+  </section>
+  <textarea id="output" placeholder="خروجی...">چه خوب شد که به این یافته‌ها رسیدیم.</textarea>
+</div>
+<div id="toast"></div>
+
+<script type="module">
+// Thin demo — reuses same CSS/classes as app, no duplicated logic
+const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
+const btnMic=document.getElementById('btn-mic'), btnCancel=document.getElementById('btn-cancel-stt'), toast=document.getElementById('toast'), dock=document.getElementById('stt-progress'), label=document.getElementById('progress-label'), step=document.getElementById('progress-step'), bar=document.getElementById('progress-bar'), stepsEl=document.getElementById('progress-steps'), statusText=document.getElementById('status-text'), dot=document.getElementById('dot');
+function rebuild(chain){ stepsEl.innerHTML=''; chain.forEach((id,idx)=>{ const li=document.createElement('li'); li.className='chain-step'; const rank=document.createElement('span'); rank.className='rank'+(idx>0?' fallback':''); rank.textContent=String(idx+1); const lab=document.createElement('span'); lab.textContent=id==='groq'?'Groq':id; lab.style.fontSize='12px'; const ic=document.createElement('span'); ic.className='step-icon'; li.append(rank,lab,ic); stepsEl.appendChild(li);});}
+function setProgress(state,index,total,lab){ dock.hidden=false; if(lab) label.textContent=lab; step.textContent=`قدم ${index+1} از ${total}`; bar.style.width=`${Math.round((index+1)/total*100)}%`; bar.parentElement.setAttribute('aria-valuenow', String(Math.round((index+1)/total*100))); [...stepsEl.children].forEach((li,i)=>{ li.classList.remove('is-trying','is-current','is-failed','is-done'); if(i<index) li.classList.add('is-failed'); if(i===index){ if(state==='failed') li.classList.add('is-failed'); else if(state==='done') li.classList.add('is-done'); else li.classList.add('is-trying','is-current');}}); dot.className='dot'+(state==='trying'||state==='failed'?' warn':''); }
+function setBusy(b){ btnMic.disabled=b; btnMic.classList.toggle('transcribing',b); btnMic.setAttribute('aria-busy',b); btnCancel.hidden=!b; btnMic.querySelector('.mic-label').textContent=b?'در حال تبدیل…':'شروع صحبت'; btnMic.querySelector('.mic-icon').textContent=b?'':'🎤';}
+function showToast(m){ toast.textContent=m; toast.classList.add('show'); setTimeout(()=>toast.classList.remove('show'),2500);}
+rebuild(STT_DEFAULTS);
+window.demo=(n)=>{ if(n===0){ setBusy(true); setProgress('trying',0,4,`در حال تبدیل با Groq…`); statusText.textContent='⏳ در حال تبدیل با Groq…'; showToast('در حال تبدیل با Groq… (قدم ۱ از ۴)');}
+else if(n===1){ setProgress('failed',0,4,'خطا Groq — تلاش با بعدی…'); setTimeout(()=>setProgress('trying',1,4,'تلاش با gemini-flash-lite-latest…'),600); statusText.textContent='سهمیه پر — تلاش با بعدی…'; showToast('⚠️ سهمیه Groq پر — تلاش با بعدی…');}
+else if(n===2){ setBusy(false); setProgress('done',1,4,'با gemini-flash-lite-latest نشست (فالبک ۲/۴)'); statusText.textContent='✅ با gemini نشست'; showToast('✅ با gemini-flash-lite-latest نشست'); setTimeout(()=>dock.hidden=true,2600);}
+else if(n===3){ setBusy(false); label.textContent='❌ همه موتورها خطا'; bar.style.width='100%'; bar.style.background='var(--danger)'; statusText.textContent='❌ همه موتورها خطا'; dot.className='dot err'; showToast('❌ همه موتورها خطا'); setTimeout(()=>{bar.style.background=''; dock.hidden=true;},3500);}
+else { setBusy(false); dock.hidden=true; toast.classList.remove('show'); statusText.textContent='آماده'; dot.className='dot';}};
+window.shakeDemo=()=>{ if(!btnMic.disabled){ showToast('اول \"شروع Groq\" رو بزن'); return;} btnMic.classList.remove('shake'); void btnMic.offsetWidth; btnMic.classList.add('shake'); showToast('⏳ صبر کن — تبدیل ادامه دارد…');};
+btnMic.addEventListener('click',()=>{ if(btnMic.disabled) shakeDemo(); else demo(0);});
+btnCancel.addEventListener('click',()=>{ setBusy(false); showToast('لغو شد'); dock.hidden=true;});
+</script>
+</body>
+</html>
