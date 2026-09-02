@@ -11,10 +11,10 @@ echo [khta] python peyda nashod - az python.org nasb kon
 pause
 exit /b 1
 :run
-echo ham-negar - http://localhost:%PORT%/
+echo ham-negar - http://localhost:%PORT%/index.html
 echo poshe: %cd%
 echo baraye khoroj Ctrl+C bezan
 timeout /t 1 /nobreak >nul
-start "" "http://localhost:%PORT%/"
-%PYTHON% -m http.server %PORT%
+start "" "http://localhost:%PORT%/index.html"
+%PYTHON% -m http.server %PORT% --directory "%~dp0"
 pause
