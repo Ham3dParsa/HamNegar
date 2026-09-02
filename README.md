@@ -89,6 +89,12 @@ python -m http.server 8000
 
 ویرایش هر بخش: فقط همان ماژول. مثلا سهمیه → `quota.js`, مدل جدید → `transcription.js`.
 
+## Post-merge gate compliance
+
+> **Violation note (PR #4 @ eb666f4):** PR #4 was merged with 5 must-fix `[warning]` items still open in OC review. Fixes were pushed directly to `main` as `82fe4aa` bypassing the required `APPROVED` gate, violating `AGENTS.md` §5 and `REVIEW.md` gate.
+> **Compensation via this follow-up PR (`fix/followup-pr4-gate`):** documents the bypass, retains the 5-warning fixes from `82fe4aa` (XSS `esc()` in `js/app.js:123`, `quota.js:29` → `sttChain`, `transcription.js:114-123` 401-skip, `storage.js:40` `trim()!==''` + dedup, manual transcription test obligation), and re-establishes the gate.
+> **Policy going forward:** no PR merges without OC review `APPROVED` (or explicit `suggestion: merge`) and all must-fix warnings resolved inside the PR branch. Direct pushes to `main` for review fixes are prohibited.
+
 ## سازنده
 
 [Ham3dParsa](https://github.com/Ham3dParsa)
