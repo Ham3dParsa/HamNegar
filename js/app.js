@@ -44,14 +44,32 @@ els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtim
 els.toggleVad.addEventListener('change',()=> Storage.saveSettings({vad: els.toggleVad.checked}));
 els.toggleAutocopy.addEventListener('change',()=> Storage.saveSettings({autocopy: els.toggleAutocopy.checked}));
 
-// log panel toggle + resize persistence handled via Storage heights
+// log panel toggle + manual splitter (not resize:vertical on flex)
 $('btn-clear-log').onclick=()=> els.logBody.innerHTML='';
-$('btn-copy-log').onclick=async()=>{ await navigator.clipboard.writeText([...els.logBody.children].map(e=>e.innerText).join('\n')||'خالی'); Logger.toast('کپی شد'); };
+$('btn-copy-log').onclick=async()=>{
+  const visible = [...els.logBody.children].filter(el=> !el.classList.contains('hidden'));
+  const text = (visible.length ? visible : [...els.logBody.children]).map(e=>e.innerText).join('\n') || 'خالی';
+  await navigator.clipboard.writeText(text);
+  Logger.toast(visible.length && visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
+};
 let logCollapsed=false;
+const _splitterEl = document.getElementById('log-splitter');
 els.btnToggleLog.onclick=()=>{
   logCollapsed=!logCollapsed;
-  if(logCollapsed){ els.logPanel.dataset.prevHeight=els.logPanel.style.height||getComputedStyle(els.logPanel).height; els.logPanel.style.display='none'; els.btnToggleLog.textContent='نمایش'; Logger.log('info','لاگ بسته شد'); }
-  else { els.logPanel.style.display='flex'; els.logPanel.style.height=els.logPanel.dataset.prevHeight||Storage.getHeights().log||'180px'; els.btnToggleLog.textContent='بستن'; Logger.log('info','لاگ باز شد'); }
+  const splitter = document.getElementById('log-splitter');
+  if(logCollapsed){
+    els.logPanel.dataset.prevHeight=els.logPanel.style.height||getComputedStyle(els.logPanel).height;
+    els.logPanel.style.display='none';
+    if(splitter) splitter.style.display='none';
+    els.btnToggleLog.textContent='نمایش';
+    Logger.log('info','لاگ بسته شد');
+  } else {
+    els.logPanel.style.display='flex';
+    els.logPanel.style.height=els.logPanel.dataset.prevHeight||Storage.getHeights().log||'180px';
+    if(splitter) splitter.style.display='flex';
+    els.btnToggleLog.textContent='بستن';
+    Logger.log('info','لاگ باز شد');
+  }
 };
 
 // output draft + counters + heights
@@ -60,13 +78,63 @@ els.output.addEventListener('click',saveCursor); els.output.addEventListener('ke
 const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; };
 let draftTimer=null;
 els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
-// restore draft + heights
+// restore draft + heights + manual splitter wiring (saves H_LOG via Storage)
 (() => {
   const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('info','پیش‌نویس بارگذاری شد',{chars:d.length}); }
   const h=Storage.getHeights(); if(h.out) els.output.style.height=h.out; if(h.log) els.logPanel.style.height=h.log;
+  // inject splitter between output-meta and log-panel if missing (keeps seam: only app.js touches splitter)
+  let splitter = document.getElementById('log-splitter');
+  if(!splitter){
+    splitter = document.createElement('div');
+    splitter.id = 'log-splitter';
+    splitter.setAttribute('role','separator');
+    splitter.setAttribute('aria-orientation','horizontal');
+    splitter.setAttribute('aria-label','تغییر ارتفاع لاگ');
+    splitter.title = 'بکش تا ارتفاع لاگ عوض شود — ذخیره خودکار';
+    // place right before log-panel (after output-meta/resizer-hint)
+    els.logPanel.parentNode.insertBefore(splitter, els.logPanel);
+  }
+  // mouse/touch drag handling
+  let dragging=false, startY=0, startH=0;
+  const clamp = v => Math.max(80, Math.min(v, Math.floor(window.innerHeight*0.55)));
+  const onMove = (e)=>{
+    if(!dragging) return;
+    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const delta = startY - y;
+    const nh = clamp(startH + delta);
+    els.logPanel.style.height = nh + 'px';
+    e.preventDefault();
+  };
+  const onUp = ()=>{
+    if(!dragging) return;
+    dragging=false;
+    splitter.classList.remove('dragging');
+    document.body.style.cursor='';
+    document.body.style.userSelect='';
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onUp);
+    Storage.saveHeights({log: els.logPanel.style.height});
+  };
+  const onDown = (e)=>{
+    dragging=true;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startH = els.logPanel.getBoundingClientRect().height;
+    splitter.classList.add('dragging');
+    document.body.style.cursor='ns-resize';
+    document.body.style.userSelect='none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, {passive:false});
+    document.addEventListener('touchend', onUp);
+    e.preventDefault();
+  };
+  splitter.addEventListener('mousedown', onDown);
+  splitter.addEventListener('touchstart', onDown, {passive:false});
+  // keep output height persistence via ResizeObserver (output only, log now via splitter)
   if(window.ResizeObserver){
     const roOut=new ResizeObserver(()=>{ clearTimeout(roOut._t); roOut._t=setTimeout(()=> Storage.saveHeights({out: getComputedStyle(els.output).height}),300); }); roOut.observe(els.output);
-    const roLog=new ResizeObserver(()=>{ clearTimeout(roLog._t); roLog._t=setTimeout(()=> Storage.saveHeights({log: getComputedStyle(els.logPanel).height}),300); }); roLog.observe(els.logPanel);
   }
 })();
 
