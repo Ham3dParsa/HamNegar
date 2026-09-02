@@ -24,6 +24,7 @@ const KEYS = {
   AUTOCOPY: 'AUTOCOPY',
   DRAFT: 'DRAFT_TEXT',
   QUOTA: 'QUOTA_USAGE',
+  STATS_HISTORY: 'STATS_HISTORY',
   H_OUT: 'OUTPUT_HEIGHT',
   H_LOG: 'LOG_HEIGHT',
 };
@@ -97,5 +98,11 @@ export const Storage = {
   },
   saveQuotaRaw(obj) {
     localStorage.setItem(KEYS.QUOTA, JSON.stringify(obj));
+  },
+  getStatsHistory() {
+    try { const raw = localStorage.getItem(KEYS.STATS_HISTORY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+  },
+  saveStatsHistory(arr) {
+    localStorage.setItem(KEYS.STATS_HISTORY, JSON.stringify(arr));
   },
 };

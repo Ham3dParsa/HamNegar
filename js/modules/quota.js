@@ -1,44 +1,76 @@
-// Module: quota
-// Interface: record(model), render(container)
-// Depth: hides LIMITS table, daily reset, percentage calc, and rendering behind 2 calls.
-// Seam is at Quota interface; Storage is an internal detail, not exposed to callers.
+// Module: quota (thin view)
+// Interface: record(model, meta), render(container, opts), LIMITS (re-export from stats)
+// Depth: hiding removed — delegates to Stats. View only.
 import { Storage } from './storage.js';
-export const LIMITS = {
-  groq: { label: 'Groq Whisper', rpd: 2000, rpm: 20, tpm: '—' },
-  'gemini-flash-latest': { label: 'Gemini Flash Latest', rpd: 1500, rpm: 15, tpm: '1M' },
-  'gemini-flash-lite-latest': { label: 'Gemini Flash-Lite Latest', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-3.5-flash-lite': { label: 'Gemini 3.5 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-3.1-flash-lite': { label: 'Gemini 3.1 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-2.5-flash': { label: 'Gemini 2.5 Flash', rpd: 500, rpm: 10, tpm: '250K' },
-  'gemini-2.0-flash': { label: 'Gemini 2.0 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
-  'gemini-1.5-flash': { label: 'Gemini 1.5 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
-  'live-transcribe': { label: 'Gemini Live Transcribe', rpd: '∞', rpm: '∞', tpm: '20K' },
-};
+import { Stats, LIMITS } from './stats.js';
+
+export { LIMITS };
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// keep expanded state per container so period switch doesn't collapse unexpectedly
+const expandedMap = new WeakMap();
+
 export const Quota = {
-  record(model) {
-    const q = Storage.getQuotaRaw();
-    const today = new Date().toISOString().slice(0, 10);
-    if (q._date !== today) { q._date = today; Object.keys(LIMITS).forEach(k => q[k] = 0); }
-    q[model] = (q[model] || 0) + 1;
-    Storage.saveQuotaRaw(q);
+  record(model, meta={}) {
+    if (!model) return;
+    const words = meta.words||0;
+    const chars = meta.chars||0;
+    // skip empty payload to avoid polluting totals (Kilo suggestion)
+    if (!words && !chars) return;
+    // drop dual-write drift: Stats is source of truth; QUOTA_USAGE is legacy read-only for migrateIfNeeded
+    // do not write legacy on new records — migration is one-way
+    Stats.record({ model, durationMs: meta.durationMs, words, chars, success: meta.success!==false, kind: meta.kind||'stt' });
   },
-  render(container) {
+  render(container, opts={}) {
     if (!container) return;
-    const q = Storage.getQuotaRaw();
-    const s = Storage.getSettings();
-    const chain = s.sttChain?.length ? s.sttChain : [s.primary, s.model];
-    const keys = [chain[0] || s.primary, chain[1] || (chain[0]==='groq' ? s.model : 'groq'), 'live-transcribe'];
+    const period = opts.period || 'today';
+    // persist expanded across period switches unless explicitly collapsed
+    let expanded = !!opts.expanded;
+    if (opts.expanded === undefined && expandedMap.has(container)) {
+      expanded = expandedMap.get(container);
+    }
+    expandedMap.set(container, expanded);
+    const summary = Stats.getSummary(period);
+    let byModel = summary.byModel;
+
+    // fallback when no history yet: show chain first item with 0
+    if (byModel.length===0){
+      const s = Storage.getSettings();
+      const chain = s.sttChain?.length ? s.sttChain : [s.primary, s.model];
+      const first = chain[0] || 'groq';
+      const lim = LIMITS[first] || { label:first, rpd:'—', rpm:'—', tpm:'—' };
+      byModel = [{ model:first, label: lim.label, count:0, pct:0, color:'none', isFavorite:false, isNearLimit:false }];
+    }
+
+    const visible = expanded ? byModel : byModel.slice(0,3);
     container.innerHTML = '';
-    keys.forEach(k => {
-      const lim = LIMITS[k] || { label: k, rpd: '—', rpm: '—', tpm: '—' };
-      const used = q[k] || 0;
-      let pct = 0, cls = '';
-      if (lim.rpd !== '∞' && lim.rpd !== '—' && typeof lim.rpd === 'number') {
-        pct = Math.min(100, Math.round((used / lim.rpd) * 100));
-        if (pct > 80) cls = 'warn';
-        if (pct > 95) cls = 'danger';
-      }
-      container.innerHTML += `<div class="quota-card"><h4>${lim.label} <span class="badge">${typeof lim.rpd === 'number' ? lim.rpd + ' /روز' : 'نامحدود'}</span></h4><div class="bar"><i class="${cls}" style="width:${pct}%"></i></div><div class="meta"><span>امروز: <b>${used}</b></span><span>${lim.rpm} /دقیقه • ${lim.tpm} /دقیقه</span></div></div>`;
+
+    visible.forEach(m=>{
+      const lim = LIMITS[m.model] || { label:m.model, rpd:'—', rpm:'—', tpm:'—' };
+      const pct = m.pct || 0;
+      let barCls='';
+      if (m.color==='warn') barCls='warn';
+      else if (m.color==='warn-orange') barCls='warn-orange';
+      else if (m.color==='danger') barCls='danger';
+      const cardCls = m.color==='danger' ? 'quota-card danger pulse' : 'quota-card';
+      const favBadge = m.isFavorite ? ' <span class="fav">⭐ محبوب</span>' : '';
+      const warnIcon = m.isNearLimit ? ' ⚠' : '';
+      const badge = typeof lim.rpd==='number' ? lim.rpd+' /روز' : 'نامحدود';
+      container.innerHTML += `<div class="${cardCls}" data-model="${esc(m.model)}"><h4>${esc(m.label)} <span class="badge">${esc(badge)}</span>${favBadge}</h4><div class="bar"><i class="${barCls}" style="width:${pct}%"></i></div><div class="meta"><span>امروز: <b>${m.count}</b> (${pct}٪)${warnIcon}</span><span>${esc(String(lim.rpm))} /دقیقه • ${esc(String(lim.tpm))} /دقیقه</span></div></div>`;
     });
+
+    if (!expanded && byModel.length>3){
+      container.insertAdjacentHTML('beforeend', `<button class="btn-ghost btn-sm" data-expand-quota>نمایش همه (${byModel.length})</button>`);
+      const btn = container.querySelector('[data-expand-quota]');
+      if (btn) btn.addEventListener('click', ()=> Quota.render(container, { period, expanded:true }));
+    } else if (expanded && byModel.length>3) {
+      container.insertAdjacentHTML('beforeend', `<button class="btn-ghost btn-sm" data-collapse-quota>نمایش کمتر</button>`);
+      const btn2 = container.querySelector('[data-collapse-quota]');
+      if (btn2) btn2.addEventListener('click', ()=> Quota.render(container, { period, expanded:false }));
+    }
   },
+  // for dashboard / tests
+  getSummary(period){ return Stats.getSummary(period); },
+  getSeries(days){ return Stats.getSeries(days); },
 };
