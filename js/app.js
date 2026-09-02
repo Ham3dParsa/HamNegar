@@ -520,15 +520,14 @@ async function handleTranscription(blob, snap){
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
-  // ensure busy UI even if stopRecording not called (VAD path)
-  if (!isTranscribing) { setMicBusy(true); transcribingAbort = transcribingAbort || new AbortController(); }
+  // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
+  if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); }
   Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? (snap.committed+snap.pending).length : 0});
   if(blob.size<800){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
-    if(snap && snapId===rtVersion){ rtSnap=null; }
-    else if(!snap){ rtSnap=null; }
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
     return;
   }
   try{
@@ -566,16 +565,16 @@ async function handleTranscription(blob, snap){
     Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); Logger.dismissProgress(2600); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
     Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
-    if (err.aborted || err.message === 'لغو شد' || transcribingAbort?.signal.aborted) {
+    if (err.aborted || transcribingAbort?.signal.aborted) {
       Logger.log('info','transcribe aborted',{msg:err.message, snapId});
       Logger.toast('لغو شد', 1500);
       Logger.dismissProgress(0);
       Logger.setStatus('لغو شد','warn');
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
-      let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401) h='کلید نامعتبر';
+      let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
       Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
-      Logger.toast(`❌ ${err.message.slice(0,60)}`, 3500);
+      Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
       Logger.dismissProgress(3500);
     }
   } finally {

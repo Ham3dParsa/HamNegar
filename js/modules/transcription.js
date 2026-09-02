@@ -110,13 +110,17 @@ export const Transcription = {
       const skipped = rawChain.filter(id => !hasKeyFor(id));
       if(skipped.length) Logger.log('info','STT بی‌کلید حذف شد', { skipped });
     }
+    try { Logger.rebuildProgress(chain); } catch {}
     let lastErr=null, usedEngine='—', rawText='';
     for(let i=0;i<chain.length;i++){
       const id = chain[i];
       const isGroq = id==='groq';
       const label = isGroq ? 'Groq' : id;
       const signal = opts.signal;
-      if (signal?.aborted) throw Object.assign(new Error('لغو شد'), { status: 0, aborted: true });
+      if (signal?.aborted) {
+        Logger.setProgress({ state: 'failed', index: i, total: chain.length, label: `لغو شد` });
+        throw Object.assign(new Error('لغو شد'), { status: 0, aborted: true });
+      }
       try{
         if (i === 0) {
           Logger.setProgress({ state: 'trying', index: i, total: chain.length, label: `در حال تبدیل با ${label}…` });
@@ -132,12 +136,16 @@ export const Transcription = {
         if(i>0) Logger.toast(`✅ با ${label} نشست` + (i>0?` (فالبک ${i+1}/${chain.length})`:''), 2600);
         break;
       }catch(err){
-        if (err.aborted || signal?.aborted) throw err;
+        if (err.aborted || signal?.aborted) {
+          Logger.setProgress({ state: 'failed', index: i, total: chain.length, label: `لغو شد` });
+          throw err;
+        }
         lastErr=err;
         Logger.log('warn',`STT ${label} خطا (${i+1}/${chain.length})`,{msg:err.message, status:err.status});
         Logger.setProgress({ state: 'failed', index: i, total: chain.length, label: `خطا ${label} — تلاش با بعدی…` });
         if (err.status === 429) Logger.toast(`⚠️ سهمیه ${label} پر — تلاش با بعدی…`, 2000);
         else if (err.status === 404) Logger.toast(`⚠️ ${label} پیدا نشد — بعدی…`, 2000);
+        else if (err.status === 401 || err.status === 403) Logger.toast(`⚠️ کلید ${label} نامعتبر — بعدی…`, 2000);
         if(i===chain.length-1) throw err;
         // small delay before next for 429
         if(err.status===429) await new Promise(r=>setTimeout(r,600));

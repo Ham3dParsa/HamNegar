@@ -71,13 +71,32 @@ export const Logger = {
           else if (state === 'done') li.classList.add('is-done');
           else { li.classList.add('is-trying', 'is-current'); }
         }
-        if (i === index && state === 'done') li.classList.add('is-done');
       });
     }
     // sync dot
     if (state === 'trying' && statusDot) statusDot.className = 'dot warn';
     if (state === 'done' && statusDot) statusDot.className = 'dot';
     if (state === 'failed' && statusDot) statusDot.className = 'dot warn';
+  },
+  rebuildProgress(chain) {
+    if (!progressSteps) progressSteps = document.getElementById('progress-steps');
+    if (!progressSteps || !Array.isArray(chain)) return;
+    progressSteps.innerHTML = '';
+    chain.forEach((id, idx) => {
+      const li = document.createElement('li');
+      li.className = 'chain-step';
+      const rank = document.createElement('span');
+      rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
+      rank.textContent = String(idx + 1);
+      const label = document.createElement('span');
+      label.textContent = id === 'groq' ? 'Groq' : id;
+      label.style.fontSize = '12px';
+      const icon = document.createElement('span');
+      icon.className = 'step-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      li.append(rank, label, icon);
+      progressSteps.appendChild(li);
+    });
   },
   dismissProgress(delay = 0) {
     const el = progressEl || document.getElementById('stt-progress');
