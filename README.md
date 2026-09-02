@@ -2,8 +2,7 @@
 
 > تایپ صوتی فارسی/انگلیسی، زنده و دقیق با Groq Whisper + Gemini Live
 
-ساخته شده توسط [Ham3dParsa](https://github.com/Ham3dParsa) — معماری ماژولار بر اساس `codebase-design`، هر بخش پشت یک اینترفیس کوچک و عمیق.
-
+ساخته شده با عشق ❣️
 ## ویژگی‌ها
 
 - **زنده:** پیش‌نمایش آنی با Web Speech API (مرورگر)، تثبیت نهایی با Groq/Gemini
@@ -58,7 +57,7 @@ cp .env.example .env
 # داخل .env را پر کن
 ```
 
-نمونه `.env.example` را ببین. **هرگز `.env` را کامیت نکن.**
+نمونه `.env.example` را ببین.
 
 ## راه‌اندازی
 
@@ -83,8 +82,8 @@ python -m http.server 8000
 ## توسعه
 
 ```bash
-git clone https://github.com/Ham3dParsa/ham-negar
-cd ham-negar
+git clone https://github.com/Ham3dParsa/HamNegar
+cd HamNegar
 python -m http.server 8000
 ```
 
