@@ -167,6 +167,118 @@ function parsePolishChain(raw, defaults){
   return defaults.map(e=>({ ...e }));
 }
 
+// Wave personalization (ticket/50): stack model v3 under its own key. Never logs colors/keys.
+export const WAVE_KEY = 'hamnegar.wave.v3';
+export const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line'];
+export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
+export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
+export const WAVE_PROFILES = ['flat', 'center', 'edges', 'bands'];
+export const WAVE_PEAKS = ['low', 'mid', 'high'];
+const WAVE_MAX = 5;
+
+function waveClampInt(v, lo, hi, fb) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fb;
+  return Math.max(lo, Math.min(hi, Math.round(n)));
+}
+function wavePick(v, allowed, fb) {
+  return allowed.includes(v) ? v : fb;
+}
+function waveColor(v, fb) {
+  return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim().toLowerCase() : fb;
+}
+function waveOv(v) {
+  if (v == null) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+function normalizeWaveEntry(x, idx) {
+  if (!x || typeof x !== 'object') return null;
+  const ov = (x.ov && typeof x.ov === 'object') ? x.ov : {};
+  const name = typeof x.name === 'string' && x.name.trim()
+    ? x.name.trim().slice(0, 24)
+    : `موج ${idx + 1}`;
+  return {
+    id: typeof x.id === 'string' && x.id.trim() ? x.id.trim().slice(0, 32) : `w${idx + 1}`,
+    name,
+    type: wavePick(x.type, WAVE_TYPES, 'sine'),
+    colorMode: wavePick(x.colorMode, WAVE_COLOR_MODES, 'solid'),
+    c1: waveColor(x.c1, '#8ab4f8'),
+    c2: waveColor(x.c2, '#c4b5fd'),
+    opacity: waveClampInt(x.opacity, 0, 100, 100),
+    glow: waveClampInt(x.glow, 0, 100, 70),
+    thick: (() => { const n = Number(x.thick); return Number.isFinite(n) ? Math.max(1, Math.min(6, Math.round(n * 2) / 2)) : 2; })(),
+    peaks: wavePick(x.peaks, WAVE_PEAKS, 'mid'),
+    band: wavePick(x.band, WAVE_BANDS, 'rms'),
+    profile: wavePick(x.profile, WAVE_PROFILES, 'flat'),
+    mute: x.mute === true,
+    ov: {
+      speed: waveOv(ov.speed),
+      intensity: waveOv(ov.intensity),
+      attack: waveOv(ov.attack),
+      smooth: waveOv(ov.smooth),
+      sensitivity: waveOv(ov.sensitivity),
+    },
+  };
+}
+function normalizeWaveList(arr) {
+  if (!Array.isArray(arr)) return [];
+  const out = [];
+  const seen = new Set();
+  arr.forEach((raw, i) => {
+    if (out.length >= WAVE_MAX) return;
+    const e = normalizeWaveEntry(raw, out.length);
+    if (!e) return;
+    let id = e.id;
+    let k = 1;
+    while (seen.has(id)) id = `${e.id}_${++k}`;
+    e.id = id;
+    seen.add(id);
+    out.push(e);
+  });
+  return out;
+}
+export function defaultWaveConfig() {
+  return {
+    version: 3,
+    starterId: 'classic-fade',
+    sensitivity: 50,
+    attack: 50,
+    speed: 50,
+    intensity: 50,
+    smooth: 50,
+    particles: 12,
+    aurora: { on: false, hue: 220 },
+    waves: [{
+      id: 'w1', name: 'موج ۱', type: 'sine', colorMode: 'solid',
+      c1: '#8ab4f8', c2: '#c4b5fd', opacity: 100, glow: 70, thick: 2,
+      peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+      ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
+    }],
+  };
+}
+function normalizeWaveConfig(raw) {
+  const fb = defaultWaveConfig();
+  const o = (raw && typeof raw === 'object') ? raw : {};
+  const aur = (o.aurora && typeof o.aurora === 'object') ? o.aurora : {};
+  const waves = normalizeWaveList(o.waves);
+  return {
+    version: 3,
+    starterId: typeof o.starterId === 'string' && o.starterId.trim() ? o.starterId.trim().slice(0, 40) : fb.starterId,
+    sensitivity: waveClampInt(o.sensitivity, 0, 100, fb.sensitivity),
+    attack: waveClampInt(o.attack, 0, 100, fb.attack),
+    speed: waveClampInt(o.speed, 0, 100, fb.speed),
+    intensity: waveClampInt(o.intensity, 0, 100, fb.intensity),
+    smooth: waveClampInt(o.smooth, 0, 100, fb.smooth),
+    particles: waveClampInt(o.particles, 0, 24, fb.particles),
+    aurora: {
+      on: aur.on === true,
+      hue: waveClampInt(aur.hue, 0, 360, fb.aurora.hue),
+    },
+    waves: waves.length ? waves : fb.waves,
+  };
+}
 export const Storage = {
   getSettings() {
     const rawStt = localStorage.getItem(KEYS.STT_CHAIN);
@@ -278,5 +390,20 @@ export const Storage = {
   },
   saveStatsHistory(arr) {
     localStorage.setItem(KEYS.STATS_HISTORY, JSON.stringify(arr));
+  },
+  getWave() {
+    try {
+      const raw = localStorage.getItem(WAVE_KEY);
+      if (!raw) return defaultWaveConfig();
+      const parsed = JSON.parse(raw);
+      const shape = (parsed && typeof parsed === 'object' && parsed.wave) ? parsed.wave : parsed;
+      return normalizeWaveConfig(shape);
+    } catch { return defaultWaveConfig(); }
+  },
+  saveWave(cfg) {
+    const norm = normalizeWaveConfig(cfg);
+    localStorage.setItem(WAVE_KEY, JSON.stringify({ wave: norm }));
+    // Accept both bare {…v3…} and wrapped {wave:{…}} on read; always persist wrapped.
+    return norm;
   },
 };

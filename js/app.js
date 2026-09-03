@@ -1,5 +1,6 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './modules/storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT, defaultWaveConfig } from './modules/storage.js';
+import { createWaveRenderer, STARTERS, starterById, randomStack, WAVE_FA } from './modules/wave.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
 import { Dashboard } from './modules/dashboard.js';
@@ -26,6 +27,7 @@ const els = {
   groqModelsList: $('groq-models-list'), orModelsList: $('or-models-list'),
   tabProviders: $('tab-providers'), tabEasyadd: $('tab-easyadd'), tabChains: $('tab-chains'),
   panelProviders: $('panel-providers'), panelEasyadd: $('panel-easyadd'), panelChains: $('panel-chains'),
+  tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   customModelsList: $('custom-models-list'),
   easyProvider: $('easy-provider-select'), easyModel: $('easy-model-select'), easyModelInput: $('easy-model-input'),
@@ -446,18 +448,20 @@ if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistCh
 
 // --- settings tabs (providers | easy-add | chains) ---
 function switchTab(name){
-  const tabs = { providers: els.tabProviders, easyadd: els.tabEasyadd, chains: els.tabChains };
-  const panels = { providers: els.panelProviders, easyadd: els.panelEasyadd, chains: els.panelChains };
+  const tabs = { providers: els.tabProviders, easyadd: els.tabEasyadd, chains: els.tabChains, wave: els.tabWave };
+  const panels = { providers: els.panelProviders, easyadd: els.panelEasyadd, chains: els.panelChains, wave: els.panelWave };
   for(const k of Object.keys(tabs)){
     const active = k === name;
     tabs[k]?.classList.toggle('active', active);
     tabs[k]?.setAttribute('aria-selected', active ? 'true' : 'false');
     if(panels[k]) panels[k].hidden = !active;
   }
+  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else wavePrevStop();
 }
 els.tabProviders?.addEventListener('click', ()=> switchTab('providers'));
 els.tabEasyadd?.addEventListener('click', ()=> switchTab('easyadd'));
 els.tabChains?.addEventListener('click', ()=> switchTab('chains'));
+els.tabWave?.addEventListener('click', ()=> switchTab('wave'));
 
 // --- provider model lists: single path via Transcription.listModels(providerId) ---
 const modelCache = new Map(); // providerId -> string[]
@@ -713,6 +717,350 @@ $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEac
 $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
 $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
+// --- wave tab (ticket/50; seam: Storage.getWave/saveWave + wave renderer; main #vis strip untouched) ---
+let waveCfg = Storage.getWave();
+let waveRenderer = null, waveInit = false, waveFakeOn = true;
+let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null;
+let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
+let waveAdvIds = new Set();
+const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line'];
+function waveName(wv, idx){ const n = (wv.name || '').trim(); return n || `موج ${idx + 1}`; }
+function wavePersist(){ waveCfg = Storage.saveWave(waveCfg); waveRenderer?.setConfig(waveCfg); waveSync(); }
+function waveSeg(box, vals, cur, faMap, cb){
+  box.innerHTML = '';
+  vals.forEach(v => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = faMap ? faMap[v] : v;
+    b.className = v === cur ? 'active' : '';
+    b.addEventListener('click', e => { e.preventDefault(); cb(v); });
+    box.appendChild(b);
+  });
+}
+function waveOvRow(wv, key, label){
+  const wrap = document.createElement('div');
+  wrap.className = 'wave-ov';
+  const head = document.createElement('div');
+  head.className = 'wave-ov-head';
+  const sp = document.createElement('span'); sp.textContent = label;
+  const bb = document.createElement('b');
+  const rs = document.createElement('button'); rs.type = 'button'; rs.textContent = '↩ سراسری'; rs.title = 'بازگشت به سراسری';
+  const paint = () => {
+    const v = wv.ov[key], gv = waveCfg[key];
+    if (v == null) { bb.textContent = `همگام با سراسری (${gv}٪)`; rs.disabled = true; }
+    else { bb.textContent = `دستی ${v}٪ (سراسری ${gv}٪)`; rs.disabled = false; }
+  };
+  head.append(sp, bb, rs);
+  const rg = document.createElement('input');
+  rg.type = 'range'; rg.min = '-1'; rg.max = '100'; rg.step = '1';
+  rg.value = wv.ov[key] == null ? -1 : wv.ov[key];
+  rg.setAttribute('aria-label', label);
+  rg.title = '-۱ = سراسری';
+  rg.addEventListener('input', () => { const v = +rg.value; wv.ov[key] = v < 0 ? null : v; paint(); wavePersist(); });
+  rs.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wv.ov[key] = null; rg.value = -1; paint(); wavePersist(); });
+  paint();
+  wrap.append(head, rg);
+  return wrap;
+}
+function waveApplyStarter(id, applyAurora){
+  const st = starterById(id);
+  waveCfg.starterId = id;
+  waveCfg.waves = st.stack();
+  waveCfg.waves.forEach((w, i) => { if (!(w.name || '').trim()) w.name = `موج ${i + 1}`; });
+  if (applyAurora && st.aurora !== undefined) waveCfg.aurora = { ...waveCfg.aurora, on: !!st.aurora };
+  waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
+  waveAdvIds = new Set();
+  wavePersist(); waveRenderList();
+}
+function waveRenderStarters(){
+  const grid = $('wave-starters');
+  if (!grid) return;
+  grid.innerHTML = '';
+  STARTERS.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'wave-card' + (s.id === waveCfg.starterId ? ' active' : '');
+    const sw = document.createElement('span');
+    sw.className = 'swatch';
+    const preview = s.stack();
+    sw.style.background = preview.length > 1
+      ? `linear-gradient(90deg, ${preview[0].c1}, ${preview[1].c1})`
+      : preview[0].c1;
+    const t = document.createElement('b'); t.textContent = `${i + 1} — ${s.n}`;
+    const d = document.createElement('span'); d.textContent = s.d;
+    b.append(sw, t, d);
+    b.addEventListener('click', () => waveApplyStarter(s.id, true));
+    grid.appendChild(b);
+  });
+}
+function waveRenderList(){
+  const list = $('wave-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const alive = new Set(waveCfg.waves.map(w => w.id));
+  [...waveOpenIds].forEach(id => { if (!alive.has(id)) waveOpenIds.delete(id); });
+  [...waveAdvIds].forEach(id => { if (!alive.has(id)) waveAdvIds.delete(id); });
+  waveCfg.waves.forEach((wv, idx) => {
+    const row = document.createElement('div');
+    row.className = 'wave-item' + (wv.mute ? ' muted' : '');
+    const det = document.createElement('details');
+    det.open = waveOpenIds.has(wv.id);
+    det.addEventListener('toggle', () => { det.open ? waveOpenIds.add(wv.id) : waveOpenIds.delete(wv.id); });
+    const sum = document.createElement('summary');
+    const dot = document.createElement('span');
+    dot.className = 'wave-dot';
+    dot.style.background = wv.colorMode === 'rainbow' ? 'conic-gradient(red,orange,yellow,green,blue,violet,red)' : wv.c1;
+    const title = document.createElement('span');
+    title.className = 'wave-title' + (wv.mute ? ' dim' : '');
+    const paintTitle = () => {
+      title.textContent = `${waveName(wv, idx)} — ${WAVE_FA.types[wv.type]} · ${WAVE_FA.colorModes[wv.colorMode]} · ${WAVE_FA.profiles[wv.profile || 'flat']}${wv.mute ? ' · بی‌صدا' : ''}`;
+      title.title = wv.mute ? 'بی‌صدا — برای فعال‌سازی روی 🔊 بزن' : 'برای تغییر نام کلیک کن یا ✎ را بزن';
+    };
+    paintTitle();
+    const muteBtn = document.createElement('button');
+    muteBtn.type = 'button'; muteBtn.className = 'wave-mute';
+    const paintMute = () => {
+      muteBtn.textContent = wv.mute ? '🔇' : '🔊';
+      muteBtn.setAttribute('aria-pressed', String(!wv.mute));
+      muteBtn.setAttribute('aria-label', (wv.mute ? 'فعال‌سازی ' : 'بی‌صدا کردن ') + waveName(wv, idx));
+    };
+    paintMute();
+    muteBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wv.mute = !wv.mute; row.classList.toggle('muted', wv.mute); paintTitle(); title.classList.toggle('dim', !!wv.mute); paintMute(); wavePersist(); });
+    const rn = document.createElement('button');
+    rn.type = 'button'; rn.className = 'wave-rename'; rn.textContent = '✎'; rn.title = 'تغییر نام موج';
+    rn.setAttribute('aria-label', 'تغییر نام ' + waveName(wv, idx));
+    const startRename = e => {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      if (sum.querySelector('.wave-name-input')) return;
+      const inp = document.createElement('input');
+      inp.className = 'wave-name-input'; inp.type = 'text'; inp.value = waveName(wv, idx); inp.maxLength = 24; inp.dir = 'auto';
+      inp.setAttribute('aria-label', 'نام موج');
+      title.style.display = 'none'; rn.style.display = 'none';
+      sum.insertBefore(inp, tag);
+      inp.focus(); inp.select();
+      let done = false;
+      const commit = ok => {
+        if (done) return; done = true;
+        if (ok) { wv.name = inp.value.trim().slice(0, 24) || ''; paintTitle(); wavePersist(); }
+        inp.remove(); title.style.display = ''; rn.style.display = '';
+      };
+      inp.addEventListener('click', ev => ev.stopPropagation());
+      inp.addEventListener('pointerdown', ev => ev.stopPropagation());
+      inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') commit(true); else if (ev.key === 'Escape') commit(false); });
+      inp.addEventListener('blur', () => commit(true));
+    };
+    title.addEventListener('click', startRename);
+    rn.addEventListener('click', startRename);
+    const tag = document.createElement('span');
+    tag.className = 'wave-tag' + (idx === 0 ? ' front' : '');
+    tag.textContent = idx === 0 ? 'بالا · رو/جلو' : (idx === waveCfg.waves.length - 1 ? 'پایین · پشت/زیر' : 'میانی');
+    const tools = document.createElement('span');
+    tools.className = 'wave-tools';
+    const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'انتقال به رو (جلوتر)'; up.disabled = idx === 0;
+    up.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx - 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx - 1]]; wavePersist(); waveRenderList(); });
+    const dn = document.createElement('button'); dn.type = 'button'; dn.textContent = '↓'; dn.title = 'انتقال به پشت (عقب‌تر)'; dn.disabled = idx === waveCfg.waves.length - 1;
+    dn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx + 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx + 1]]; wavePersist(); waveRenderList(); });
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.title = 'حذف'; del.disabled = waveCfg.waves.length <= 1;
+    del.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); waveOpenIds.delete(wv.id); waveAdvIds.delete(wv.id); waveCfg.waves.splice(idx, 1); wavePersist(); waveRenderList(); });
+    tools.append(up, dn, del);
+    sum.append(dot, title, rn, muteBtn, tag, tools);
+    det.appendChild(sum);
+    const body = document.createElement('div');
+    body.className = 'wave-body';
+    const rType = document.createElement('div');
+    const tLab = document.createElement('div'); tLab.className = 'wave-ctrl-label'; tLab.textContent = 'نوع موج';
+    const segT = document.createElement('div'); segT.className = 'wave-seg';
+    waveSeg(segT, WAVE_TYPES, wv.type, WAVE_FA.types, v => { wv.type = v; wavePersist(); waveRenderList(); });
+    rType.append(tLab, segT);
+    body.appendChild(rType);
+    const rCm = document.createElement('div');
+    const cLab = document.createElement('div'); cLab.className = 'wave-ctrl-label'; cLab.textContent = 'حالت رنگ';
+    const segC = document.createElement('div'); segC.className = 'wave-seg';
+    waveSeg(segC, ['solid', 'gradient', 'rainbow'], wv.colorMode, WAVE_FA.colorModes, v => { wv.colorMode = v; dot.style.background = v === 'rainbow' ? 'conic-gradient(red,orange,yellow,green,blue,violet,red)' : wv.c1; wavePersist(); waveRenderList(); });
+    rCm.append(cLab, segC);
+    body.appendChild(rCm);
+    const rCol = document.createElement('div'); rCol.className = 'wave-row-btns';
+    const c1Lab = document.createElement('span'); c1Lab.className = 'wave-ctrl-label'; c1Lab.textContent = 'رنگ ۱';
+    const c1 = document.createElement('input'); c1.type = 'color'; c1.value = wv.c1; c1.setAttribute('aria-label', 'رنگ ۱');
+    c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePersist(); });
+    rCol.append(c1Lab, c1);
+    body.appendChild(rCol);
+    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '%'], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '%'], ['thick', 'ضخامت (مطلق هر موج)', 1, 6, '']].forEach(([k, fa, mn, mx, u]) => {
+      const wrap = document.createElement('div');
+      const lab = document.createElement('div'); lab.className = 'wave-lab';
+      const sp = document.createElement('span'); sp.textContent = fa;
+      const bb = document.createElement('b'); bb.textContent = wv[k] + u;
+      lab.append(sp, bb);
+      const rg = document.createElement('input');
+      rg.type = 'range'; rg.min = mn; rg.max = mx; rg.step = k === 'thick' ? '0.5' : '1'; rg.value = wv[k];
+      rg.setAttribute('aria-label', fa);
+      rg.addEventListener('input', () => { wv[k] = +rg.value; bb.textContent = wv[k] + u; wavePersist(); });
+      wrap.append(lab, rg);
+      body.appendChild(wrap);
+    });
+    const rPk = document.createElement('div');
+    const pLab = document.createElement('div'); pLab.className = 'wave-ctrl-label'; pLab.textContent = 'تراکم قله‌ها';
+    const segP = document.createElement('div'); segP.className = 'wave-seg';
+    waveSeg(segP, ['low', 'mid', 'high'], wv.peaks, WAVE_FA.peaks, v => { wv.peaks = v; wavePersist(); waveRenderList(); });
+    rPk.append(pLab, segP);
+    body.appendChild(rPk);
+    const adv = document.createElement('details');
+    adv.className = 'wave-adv'; adv.open = waveAdvIds.has(wv.id);
+    adv.addEventListener('toggle', () => { adv.open ? waveAdvIds.add(wv.id) : waveAdvIds.delete(wv.id); });
+    const advSum = document.createElement('summary'); advSum.textContent = '⚙️ پیشرفته (باند، پروفایل، رونوشت‌ها، توقف دوم گرادیان)';
+    adv.appendChild(advSum);
+    if (wv.colorMode === 'gradient') {
+      const rC2 = document.createElement('div'); rC2.className = 'wave-row-btns';
+      const c2Lab = document.createElement('span'); c2Lab.className = 'wave-ctrl-label'; c2Lab.textContent = 'رنگ ۲ (توقف دوم گرادیان)';
+      const c2 = document.createElement('input'); c2.type = 'color'; c2.value = wv.c2; c2.setAttribute('aria-label', 'رنگ ۲');
+      c2.addEventListener('input', () => { wv.c2 = c2.value; wavePersist(); });
+      rC2.append(c2Lab, c2);
+      adv.appendChild(rC2);
+    }
+    const rBd = document.createElement('div');
+    const bLab = document.createElement('div'); bLab.className = 'wave-ctrl-label'; bLab.textContent = 'محرک باند (کدام بخش صدا این موج را می‌راند)';
+    const segB = document.createElement('div'); segB.className = 'wave-seg';
+    waveSeg(segB, ['low', 'mid', 'high', 'rms'], wv.band, WAVE_FA.bands, v => { wv.band = v; wavePersist(); waveRenderList(); });
+    rBd.append(bLab, segB);
+    adv.appendChild(rBd);
+    const rPf = document.createElement('div');
+    const fLab = document.createElement('div'); fLab.className = 'wave-ctrl-label'; fLab.textContent = 'پروفایل دامنه (ضریب فضایی روی x)';
+    const segF = document.createElement('div'); segF.className = 'wave-seg';
+    waveSeg(segF, ['flat', 'center', 'edges', 'bands'], wv.profile || 'flat', WAVE_FA.profiles, v => { wv.profile = v; wavePersist(); waveRenderList(); });
+    rPf.append(fLab, segF);
+    adv.appendChild(rPf);
+    const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'رونوشت هر موج — ۱- = همگام با سراسری';
+    adv.appendChild(ovLab);
+    adv.appendChild(waveOvRow(wv, 'speed', 'سرعت این موج'));
+    adv.appendChild(waveOvRow(wv, 'intensity', 'شدت این موج'));
+    adv.appendChild(waveOvRow(wv, 'attack', 'سرعت پاسخ این موج (اتک)'));
+    adv.appendChild(waveOvRow(wv, 'smooth', 'نرمی این موج (رهایی)'));
+    adv.appendChild(waveOvRow(wv, 'sensitivity', 'حساسیت این موج (گین)'));
+    body.appendChild(adv);
+    det.appendChild(body);
+    row.appendChild(det);
+    list.appendChild(row);
+  });
+  const addBtn = $('wave-add');
+  if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
+}
+function waveSync(){
+  waveRenderStarters();
+  const set = (id, v) => { const el = $(id); if (el) el.value = v; };
+  const txt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('wave-sens', waveCfg.sensitivity); set('wave-sens-mini', waveCfg.sensitivity);
+  set('wave-spd', waveCfg.speed); set('wave-int', waveCfg.intensity);
+  set('wave-atk', waveCfg.attack); set('wave-sm', waveCfg.smooth);
+  set('wave-parts', waveCfg.particles); set('wave-aurora-hue', waveCfg.aurora.hue);
+  const aur = $('wave-aurora'); if (aur) aur.checked = !!waveCfg.aurora.on;
+  txt('wave-sens-val', waveCfg.sensitivity + '٪'); txt('wave-sens-mini-val', waveCfg.sensitivity + '٪');
+  txt('wave-spd-val', waveCfg.speed + '٪'); txt('wave-int-val', waveCfg.intensity + '٪');
+  txt('wave-atk-val', waveCfg.attack + '٪'); txt('wave-sm-val', waveCfg.smooth + '٪');
+  txt('wave-parts-val', waveCfg.particles); txt('wave-aurora-hue-val', waveCfg.aurora.hue);
+  txt('wave-count', waveCfg.waves.length + ' موج' + (waveCfg.waves.length >= 5 ? ' (سقف)' : ''));
+  const nm = $('wave-name');
+  if (nm) nm.textContent = `«${waveCfg.starterId === 'custom-dice' ? 'ترکیب تصادفی 🎲' : starterById(waveCfg.starterId).n}» — ${waveCfg.waves.length} موج`;
+  const addBtn = $('wave-add');
+  if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
+  const ft = $('wave-fake-toggle');
+  if (ft) ft.textContent = waveFakeOn ? '⏺ مصنوعی: روشن' : '⏺ مصنوعی: خاموش';
+  const mt = $('wave-mic-test');
+  if (mt) mt.textContent = waveMicStream ? '⏹ توقف میکروفون' : '🎤 تست با صدای من';
+}
+function waveEnsure(){
+  if (waveInit) { waveSync(); return; }
+  waveInit = true;
+  const cv = $('wave-preview');
+  waveRenderer = createWaveRenderer(cv);
+  waveRenderer.setConfig(waveCfg);
+  waveRenderer.setFakeEnabled(waveFakeOn);
+  const bind = (id, key, isAurora) => {
+    $(id)?.addEventListener('input', e => {
+      if (isAurora === 'hue') waveCfg.aurora.hue = +e.target.value;
+      else waveCfg[key] = +e.target.value;
+      wavePersist();
+    });
+  };
+  bind('wave-sens', 'sensitivity'); bind('wave-sens-mini', 'sensitivity');
+  bind('wave-spd', 'speed'); bind('wave-int', 'intensity');
+  bind('wave-atk', 'attack'); bind('wave-sm', 'smooth');
+  bind('wave-parts', 'particles'); bind('wave-aurora-hue', null, 'hue');
+  $('wave-aurora')?.addEventListener('change', e => { waveCfg.aurora.on = e.target.checked; wavePersist(); });
+  $('wave-add')?.addEventListener('click', () => {
+    if (waveCfg.waves.length >= 5) return;
+    const pal = ['#8ab4f8', '#5eead4', '#c4b5fd', '#f6b17a', '#f9a8d4'];
+    waveCfg.starterId = waveCfg.starterId || 'custom';
+    waveCfg.waves.push({
+      id: `w${Date.now().toString(36)}`, name: `موج ${waveCfg.waves.length + 1}`, type: 'sine',
+      colorMode: 'solid', c1: pal[waveCfg.waves.length % pal.length], c2: '#c4b5fd',
+      opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+      ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
+    });
+    waveOpenIds.add(waveCfg.waves[waveCfg.waves.length - 1].id);
+    wavePersist(); waveRenderList();
+  });
+  $('wave-dice')?.addEventListener('click', () => {
+    waveCfg.starterId = 'custom-dice';
+    waveCfg.waves = randomStack();
+    waveCfg.waves.forEach((w, i) => { w.name = `موج ${i + 1}`; });
+    waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
+    waveAdvIds = new Set();
+    wavePersist(); waveRenderList();
+  });
+  $('wave-reset')?.addEventListener('click', () => {
+    const id = waveCfg.starterId && starterById(waveCfg.starterId) ? waveCfg.starterId : 'classic-fade';
+    const fb = defaultWaveConfig();
+    const keepWaves = starterById(id).stack();
+    keepWaves.forEach((w, i) => { w.name = `موج ${i + 1}`; });
+    waveCfg = { ...fb, starterId: id, waves: keepWaves };
+    waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
+    waveAdvIds = new Set();
+    wavePersist(); waveRenderList();
+  });
+  $('wave-fake-toggle')?.addEventListener('click', () => {
+    waveFakeOn = !waveFakeOn;
+    waveRenderer.setFakeEnabled(waveFakeOn);
+    waveSync();
+  });
+  $('wave-mic-test')?.addEventListener('click', async () => {
+    if (waveMicStream) { waveMicStop(); waveSync(); return; }
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('no-gum');
+      waveMicStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      waveMicCtx = waveMicCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (waveMicCtx.state === 'suspended') await waveMicCtx.resume();
+      const src = waveMicCtx.createMediaStreamSource(waveMicStream);
+      waveMicAnalyser = waveMicCtx.createAnalyser();
+      waveMicAnalyser.fftSize = 1024;
+      src.connect(waveMicAnalyser);
+      waveRenderer.setAnalyser(waveMicAnalyser);
+      Logger.log('info', 'پیش‌نمایش موج: میکروفون وصل شد');
+    } catch (err) {
+      waveMicStop();
+      Logger.toast('میکروفون باز نشد — همان سطح مصنوعی می‌ماند');
+    }
+    waveSync();
+  });
+  // Follow the main recorder's analyser when the preview has no temp mic (reuse, no new stream).
+  setInterval(() => {
+    if (!waveRenderer || waveMicStream) return;
+    try {
+      const an = Audio.getAnalyser();
+      waveRenderer.setAnalyser(an || null);
+    } catch {}
+  }, 1000);
+  waveRenderList();
+  waveSync();
+}
+function waveMicStop(){
+  waveMicStream?.getTracks().forEach(t => { try { t.stop(); } catch {} });
+  waveMicStream = null;
+  waveMicAnalyser = null;
+  try { waveRenderer?.setAnalyser(Audio.getAnalyser() || null); } catch {}
+}
+function wavePrevStart(){ try { waveRenderer?.start(); } catch {} }
+function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
+
 loadSettings();
 // --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
 let lastModalFocus = null;
@@ -732,6 +1080,8 @@ function openModal(){
 }
 function closeModal(){
   els.modal.style.display = 'none';
+  wavePrevStop();
+  if (waveMicStream) { waveMicStop(); waveSync(); }
   if(lastModalFocus?.focus) lastModalFocus.focus();
   else els.btnSettings.focus();
 }
