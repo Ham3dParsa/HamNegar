@@ -5,6 +5,10 @@
 ## [Unreleased] — Post-merge gate compliance (follow-up for PR #4)
 
 ### Added
+- **Wave personalization (ticket/50):** new 4th settings tab «موج صدا» — sticky live preview (mic test + fake + sensitivity), 10 starter cards (one-click stack fill), wave stack ≤5 with per-wave rows (title toggle + rename + quick controls + collapsed advanced: band/profile/overrides/c2), globals (sensitivity/attack/speed/intensity/smooth/particles/aurora), 🎲 random stack + reset. Persisted as stack JSON v3 under `hamnegar.wave.v3` (`Storage.getWave/saveWave`).
+- **Wave engine (`js/modules/wave.js`):** standing-wave renderer (gate + floor-freeze hysteresis, perc loudness curve, near-still idle, no horizontal travel, thickness coupling, band drivers low/mid/high/rms, profiles flat/center/edges/bands, layered glow without per-frame `shadowBlur`, DPR-aware ≤60fps rAF, reduced-motion static). Preview-only — main-page `#vis` strip behavior unchanged.
+
+### Added
 - **Gate compensation:** follow-up branch `fix/followup-pr4-gate` addressing premature merge of PR #4 (`eb666f4`) with 5 must-fix warnings open and direct-to-`main` fix `82fe4aa` that bypassed review gate (violates `AGENTS.md`/`REVIEW.md`). This PR re-documents the bypass in `README.md` (§ Post-merge gate compliance) and here, and records evidence for the 5 fixes in `REVIEW.md` + `docs/PR4_FOLLOWUP_EVIDENCE.md`.
 - **Policy:** future merges require OC review `APPROVED`; no direct `main` pushes for review fixes.
 

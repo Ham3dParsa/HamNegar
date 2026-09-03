@@ -64,6 +64,7 @@
       <button type="button" class="settings-tab active" id="tab-providers" role="tab" aria-selected="true" aria-controls="panel-providers">ارائه‌دهنده‌ها</button>
       <button type="button" class="settings-tab" id="tab-easyadd" role="tab" aria-selected="false" aria-controls="panel-easyadd">افزودن آسان</button>
       <button type="button" class="settings-tab" id="tab-chains" role="tab" aria-selected="false" aria-controls="panel-chains">زنجیره‌ها</button>
+      <button type="button" class="settings-tab" id="tab-wave" role="tab" aria-selected="false" aria-controls="panel-wave">موج صدا</button>
     </div>
 
     <!-- Providers tab: keys editable ONLY here -->
@@ -188,6 +189,53 @@
         </div>
         <div class="hint" id="polish-disabled-hint" style="display:none">پالیش خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
       </section>
+    </section>
+
+    <!-- Wave tab: live preview + starters + stack + globals (ticket/50) -->
+    <section id="panel-wave" role="tabpanel" aria-labelledby="tab-wave" hidden>
+      <div class="wave-sticky" aria-label="پیش‌نمایش زنده موج">
+        <div class="pref-head"><h4>🔴 پیش‌نمایش زنده</h4>
+          <div class="wave-row-btns">
+            <button type="button" id="wave-mic-test" class="btn-ghost btn-sm">🎤 تست با صدای من</button>
+            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-sm">⏺ مصنوعی: روشن</button>
+          </div>
+        </div>
+        <div class="wave-preview-wrap"><canvas id="wave-preview"></canvas></div>
+        <div class="wave-row-btns" style="justify-content:space-between">
+          <label class="wave-mini-sens">حساسیت <input type="range" id="wave-sens-mini" min="0" max="100" value="50" aria-label="حساسیت پیش‌نمایش"><b id="wave-sens-mini-val">۵۰٪</b></label>
+          <span class="pref-sub" id="wave-count">۱ موج</span>
+        </div>
+        <div class="pref-sub" id="wave-name" style="text-align:center"></div>
+      </div>
+
+      <div class="pref-section" aria-label="استارترها">
+        <div class="pref-head"><h4>✨ استارترها — یک کلیک، پر کردن پشته</h4><span class="pref-sub">۱۰ طرح؛ هرکدام ۱ تا ۲ موج</span></div>
+        <div class="wave-cards" id="wave-starters"></div>
+      </div>
+
+      <div class="pref-section" aria-label="پشته موج">
+        <div class="pref-head"><h4>🌊 پشته موج (تا ۵ لایه)</h4><span class="pref-sub">بالای فهرست = رو/جلو</span></div>
+        <div id="wave-list" class="wave-list"></div>
+        <div class="wave-row-btns" style="justify-content:space-between">
+          <span class="wave-row-btns"><button type="button" id="wave-add" class="btn-ghost btn-sm">➕ افزودن موج</button>
+          <button type="button" id="wave-dice" class="btn-ghost btn-sm" title="پشته‌ای تازه در سلیقه امن">🎲 ترکیب تصادفی</button></span>
+          <span class="pref-sub">رسم از پشت (پایین) به رو (بالا)</span>
+        </div>
+      </div>
+
+      <div class="pref-section" aria-label="سراسری پشته">
+        <div class="pref-head"><h4>🎛 سراسری پشته</h4><button type="button" id="wave-reset" class="btn-ghost btn-sm">بازنشانی پشته</button></div>
+        <div><div class="wave-lab"><span>حساسیت (گیت + گین)</span><b id="wave-sens-val">۵۰٪</b></div><input type="range" id="wave-sens" min="0" max="100" value="50" aria-label="حساسیت"></div>
+        <div><div class="wave-lab"><span>سرعت پاسخ — اتک (خیزش؛ بیشتر = تندتر)</span><b id="wave-atk-val">۵۰٪</b></div><input type="range" id="wave-atk" min="0" max="100" value="50" aria-label="سرعت پاسخ"></div>
+        <div><div class="wave-lab"><span>سرعت (تپش ایستاده + جریان رنگ)</span><b id="wave-spd-val">۵۰٪</b></div><input type="range" id="wave-spd" min="0" max="100" value="50" aria-label="سرعت"></div>
+        <div><div class="wave-lab"><span>شدت (دهانه نوسان)</span><b id="wave-int-val">۵۰٪</b></div><input type="range" id="wave-int" min="0" max="100" value="50" aria-label="شدت"></div>
+        <div><div class="wave-lab"><span>نرمی — رهایی (بیشتر = کندتر محو می‌شود)</span><b id="wave-sm-val">۵۰٪</b></div><input type="range" id="wave-sm" min="0" max="100" value="50" aria-label="نرمی"></div>
+        <div><div class="wave-lab"><span>ذرات</span><b id="wave-parts-val">۱۲</b></div><input type="range" id="wave-parts" min="0" max="24" value="12" aria-label="ذرات"></div>
+        <div class="wave-row-btns" style="justify-content:space-between">
+          <label class="chip"><input type="checkbox" id="wave-aurora"> <strong>شست‌وشوی زمینه (aurora)</strong></label>
+          <label class="wave-mini-sens">ته‌رنگ <input type="range" id="wave-aurora-hue" min="0" max="360" value="220" aria-label="ته رنگ زمینه"><b id="wave-aurora-hue-val">۲۲۰</b></label>
+        </div>
+      </div>
     </section>
 
     <div class="hint">ترتیب را ذخیره کن — هر ماژول یک وظیفه دارد.</div>
