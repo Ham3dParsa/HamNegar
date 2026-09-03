@@ -592,15 +592,28 @@ $('btn-custom-add')?.addEventListener('click', ()=>{
   Logger.toast('ارائه‌دهنده اضافه شد');
 });
 $('btn-custom-test')?.addEventListener('click', async ()=>{
+  const name = els.customName?.value.trim() || '';
   const baseURL = els.customBaseUrl?.value.trim() || '';
   const key = els.customKey?.value || '';
   if(!baseURL || !key){ Logger.toast('BaseURL و کلید لازم است'); return; }
   Logger.setStatus('تست ارائه‌دهنده سفارشی...','warn');
   try{
-    const u = new URL(baseURL);
-    if(u.protocol !== 'https:') throw new Error('BaseURL باید https باشد');
-    const r = await fetch(baseURL.replace(/\/+$/,'') + '/models', { headers:{ Authorization:`Bearer ${key}` } });
-    if(!r.ok) throw new Error('HTTP ' + r.status);
+    // Route through Transcription seam so untrusted custom hosts hit the user-confirm gate.
+    const cur = Storage.getSettings().customProviders.slice();
+    let stored = name ? cur.find(x => x.name === name || x.id === slugifyCustomId(name)) : undefined;
+    let id;
+    if(stored){
+      id = stored.id;
+      Storage.saveSettings({ customProviders: cur.map(x => x.id === id ? { ...x, baseURL, key } : x) });
+    }else{
+      if(!name){ Logger.toast('اول ارائه‌دهنده را اضافه کن'); return; }
+      id = slugifyCustomId(name);
+      try{
+        Storage.saveSettings({ customProviders: [...cur, { id, name, baseURL, key }] });
+      }catch(e){ Logger.setStatus('❌ سفارشی: '+sanitizeMsg(e.message || e),'error'); return; }
+      renderCustomProviders(); buildEasyProviderOptions(); renderProvidersStatus();
+    }
+    await Transcription.listModels(id);
     Logger.setStatus('✅ ارائه‌دهنده سفارشی اوکی','info'); Logger.toast('ok');
   }catch(e){ Logger.setStatus('❌ سفارشی: '+sanitizeMsg(e.message || e),'error'); }
 });
@@ -613,10 +626,11 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
   const listEl = els.customModelsList;
   if(!baseURL || !key){ Logger.toast('BaseURL و کلید لازم است'); return; }
   try{
-    const r = await fetch(baseURL.replace(/\/+$/,'') + '/models', { headers:{ Authorization:`Bearer ${key}` } });
-    if(!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    const ids = j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
+    // Route through Transcription seam so untrusted custom hosts hit the user-confirm gate.
+    // Sync form values into the stored provider so listModels uses what the user sees.
+    const cur = Storage.getSettings().customProviders.slice();
+    Storage.saveSettings({ customProviders: cur.map(x => x.id === stored.id ? { ...x, baseURL, key } : x) });
+    const ids = await Transcription.listModels(stored.id);
     if(listEl) renderModelCodes(listEl, ids, stored.id, 'polish');
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل بارگذاری شد`);
