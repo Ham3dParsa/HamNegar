@@ -456,7 +456,7 @@ function switchTab(name){
     tabs[k]?.setAttribute('aria-selected', active ? 'true' : 'false');
     if(panels[k]) panels[k].hidden = !active;
   }
-  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); }
+  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
 }
 els.tabProviders?.addEventListener('click', ()=> switchTab('providers'));
 els.tabEasyadd?.addEventListener('click', ()=> switchTab('easyadd'));
