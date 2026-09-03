@@ -1229,8 +1229,8 @@ els.output.addEventListener('keydown', (e)=>{
     splitter.setAttribute('aria-orientation','horizontal');
     splitter.setAttribute('aria-label','تغییر ارتفاع لاگ');
     splitter.title = 'بکش تا ارتفاع لاگ عوض شود — ذخیره خودکار';
-    els.logPanel.parentNode.insertBefore(splitter, els.logPanel.nextSibling);
-    splitter.style.display = logCollapsed ? 'none' : 'flex';
+    els.logPanel.after(splitter);
+    applyLogCollapsed(logCollapsed);
   }
   let dragging=false, startY=0, startH=0;
   const clamp = v => Math.max(80, Math.min(v, Math.floor(window.innerHeight*0.55)));
