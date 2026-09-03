@@ -148,7 +148,82 @@ function hasKeyFor(entry){
 function hasKeyForPolish(entry){
   return Storage.hasKeyForProvider(providerIdOf(entry, 'groq'));
 }
-function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;'); }
+
+// --- chain/model a11y: single role=status live region + delete-with-undo (seam: ui behavior) ---
+const liveEl = $('chain-live');
+function announce(msg){
+  if(!liveEl) return;
+  const text = String(msg || '').slice(0, 200);
+  liveEl.textContent = '';
+  setTimeout(()=>{ liveEl.textContent = text; }, 30);
+}
+// Strip anything key-like before it reaches announcements/toasts/log-adjacent text.
+function sanitizeMsg(msg){
+  return String(msg ?? '')
+    .replace(/gsk_[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
+    .replace(/sk-or-v1-[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
+    .replace(/sk-or-[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
+    .replace(/AIza[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
+    .replace(/AQ\.[A-Za-z0-9_.-]+/g, '[کلید حذف شد]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [کلید حذف شد]')
+    .slice(0, 120);
+}
+function labelOf(entry, type){
+  const id = entryIdOf(entry);
+  const meta = (type === 'stt' ? STT_LABELS[id] : POLISH_LABELS[id]) || { label: id };
+  return meta.label;
+}
+// Sane focus after list mutations: next row, else previous, else section reset button.
+function focusChainRow(type, idx, innerSelector){
+  const container = type === 'stt' ? els.sttChain : els.polishChain;
+  const rows = container?.querySelectorAll('.chain-item');
+  if(!rows || !rows.length){
+    (type === 'stt' ? $('btn-reset-stt') : $('btn-reset-polish'))?.focus?.();
+    return;
+  }
+  const row = rows[Math.max(0, Math.min(idx, rows.length - 1))];
+  const inner = innerSelector ? row.querySelector(innerSelector) : null;
+  (inner || row).focus?.();
+}
+let lastDeleted = null; // {entry, index, type}
+let undoTimer = null;
+function hideUndoToast(){
+  const t = $('toast');
+  if(undoTimer){ clearTimeout(undoTimer); undoTimer = null; }
+  if(!t) return;
+  t.classList.remove('show');
+  t.innerHTML = '';
+}
+function undoDelete(){
+  if(!lastDeleted) return;
+  const { entry, index, type } = lastDeleted;
+  lastDeleted = null;
+  hideUndoToast();
+  const arr = type === 'stt' ? sttChainState : polishChainState;
+  arr.splice(Math.min(index, arr.length), 0, entry);
+  persistChains();
+  renderAllChains();
+  announce(`«${labelOf(entry, type)}» بازگردانده شد`);
+  focusChainRow(type, Math.min(index, arr.length - 1));
+}
+function showUndoToast(label, ms = 8000){
+  const t = $('toast');
+  if(!t){ lastDeleted = null; return; }
+  if(undoTimer){ clearTimeout(undoTimer); undoTimer = null; }
+  t.innerHTML = '';
+  const span = document.createElement('span');
+  span.textContent = `«${label}» حذف شد`;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'toast-undo';
+  btn.textContent = 'واگرد';
+  btn.setAttribute('aria-label', `بازگردانی «${label}»`);
+  btn.addEventListener('click', undoDelete);
+  t.append(span, btn);
+  t.classList.add('show');
+  undoTimer = setTimeout(()=>{ lastDeleted = null; hideUndoToast(); }, ms);
+}
 
 function renderChain(container, chain, type){
   if(!container) return;
@@ -167,8 +242,10 @@ function renderChain(container, chain, type){
     item.dataset.index = idx;
     item.setAttribute('role','listitem');
     item.setAttribute('aria-label', `${idx+1}. ${meta.label}`);
+    item.tabIndex = 0; // keyboard reorder target: Ctrl+ArrowUp/Down
     const dotCls = hasKey ? 'ok' : 'missing';
-    const toggleHtml = `<label class="chip" style="padding:4px 8px;gap:4px"><input type="checkbox" data-toggle ${enabled?'checked':''} aria-label="فعال"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>`;
+    const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
+    const toggleHtml = `<label class="chip chain-switch" style="padding:4px 8px;gap:4px"><input type="checkbox" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>`;
     item.innerHTML = `
       <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
@@ -181,9 +258,9 @@ function renderChain(container, chain, type){
       ${toggleHtml}
       <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span>
       <div class="chain-actions">
-        <button class="chain-btn" data-up aria-label="بالا" ${idx===0?'disabled':''}>▲</button>
-        <button class="chain-btn" data-down aria-label="پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
-        <button class="chain-btn" data-remove aria-label="حذف" title="حذف">✕</button>
+        <button type="button" class="chain-btn" data-up aria-label="انتقال ${esc(meta.label)} به بالا" ${idx===0?'disabled':''}>▲</button>
+        <button type="button" class="chain-btn" data-down aria-label="انتقال ${esc(meta.label)} به پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
+        <button type="button" class="chain-btn" data-remove aria-label="حذف مدل ${esc(meta.label)}" title="حذف">✕</button>
       </div>
     `;
     // toggle per-model (both chains) — single path: canonical {id, providerId, enabled}
@@ -193,16 +270,29 @@ function renderChain(container, chain, type){
       else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'gemini':'groq'); arr[idx].enabled = e.target.checked; }
       persistChains();
       renderAllChains();
+      announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
+      focusChainRow(type, idx, '[data-toggle]');
     });
     item.querySelector('[data-remove]')?.addEventListener('click', ()=>{
       const arr = type==='stt'? sttChainState : polishChainState;
-      arr.splice(idx,1);
+      const [removed] = arr.splice(idx,1);
+      lastDeleted = { entry: removed, index: idx, type };
       persistChains();
       renderAllChains();
+      announce(`مدل ${meta.label} حذف شد — برای بازگردانی «واگرد» را بزن`);
+      showUndoToast(meta.label);
+      focusChainRow(type, idx);
     });
     // up/down
     item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
     item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
+    // keyboard reorder: Ctrl+ArrowUp/Down on focused row (bubbles from inner controls too)
+    item.addEventListener('keydown', (e)=>{
+      if(e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
+        e.preventDefault();
+        moveChain(type, idx, e.key === 'ArrowUp' ? -1 : 1);
+      }
+    });
     // drag
     item.addEventListener('dragstart', e=>{
       item.classList.add('dragging');
@@ -236,6 +326,8 @@ function moveChain(type, idx, dir){
   [arr[idx], arr[n]] = [arr[n], arr[idx]];
   renderAllChains();
   persistChains();
+  announce(`«${labelOf(arr[n], type)}» به جایگاه ${n+1} از ${arr.length} منتقل شد`);
+  focusChainRow(type, n);
 }
 
 function renderAllChains(){
@@ -316,7 +408,7 @@ function loadSettings(){
   buildEasyProviderOptions();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ els.modal.style.display='flex'; Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ openModal(); Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   try{
@@ -397,7 +489,10 @@ function addModelToChain(modelId, providerId, target){
     if(polishChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'groq')===pid)){ Logger.toast('قبلاً هست'); return; }
     polishChainState.push({ id:mid, providerId:pid, enabled:true });
   }
-  persistChains(); renderAllChains(); Logger.toast('افزوده شد');
+  persistChains(); renderAllChains();
+  const list = target === 'stt' ? sttChainState : polishChainState;
+  announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
+  Logger.toast('افزوده شد');
 }
 async function fetchAndShowModels(providerId, target){
   const isGroq = providerId==='groq';
@@ -411,7 +506,8 @@ async function fetchAndShowModels(providerId, target){
     if(listEl) renderModelCodes(listEl, ids, providerId, 'polish');
     refreshEasyModels(false);
     Logger.toast(`مدل‌ها: ${ids.length}`);
-  }catch(e){ Logger.toast(String(e.message||e).slice(0,80)); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+String(e.message||e); } }
+    announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+safe; } }
   finally{ if(btn) btn.textContent='لیست مدل‌ها'; }
 }
 els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq', 'polish'));
@@ -510,7 +606,8 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
     const ids = j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
     if(listEl) renderModelCodes(listEl, ids, slugifyCustomId(els.customName?.value), 'polish');
     Logger.toast(`مدل‌ها: ${ids.length}`);
-  }catch(e){ Logger.toast(String(e.message||e).slice(0,80)); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+String(e.message||e); } }
+    announce(`${ids.length} مدل بارگذاری شد`);
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+safe; } }
 });
 
 // --- easy-add tab: provider select → model select (listModels cache) → target → Add ---
@@ -557,7 +654,8 @@ async function loadEasyModels(providerId){
     modelCache.set(providerId, ids);
     refreshEasyModels(false);
     Logger.toast(`مدل‌ها: ${ids.length}`);
-  }catch(e){ Logger.toast(String(e.message||e).slice(0,80)); }
+    announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
   finally{ if(btn) btn.textContent='تازه‌سازی مدل‌ها'; }
 }
 els.easyProvider?.addEventListener('change', ()=> refreshEasyModels(true));
@@ -577,12 +675,43 @@ $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainSta
 $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
 loadSettings();
-els.btnSettings.onclick=()=> els.modal.style.display='flex';
-$('btn-close-modal').onclick=()=> els.modal.style.display='none';
-$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
+// --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
+let lastModalFocus = null;
+function modalFocusables(){
+  const box = els.modal.querySelector('.modal-box');
+  if(!box) return [];
+  return [...box.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')]
+    .filter(el=> !el.disabled && el.getClientRects().length > 0);
+}
+function openModal(){
+  lastModalFocus = document.activeElement;
+  els.modal.style.display = 'flex';
+  const box = els.modal.querySelector('.modal-box');
+  if(box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
+  const f = modalFocusables();
+  (f[0] || box)?.focus?.();
+}
+function closeModal(){
+  els.modal.style.display = 'none';
+  if(lastModalFocus?.focus) lastModalFocus.focus();
+  else els.btnSettings.focus();
+}
+els.modal.addEventListener('keydown', (e)=>{
+  if(els.modal.style.display !== 'flex') return;
+  if(e.key === 'Escape'){ e.preventDefault(); closeModal(); return; } // Esc: close WITHOUT saving
+  if(e.key !== 'Tab') return;
+  const f = modalFocusables();
+  if(!f.length) return;
+  const first = f[0], last = f[f.length - 1];
+  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+els.btnSettings.onclick=()=> openModal();
+$('btn-close-modal').onclick=()=> closeModal();
+$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } closeModal(); Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
 $('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=STT_DEFAULTS.map(id=>({id, providerId:providerIdOf(id,'gemini'), enabled:true})); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
 $('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
-els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
+els.modal.addEventListener('click',e=>{ if(e.target===els.modal) closeModal(); });
 els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
 els.toggleVad.addEventListener('change',()=> Storage.saveSettings({vad: els.toggleVad.checked}));
 els.toggleAutocopy.addEventListener('change',()=> Storage.saveSettings({autocopy: els.toggleAutocopy.checked}));
@@ -777,7 +906,7 @@ function shakeMic(){
 async function startRecording(){
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
-  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); els.modal.style.display='flex'; return; }
+  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); openModal(); return; }
   let snap=null;
   try{
     snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
