@@ -310,7 +310,8 @@ export const Transcription = {
     const { geminiKey: k }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw new Error('باید AQ. یا AIza باشد');
     const { sttChain } = Storage.getSettings();
-    const model = (sttChain.find(m=>m!=='groq') ) || 'gemini-flash-lite-latest';
+    const found = sttChain.find(m=> (typeof m==='object'?m.id:m)!=='groq');
+    const model = (typeof found==='object'?found.id:found) || 'gemini-flash-lite-latest';
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:{'x-goog-api-key':k}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();

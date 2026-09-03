@@ -124,7 +124,7 @@ export const Storage = {
       const set = new Set();
       if(p==='groq'){ set.add('groq'); if(allowed.has(m)) set.add(m); } else { if(allowed.has(m)) set.add(m); set.add('groq'); }
       for(const d of STT_DEFAULTS) set.add(d);
-      sttChain = [...set];
+      sttChain = normalizeSTTChain([...set]);
     }
     const peRaw = localStorage.getItem(KEYS.POLISH_ENABLED);
     const logColRaw = localStorage.getItem(KEYS.LOG_COLLAPSED);

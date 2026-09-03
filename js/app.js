@@ -127,16 +127,16 @@ let polishChainState = [];
 
 function hasKeyFor(id){
   const s=Storage.getSettings();
-  if(typeof id === 'object' && id.provider){
+  const rawId = typeof id==='object' ? id.id : id;
+  if(rawId==='groq') return !!s.groqKey;
+  if(typeof id==='object' && id.provider){
     if(id.provider==='groq') return !!s.groqKey;
     if(id.provider==='openrouter') return !!s.openrouterKey;
     return !!s.geminiKey;
   }
-  if(typeof id === 'string'){
-    if(id==='groq') return !!s.groqKey;
-    if(id.includes('/')) {
-      // legacy slash ids now default to Groq per screenshot (qwen/oss via Groq)
-      if(id.includes(':free')) return !!s.openrouterKey;
+  if(typeof rawId === 'string'){
+    if(rawId.includes('/')) {
+      if(rawId.includes(':free')) return !!s.openrouterKey;
       return !!s.groqKey;
     }
     return !!s.geminiKey;
@@ -257,12 +257,12 @@ function persistChains(){
 // --- settings wiring ---
 function updateBadge(){
   const s=Storage.getSettings();
-  const first = s.sttChain?.[0] || s.primary || 'groq';
-  const label = first==='groq' ? 'Groq' : first;
+  const raw = s.sttChain?.[0] || s.primary || 'groq';
+  const firstId = typeof raw==='object' ? raw.id : raw;
+  const label = firstId==='groq' ? 'Groq' : firstId;
   const pol = s.polishEnabled ? ' • پالیش روشن' : ' • پالیش خاموش';
   els.engineBadge.textContent = `موتور: ${label}${pol}`;
-  // fallback indicator in badge color?
-  els.engineBadge.style.opacity = hasKeyFor(first) ? '1' : '0.6';
+  els.engineBadge.style.opacity = hasKeyFor(raw) ? '1' : '0.6';
 }
 function validate(){
   const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(), or=els.keyOpenrouter?.value.trim()||'';
