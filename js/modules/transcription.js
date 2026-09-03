@@ -70,6 +70,12 @@ function cleanPolishOutput(raw){
   out = out.replace(/<think>[\s\S]*$/gi, '').replace(/<thinking>[\s\S]*$/gi, '');
   return out.trim();
 }
+function validatePolishOutput(raw, text, model){
+  const out = cleanPolishOutput(raw);
+  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
+  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
+  return out;
+}
 async function queryPolishViaGroq(text, model){
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
@@ -86,10 +92,7 @@ async function queryPolishViaGroq(text, model){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=cleanPolishOutput(j.choices?.[0]?.message?.content?.trim()||'');
-  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
-  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
-  return out;
+  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolishViaGemini(text, model){
   const { geminiKey: k } = Storage.getSettings();
@@ -118,10 +121,7 @@ async function queryPolishViaOpenRouter(text, model){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=cleanPolishOutput(j.choices?.[0]?.message?.content?.trim()||'');
-  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
-  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
-  return out;
+  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolish(text, entry){
   const model = typeof entry === 'string' ? entry : entry.id;

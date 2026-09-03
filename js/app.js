@@ -395,6 +395,7 @@ $('polish-add-input')?.addEventListener('keydown', (e)=>{
 $('stt-add-input')?.addEventListener('keydown', (e)=>{
   if(e.key!=='Enter') return;
   const mid=e.target.value.trim(); if(!mid) return;
+  if(!STT_LABELS[mid] && mid!=='groq' && !/^gemini-[a-z0-9.\-]+$/i.test(mid)){ Logger.toast('مدل نامعتبر'); return; }
   if(sttChainState.some(x=> (typeof x==='object'?x.id:x)===mid)){ Logger.toast('قبلاً هست'); e.target.value=''; return; }
   sttChainState.push({ id:mid, enabled:true });
   persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid}`); e.target.value='';
@@ -408,7 +409,7 @@ loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
 $('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
-$('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
+$('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=STT_DEFAULTS.map(id=>({id,enabled:true})); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
 $('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
 els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
