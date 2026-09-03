@@ -67,7 +67,7 @@ function normalizeSTTEntry(x){
   if(typeof x === 'string'){
     const id=x.trim(); if(!id) return null;
     const cleanId = id.replace(':free','');
-    return { id: cleanId, providerId: inferSTTProviderId(cleanId, ''), enabled:true };
+    return { id: cleanId, providerId: inferSTTProviderId(id, ''), enabled:true };
   }
   if(x && typeof x === 'object' && typeof x.id==='string' && x.id.trim()){
     const id=x.id.trim().replace(':free','');
