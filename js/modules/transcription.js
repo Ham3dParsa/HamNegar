@@ -295,9 +295,7 @@ export const Transcription = {
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     const j=await r.json(); return j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
   },
-  // deprecated: app.js (fetchAndShowModels) still calls these — thin wrappers, no logic here
-  async listGroqModels(){ return this.listModels('groq'); },
-  async listOpenRouterModels(){ return this.listModels('openrouter'); },
+  // provider model lists: single path is listModels(providerId); app.js calls it via fetchAndShowModels/loadEasyModels
   async testGroq(){
     const { groqKey: k, groqBaseURL }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!k.startsWith('gsk_')) throw new Error('باید gsk_ باشد');

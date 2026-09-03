@@ -141,7 +141,8 @@
         <div class="key-row"><select id="easy-provider-select"></select><button type="button" class="btn-ghost btn-sm" id="btn-easy-refresh">تازه‌سازی مدل‌ها</button></div>
         <label for="easy-model-select">مدل:</label>
         <select id="easy-model-select"><option value="">— اول ارائه‌دهنده را انتخاب کن —</option></select>
-        <div class="hint" id="easy-models-hint">مدل‌ها از حافظه (listModels) می‌آیند؛ با «تازه‌سازی» به‌روز می‌شوند.</div>
+        <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" style="display:none">
+        <div class="hint" id="easy-models-hint">مدل‌ها از حافظه (listModels) می‌آیند؛ با «تازه‌سازی» به‌روز می‌شوند. برای Gemini شناسه را دستی بنویس.</div>
         <fieldset class="easy-target" style="border:none;display:flex;gap:8px;flex-wrap:wrap">
           <legend class="hint-inline">مقصد:</legend>
           <label class="chip"><input type="radio" name="easy-target" id="easy-target-stt" value="stt" checked> <strong>STT</strong></label>

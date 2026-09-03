@@ -28,7 +28,7 @@ const els = {
   panelProviders: $('panel-providers'), panelEasyadd: $('panel-easyadd'), panelChains: $('panel-chains'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   customModelsList: $('custom-models-list'),
-  easyProvider: $('easy-provider-select'), easyModel: $('easy-model-select'),
+  easyProvider: $('easy-provider-select'), easyModel: $('easy-model-select'), easyModelInput: $('easy-model-input'),
 };
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
@@ -564,7 +564,17 @@ function renderCustomProviders(){
     card.append(head, body);
     box.appendChild(card);
   }
+  syncCustomModelsBtn();
 }
+function syncCustomModelsBtn(){
+  const btn = $('btn-custom-models');
+  if(!btn) return;
+  const name = els.customName?.value.trim() || '';
+  try{
+    btn.disabled = !Storage.getSettings().customProviders.some(x => x.name === name || x.id === slugifyCustomId(name));
+  }catch{ btn.disabled = true; }
+}
+els.customName?.addEventListener('input', syncCustomModelsBtn);
 $('btn-custom-add')?.addEventListener('click', ()=>{
   const name = els.customName?.value.trim() || '';
   const baseURL = els.customBaseUrl?.value.trim() || '';
@@ -592,11 +602,14 @@ $('btn-custom-test')?.addEventListener('click', async ()=>{
     const r = await fetch(baseURL.replace(/\/+$/,'') + '/models', { headers:{ Authorization:`Bearer ${key}` } });
     if(!r.ok) throw new Error('HTTP ' + r.status);
     Logger.setStatus('✅ ارائه‌دهنده سفارشی اوکی','info'); Logger.toast('ok');
-  }catch(e){ Logger.setStatus('❌ سفارشی: '+String(e.message||e).slice(0,80),'error'); }
+  }catch(e){ Logger.setStatus('❌ سفارشی: '+sanitizeMsg(e.message || e),'error'); }
 });
 $('btn-custom-models')?.addEventListener('click', async ()=>{
-  const baseURL = els.customBaseUrl?.value.trim() || '';
-  const key = els.customKey?.value || '';
+  const name = els.customName?.value.trim() || '';
+  const stored = Storage.getSettings().customProviders.find(x => x.name === name || x.id === slugifyCustomId(name));
+  if(!stored){ Logger.toast('اول ارائه‌دهنده را اضافه کن'); return; }
+  const baseURL = els.customBaseUrl?.value.trim() || stored.baseURL || '';
+  const key = els.customKey?.value || stored.key || '';
   const listEl = els.customModelsList;
   if(!baseURL || !key){ Logger.toast('BaseURL و کلید لازم است'); return; }
   try{
@@ -604,7 +617,7 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     const ids = j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
-    if(listEl) renderModelCodes(listEl, ids, slugifyCustomId(els.customName?.value), 'polish');
+    if(listEl) renderModelCodes(listEl, ids, stored.id, 'polish');
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل بارگذاری شد`);
   }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+safe; } }
@@ -631,6 +644,11 @@ function refreshEasyModels(fetchIfMissing){
   const sel = els.easyModel, provSel = els.easyProvider;
   if(!sel || !provSel) return;
   const pid = provSel.value;
+  const free = els.easyModelInput;
+  const showFree = pid === 'gemini';
+  if(sel) sel.style.display = showFree ? 'none' : '';
+  if(free) free.style.display = showFree ? '' : 'none';
+  if(showFree) return; // gemini: free-text id, listModels('gemini') throws
   const cached = modelCache.get(pid);
   sel.innerHTML='';
   if(!pid){ const o=document.createElement('option'); o.value=''; o.textContent='— اول ارائه‌دهنده را انتخاب کن —'; sel.appendChild(o); return; }
@@ -646,6 +664,7 @@ function refreshEasyModels(fetchIfMissing){
 }
 async function loadEasyModels(providerId){
   if(!providerId) return;
+  if(providerId === 'gemini'){ refreshEasyModels(false); announce('شناسه مدل Gemini را دستی بنویس'); return; }
   const btn = $('btn-easy-refresh');
   if(btn) btn.textContent='...';
   try{
@@ -655,17 +674,22 @@ async function loadEasyModels(providerId){
     refreshEasyModels(false);
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; if(providerId === 'gemini') refreshEasyModels(false); Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
   finally{ if(btn) btn.textContent='تازه‌سازی مدل‌ها'; }
 }
 els.easyProvider?.addEventListener('change', ()=> refreshEasyModels(true));
 $('btn-easy-refresh')?.addEventListener('click', ()=> loadEasyModels(els.easyProvider?.value));
 $('btn-easy-add')?.addEventListener('click', ()=>{
   const pid = els.easyProvider?.value || '';
-  const mid = els.easyModel?.value || '';
+  const mid = pid === 'gemini' ? (els.easyModelInput?.value.trim() || '') : (els.easyModel?.value || '');
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
+  if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
+  if(target === 'stt'){
+    const okStt = pid === 'groq' || /^gemini/i.test(mid) || Object.prototype.hasOwnProperty.call(STT_LABELS, mid);
+    if(!okStt){ Logger.toast('مدل نامعتبر برای STT'); return; }
+  }
   if(!Storage.hasKeyForProvider(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
   addModelToChain(mid, pid, target);
 });
@@ -1041,8 +1065,8 @@ async function handleTranscription(blob, snap){
 
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
-$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+e.message,'error'); } };
-$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+e.message,'error'); } };
+$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');
@@ -1052,7 +1076,7 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
     Logger.setStatus(`✅ پالیش: ${out.slice(0,60)}`,'info');
     Logger.log('info','polish test',{in:sample, out});
     Logger.toast(`پالیش: ${out}`);
-  }catch(e){ Logger.setStatus('❌ پالیش: '+e.message,'error'); }
+  }catch(e){ Logger.setStatus('❌ پالیش: '+sanitizeMsg(e.message || e),'error'); }
 });
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
 els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
