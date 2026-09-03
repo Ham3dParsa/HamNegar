@@ -1,31 +1,52 @@
 // Module: storage
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
-// Depth: hides 10+ keys, serialization, defaults, and migration behind 6 functions.
+// Depth: hides 11+ keys, serialization, defaults, and migration behind getSettings/saveSettings plus
+// provider helpers (getProviders/hasKeyForProvider). Chains (STT + polish) share one entry shape
+// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|custom id.
+// Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
+// Never logs keys.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
-// پالیش دو-کلیده: هر ورودی {id,provider,enabled} — provider: groq|openrouter
+export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter'];
+// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|custom id
 export const POLISH_DEFAULTS = [
-  { id:'qwen/qwen3.6-27b', provider:'groq', enabled:true },
-  { id:'qwen/qwen3.8-27b', provider:'groq', enabled:true },
-  { id:'openai/gpt-oss-20b', provider:'groq', enabled:true },
+  { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
+  { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
+  { id:'openai/gpt-oss-20b', providerId:'groq', enabled:true },
 ];
 const POLISH_DEFAULTS_LEGACY = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
+
+function inferSTTProviderId(id, explicit){
+  if(typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  if(id === 'groq') return 'groq';
+  if(/^gemini/i.test(id)) return 'gemini';
+  if(id.includes(':free')) return 'openrouter';
+  return 'groq';
+}
 
 function normalizePolishEntry(x){
   if(typeof x === 'string'){
     const id = x.trim();
     if(!id) return null;
     // legacy :free → openrouter, else groq (qwen/oss via Groq per new spec)
-    const provider = id.includes(':free') ? 'openrouter' : 'groq';
+    const providerId = id.includes(':free') ? 'openrouter' : 'groq';
     const cleanId = id.replace(':free','');
-    return { id: cleanId, provider, enabled:true };
+    return { id: cleanId, providerId, enabled:true };
   }
   if(x && typeof x === 'object' && typeof x.id === 'string' && x.id.trim()){
     const id = x.id.trim();
-    const provider = x.provider === 'openrouter' ? 'openrouter' : x.provider === 'gemini' ? 'gemini' : 'groq';
+    // canonical providerId wins; legacy `provider` accepted as alias for migration
+    const rawPid = (typeof x.providerId === 'string' && x.providerId.trim())
+      ? x.providerId.trim()
+      : (typeof x.provider === 'string' && x.provider.trim() ? x.provider.trim() : '');
+    let providerId;
+    if(rawPid === 'openrouter' || rawPid === 'gemini' || rawPid === 'groq') providerId = rawPid;
+    else if(rawPid) providerId = rawPid; // custom id passthrough
+    else providerId = id.includes(':free') ? 'openrouter' : 'groq';
+    const cleanId = id.replace(':free','');
     const enabled = x.enabled === false ? false : true;
-    return { id, provider, enabled };
+    return { id: cleanId, providerId, enabled };
   }
   return null;
 }
@@ -35,7 +56,7 @@ function normalizePolishChain(arr){
   for(const raw of arr){
     const e = normalizePolishEntry(raw);
     if(!e) continue;
-    const key = `${e.provider}:${e.id}`;
+    const key = `${e.providerId}:${e.id}`;
     if(seen.has(key)) continue;
     seen.add(key);
     out.push(e);
@@ -44,16 +65,42 @@ function normalizePolishChain(arr){
 }
 function normalizeSTTEntry(x){
   if(typeof x === 'string'){
-    const id=x.trim(); if(!id) return null; return { id, enabled:true };
+    const id=x.trim(); if(!id) return null;
+    const cleanId = id.replace(':free','');
+    return { id: cleanId, providerId: inferSTTProviderId(cleanId, ''), enabled:true };
   }
   if(x && typeof x === 'object' && typeof x.id==='string' && x.id.trim()){
-    return { id:x.id.trim(), enabled: x.enabled===false?false:true };
+    const id=x.id.trim().replace(':free','');
+    const explicit = (typeof x.providerId==='string' && x.providerId.trim())
+      ? x.providerId.trim()
+      : (typeof x.provider==='string' && x.provider.trim() ? x.provider.trim() : '');
+    return { id, providerId: inferSTTProviderId(id, explicit || (x.id.includes(':free') ? 'openrouter' : '')), enabled: x.enabled===false?false:true };
   }
   return null;
 }
 function normalizeSTTChain(arr){
   const seen=new Set(); const out=[];
-  for(const raw of arr){ const e=normalizeSTTEntry(raw); if(!e||seen.has(e.id)) continue; seen.add(e.id); out.push(e); }
+  for(const raw of arr){ const e=normalizeSTTEntry(raw); if(!e) continue; const key=`${e.providerId}:${e.id}`; if(seen.has(key)) continue; seen.add(key); out.push(e); }
+  return out;
+}
+function normalizeCustomProvider(x){
+  if(!x || typeof x !== 'object') return null;
+  const id = typeof x.id === 'string' ? x.id.trim() : '';
+  if(!id) return null;
+  const name = typeof x.name === 'string' && x.name.trim() ? x.name.trim() : id;
+  const baseURL = typeof x.baseURL === 'string' ? x.baseURL.trim().replace(/\/+$/,'') : '';
+  const key = typeof x.key === 'string' ? x.key.trim() : '';
+  return { id, name, baseURL, key };
+}
+function normalizeCustomProviders(arr){
+  if(!Array.isArray(arr)) return [];
+  const seen = new Set(); const out = [];
+  for(const raw of arr){
+    const e = normalizeCustomProvider(raw);
+    if(!e || seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push(e);
+  }
   return out;
 }
 function normalizePolish(arr){
@@ -66,6 +113,7 @@ const KEYS = {
   GEMINI: 'KEY_GEMINI',
   OPENROUTER: 'KEY_OPENROUTER',
   OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
+  CUSTOM_PROVIDERS: 'CUSTOM_PROVIDERS',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
   STT_CHAIN: 'STT_CHAIN',
@@ -84,20 +132,28 @@ const KEYS = {
 };
 
 function parseSTTChain(raw, defaults){
-  if(!raw) return defaults.map(id=>({id, enabled:true}));
+  if(!raw) return normalizeSTTChain(defaults);
   try{
     const arr=JSON.parse(raw);
     if(Array.isArray(arr) && arr.length){
-      // if already objects with enabled, use them
-      if(typeof arr[0]==='object' && arr[0].id){
-        const norm=normalizeSTTChain(arr); if(norm.length) return norm;
-      }
-      // legacy string[] → objects enabled:true
-      const strings=arr.filter(x=>typeof x==='string'&&x.trim()!=='');
-      if(strings.length){ const norm=normalizeSTTChain(strings); if(norm.length) return norm; }
+      const norm=normalizeSTTChain(arr); if(norm.length) return norm;
     }
   }catch{}
-  return defaults.map(id=>({id, enabled:true}));
+  return normalizeSTTChain(defaults);
+}
+function parseCustomProviders(raw){
+  if(!raw) return [];
+  try{
+    const arr = JSON.parse(raw);
+    if(Array.isArray(arr)) return normalizeCustomProviders(arr);
+  }catch{}
+  return [];
+}
+
+function checkHttpsBaseURL(v, label, field){
+  let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error(`${label} نامعتبر — باید https:// باشد`),{status:400, field}); }
+  if(u.protocol!=='https:') throw Object.assign(new Error(`${label} باید https باشد`),{status:400, field});
+  return v.replace(/\/+$/,'');
 }
 function parsePolishChain(raw, defaults){
   if(!raw) return defaults.map(e=>({ ...e }));
@@ -139,6 +195,7 @@ export const Storage = {
       model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
       sttChain,
       polishChain,
+      customProviders: parseCustomProviders(localStorage.getItem(KEYS.CUSTOM_PROVIDERS)),
       polishEnabled: peRaw === null ? true : peRaw === '1',
       realtime: localStorage.getItem(KEYS.REALTIME) === '1',
       vad: localStorage.getItem(KEYS.VAD) !== '0',
@@ -149,22 +206,21 @@ export const Storage = {
   },
   saveSettings(patch) {
     // validate BaseURLs first — atomic: no partial persist on throw (waiver: custom host allowed, confirm at fetch)
-    let groqBaseNorm = null, orBaseNorm = null;
+    let groqBaseNorm = null, orBaseNorm = null, customsNorm = null;
     if ('groqBaseURL' in patch) {
       const v = (patch.groqBaseURL||'').trim();
-      if(v){
-        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('Groq BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'groqBaseURL'}); }
-        if(u.protocol!=='https:') throw Object.assign(new Error('Groq BaseURL باید https باشد'),{status:400, field:'groqBaseURL'});
-        groqBaseNorm = v.replace(/\/+$/,'');
-      } else groqBaseNorm = GROQ_BASE_DEFAULT;
+      groqBaseNorm = v ? checkHttpsBaseURL(v, 'Groq BaseURL', 'groqBaseURL') : GROQ_BASE_DEFAULT;
     }
     if ('openrouterBaseURL' in patch) {
       const v = (patch.openrouterBaseURL||'').trim();
-      if(v){
-        let u; try{ u=new URL(v); }catch{ throw Object.assign(new Error('OpenRouter BaseURL نامعتبر — باید https:// باشد'),{status:400, field:'openrouterBaseURL'}); }
-        if(u.protocol!=='https:') throw Object.assign(new Error('OpenRouter BaseURL باید https باشد'),{status:400, field:'openrouterBaseURL'});
-        orBaseNorm = v.replace(/\/+$/,'');
-      } else orBaseNorm = OPENROUTER_BASE_DEFAULT;
+      orBaseNorm = v ? checkHttpsBaseURL(v, 'OpenRouter BaseURL', 'openrouterBaseURL') : OPENROUTER_BASE_DEFAULT;
+    }
+    if ('customProviders' in patch) {
+      const arr = Array.isArray(patch.customProviders) ? patch.customProviders : [];
+      customsNorm = normalizeCustomProviders(arr);
+      customsNorm.forEach((c, i) => {
+        if(c.baseURL) checkHttpsBaseURL(c.baseURL, 'BaseURL ارائه‌دهنده سفارشی', `customProviders[${i}].baseURL`);
+      });
     }
     if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
     if ('groqBaseURL' in patch) localStorage.setItem(KEYS.GROQ_BASE, groqBaseNorm);
@@ -175,12 +231,31 @@ export const Storage = {
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
     if ('polishChain' in patch) localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(normalizePolishChain(patch.polishChain)));
+    if ('customProviders' in patch) localStorage.setItem(KEYS.CUSTOM_PROVIDERS, JSON.stringify(customsNorm));
     if ('polishEnabled' in patch) localStorage.setItem(KEYS.POLISH_ENABLED, patch.polishEnabled ? '1' : '0');
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');
     if ('vad' in patch) localStorage.setItem(KEYS.VAD, patch.vad ? '1' : '0');
     if ('autocopy' in patch) localStorage.setItem(KEYS.AUTOCOPY, patch.autocopy ? '1' : '0');
     if ('logCollapsed' in patch) localStorage.setItem(KEYS.LOG_COLLAPSED, patch.logCollapsed ? '1' : '0');
     if ('reportCollapsed' in patch) localStorage.setItem(KEYS.REPORT_COLLAPSED, patch.reportCollapsed ? '1' : '0');
+  },
+  getProviders() {
+    // built-ins (key presence only — never leaks key values) + customs
+    const s = Storage.getSettings();
+    return [
+      { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
+      { id: 'gemini', name: 'Gemini', baseURL: '', hasKey: !!s.geminiKey },
+      { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
+      ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
+    ];
+  },
+  hasKeyForProvider(providerId) {
+    const s = Storage.getSettings();
+    if(providerId === 'groq') return !!s.groqKey;
+    if(providerId === 'gemini') return !!s.geminiKey;
+    if(providerId === 'openrouter') return !!s.openrouterKey;
+    const c = s.customProviders.find(x => x.id === providerId);
+    return !!(c && c.key);
   },
   getDraft() { return localStorage.getItem(KEYS.DRAFT) || ''; },
   saveDraft(text) { localStorage.setItem(KEYS.DRAFT, text); },
