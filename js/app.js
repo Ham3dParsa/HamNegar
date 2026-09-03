@@ -1,5 +1,5 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT, defaultWaveConfig } from './modules/storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT, defaultWaveConfig, WAVE_TYPES } from './modules/storage.js';
 import { createWaveRenderer, STARTERS, starterById, randomStack, WAVE_FA } from './modules/wave.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
@@ -456,7 +456,7 @@ function switchTab(name){
     tabs[k]?.setAttribute('aria-selected', active ? 'true' : 'false');
     if(panels[k]) panels[k].hidden = !active;
   }
-  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else wavePrevStop();
+  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); }
 }
 els.tabProviders?.addEventListener('click', ()=> switchTab('providers'));
 els.tabEasyadd?.addEventListener('click', ()=> switchTab('easyadd'));
@@ -720,10 +720,9 @@ $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainSt
 // --- wave tab (ticket/50; seam: Storage.getWave/saveWave + wave renderer; main #vis strip untouched) ---
 let waveCfg = Storage.getWave();
 let waveRenderer = null, waveInit = false, waveFakeOn = true;
-let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null;
+let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowTimer = null;
 let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
 let waveAdvIds = new Set();
-const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line'];
 function waveName(wv, idx){ const n = (wv.name || '').trim(); return n || `موج ${idx + 1}`; }
 function wavePersist(){ waveCfg = Storage.saveWave(waveCfg); waveRenderer?.setConfig(waveCfg); waveSync(); }
 function waveSeg(box, vals, cur, faMap, cb){
@@ -968,7 +967,7 @@ function waveSync(){
   if (mt) mt.textContent = waveMicStream ? '⏹ توقف میکروفون' : '🎤 تست با صدای من';
 }
 function waveEnsure(){
-  if (waveInit) { waveSync(); return; }
+  if (waveInit) { waveFollowStart(); waveSync(); return; }
   waveInit = true;
   const cv = $('wave-preview');
   waveRenderer = createWaveRenderer(cv);
@@ -1042,21 +1041,38 @@ function waveEnsure(){
     waveSync();
   });
   // Follow the main recorder's analyser when the preview has no temp mic (reuse, no new stream).
-  setInterval(() => {
+  // Single guarded instance: re-entry into waveEnsure must not accumulate timers.
+  waveFollowStart();
+  waveRenderList();
+  waveSync();
+}
+function waveFollowStart(){
+  if (waveFollowTimer != null) return;
+  waveFollowTimer = setInterval(() => {
     if (!waveRenderer || waveMicStream) return;
     try {
       const an = Audio.getAnalyser();
       waveRenderer.setAnalyser(an || null);
     } catch {}
   }, 1000);
-  waveRenderList();
-  waveSync();
+}
+function waveFollowStop(){
+  if (waveFollowTimer == null) return;
+  clearInterval(waveFollowTimer);
+  waveFollowTimer = null;
 }
 function waveMicStop(){
   waveMicStream?.getTracks().forEach(t => { try { t.stop(); } catch {} });
   waveMicStream = null;
   waveMicAnalyser = null;
   try { waveRenderer?.setAnalyser(Audio.getAnalyser() || null); } catch {}
+  if (waveMicCtx) {
+    const ctx = waveMicCtx;
+    waveMicCtx = null;
+    try {
+      if (ctx.state !== 'closed') Promise.resolve(ctx.close()).catch(() => {});
+    } catch {}
+  }
 }
 function wavePrevStart(){ try { waveRenderer?.start(); } catch {} }
 function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
@@ -1073,6 +1089,7 @@ function modalFocusables(){
 function openModal(){
   lastModalFocus = document.activeElement;
   els.modal.style.display = 'flex';
+  if(els.panelWave && !els.panelWave.hidden){ waveEnsure(); wavePrevStart(); }
   const box = els.modal.querySelector('.modal-box');
   if(box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
   const f = modalFocusables();
@@ -1081,7 +1098,10 @@ function openModal(){
 function closeModal(){
   els.modal.style.display = 'none';
   wavePrevStop();
-  if (waveMicStream) { waveMicStop(); waveSync(); }
+  waveFollowStop();
+  const hadMic = !!waveMicStream || !!waveMicCtx;
+  waveMicStop();
+  if (hadMic) { waveSync(); }
   if(lastModalFocus?.focus) lastModalFocus.focus();
   else els.btnSettings.focus();
 }
