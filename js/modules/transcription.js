@@ -61,6 +61,15 @@ async function queryGemini(blob, model, externalSignal){
 }
 
 // Polish adapters — dual provider (Groq OpenAI-compatible + OpenRouter + Gemini fallback)
+// Qwen reasoning models leak <think> into content unless reasoning_format:hidden — strip defensively + length guard
+function cleanPolishOutput(raw){
+  if(!raw) return '';
+  let out = String(raw);
+  out = out.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  // unclosed trailing think block (stream cut)
+  out = out.replace(/<think>[\s\S]*$/gi, '').replace(/<thinking>[\s\S]*$/gi, '');
+  return out.trim();
+}
 async function queryPolishViaGroq(text, model){
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
@@ -69,12 +78,17 @@ async function queryPolishViaGroq(text, model){
   assertTrustedBase(base, ['api.groq.com']);
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const body = { model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000 };
+  // Qwen thinking models: instruct mode, hide reasoning (gpt-oss does NOT support reasoning_format — skip there)
+  if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
-    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
+    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
+  const j=await res.json(); const out=cleanPolishOutput(j.choices?.[0]?.message?.content?.trim()||'');
+  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
+  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
   return out;
 }
 async function queryPolishViaGemini(text, model){
@@ -104,7 +118,9 @@ async function queryPolishViaOpenRouter(text, model){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
+  const j=await res.json(); const out=cleanPolishOutput(j.choices?.[0]?.message?.content?.trim()||'');
+  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
+  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
   return out;
 }
 async function queryPolish(text, entry){
