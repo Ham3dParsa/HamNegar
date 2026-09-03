@@ -8,21 +8,8 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div class="header">
-  <div class="brand"><div class="brand-icon">⌨️</div><div><h1>هم‌نگار <span id="app-version" style="font-size:11px;background:var(--surface2);border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);vertical-align:middle">v0.3.1</span></h1><p>تایپ صوتی فارسی • <a href="https://github.com/Ham3dParsa" target="_blank" style="color:var(--accent2);text-decoration:none">Ham3dParsa</a> • <a href="CHANGELOG.md" target="_blank" style="color:var(--muted)">تغییرات</a></p></div></div>
-  <div class="toolbar">
-    <div class="mic-group">
-      <button id="btn-mic" aria-busy="false"><span class="mic-icon">🎤</span><span class="mic-label">شروع صحبت</span></button>
-      <button id="btn-cancel-stt" class="btn-ghost mic-cancel" hidden aria-label="انصراف">✕ انصراف</button>
-    </div>
-    <button id="btn-copy" class="btn-ghost">📋 کپی</button>
-    <button id="btn-clear" class="btn-ghost">🗑️ پاک</button>
-    <button id="btn-settings" class="btn-icon" title="تنظیمات">⚙️</button>
-  </div>
-</div>
-<div id="file-warning">⚠️ با <code>file://</code> باز شده — روی <code>localhost</code> اجرا کن: <code>python -m http.server</code></div>
-<div class="controls-row" style="gap:8px">
-  <div id="vis"><canvas id="wave" width="360" height="36"></canvas></div>
+<div class="header topbar">
+  <div class="brand-mini"><div class="brand-icon">⌨️</div><span>هم‌نگار</span><span id="app-version" class="ver">v0.5.0</span></div>
   <span class="chip" id="engine-badge">موتور: Groq</span>
   <details id="options-drawer" class="options-drawer">
     <summary class="drawer-handle">≡ گزینه‌ها</summary>
@@ -32,11 +19,14 @@
       <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
     </div>
   </details>
+  <button id="btn-settings" class="btn-icon" title="تنظیمات">⚙️</button>
 </div>
+<div id="file-warning">⚠️ با <code>file://</code> باز شده — روی <code>localhost</code> اجرا کن: <code>python -m http.server</code></div>
+<div class="rec-strip" id="rec-strip"><canvas id="wave"></canvas></div>
 <div class="main">
   <div class="status-bar">
     <div class="status-right"><span id="status-dot" class="dot"></span><span id="status-text">آماده به کار — کلیدها را در ⚙️ چک کن</span><span id="live-badge" class="live-badge">● زنده</span></div>
-    <span id="char-count" style="color:var(--muted);font-size:12px">0 کاراکتر</span>
+    <span class="counts"><span id="char-count">0 کاراکتر</span> • <span id="word-count">0 کلمه</span></span>
   </div>
   <section id="stt-progress" hidden role="status" aria-live="polite" aria-label="پیشرفت تبدیل">
     <div class="stt-progress__head"><span id="progress-label">در حال تبدیل…</span><span id="progress-step"></span></div>
@@ -48,15 +38,28 @@
     </ol>
     <div class="stt-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar" style="width:0%"></i></div>
   </section>
-  <div class="quota-grid" id="quota-grid"></div>
-  <textarea id="output" placeholder="نشانگر را هر جا بگذار، صدا همون جا می‌شینه. حالت آنی روشنه متن زنده بالا می‌آد و آخرش پولیش می‌شه..."></textarea>
-  <div class="resizer-hint"><span>↕ بکش تا اندازه کادر عوض شود — ذخیره خودکار</span></div>
-  <div class="output-meta"><span>💡 پیش‌نویس خودکار ذخیره می‌شود</span><span class="output-meta-actions"><button id="btn-undo" class="btn-ghost btn-sm" disabled aria-label="واگرد">↩ واگرد</button><button id="btn-redo" class="btn-ghost btn-sm" disabled aria-label="ازنو">↪ ازنو</button><span id="word-count">0 کلمه</span></span></div>
+  <section class="tcard">
+    <textarea id="output" rows="4" placeholder="اینجا بنویس یا با 🎤 صحبت کن…"></textarea>
+    <div class="tfoot"><span>💡 پیش‌نویس خودکار ذخیره می‌شود</span><span class="grip" id="grip" title="بکش تا اندازه عوض شود">↕ بکش</span></div>
+  </section>
+  <div class="output-meta"><span class="output-meta-actions"><button id="btn-undo" class="btn-ghost btn-sm" disabled aria-label="واگرد">↩ واگرد</button><button id="btn-redo" class="btn-ghost btn-sm" disabled aria-label="ازنو">↪ ازنو</button></span></div>
+  <section class="quota-strip" id="quota-strip">
+    <button class="qs-head" id="quota-toggle" aria-expanded="false" aria-controls="quota-detail"><span id="quota-chev">▾</span> <b>سهمیه امروز</b> <span class="qs-nums" id="quota-nums">—</span><span class="dot" id="quota-dot"></span></button>
+    <div id="quota-detail" hidden>
+      <div class="quota-grid" id="quota-grid"></div>
+    </div>
+  </section>
   <div id="log-panel">
     <div id="log-header"><b>📒 گزارش سیستم</b><div style="display:flex;gap:6px"><button class="btn-ghost" id="btn-copy-log" style="padding:4px 10px;font-size:12px">کپی لاگ</button><button class="btn-ghost" id="btn-clear-log" style="padding:4px 10px;font-size:12px">پاک</button><button class="btn-ghost" id="btn-toggle-log" style="padding:4px 10px;font-size:12px">بستن</button></div></div>
     <div id="log-body"></div>
   </div>
 </div>
+<footer class="actionbar">
+  <button id="btn-copy" class="abtn">📋 کپی</button>
+  <button id="btn-mic" aria-busy="false" title="شروع/توقف"><span class="mic-icon">🎤</span><span class="mic-label">شروع صحبت</span></button>
+  <button id="btn-cancel-stt" class="abtn-cancel" hidden aria-label="انصراف">✕ انصراف</button>
+  <button id="btn-clear" class="abtn">🗑️ پاک</button>
+</footer>
 <div id="settings-modal" role="dialog" aria-modal="true" aria-label="تنظیمات">
   <div class="modal-box modal-wide">
     <h3>⚙️ تنظیمات</h3>

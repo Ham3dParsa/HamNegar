@@ -97,10 +97,15 @@ function buildFilterUI() {
 }
 buildFilterUI();
 const _origLog = Logger.log.bind(Logger);
+let logReady = false; // flipped after initial collapsed state applies (guards TDZ on logCollapsed)
 Logger.log = (level, msg, data) => {
   _origLog(level, msg, data);
   const el = els.logBody.lastElementChild;
   if (el && !passes(level, el.textContent)) el.classList.add('hidden');
+  if (level === 'error' && logReady && els.logPanel?.classList.contains('collapsed')) {
+    applyLogCollapsed(false);
+    Logger.toast('خطای جدید — لاگ باز شد');
+  }
 };
 
 if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
@@ -717,7 +722,7 @@ $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEac
 $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
 $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
-// --- wave tab (ticket/50; seam: Storage.getWave/saveWave + wave renderer; main #vis strip untouched) ---
+// --- wave tab (ticket/50; seam: Storage.getWave/saveWave + wave renderer; main rec strip shares the stack via mainWaveSync) ---
 let waveCfg = Storage.getWave();
 let waveRenderer = null, waveInit = false, waveFakeOn = true;
 let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowTimer = null;
@@ -1097,6 +1102,7 @@ function openModal(){
 }
 function closeModal(){
   els.modal.style.display = 'none';
+  mainWaveSync(); // wave tab edits persist live; main strip picks them up here
   wavePrevStop();
   waveFollowStop();
   const hadMic = !!waveMicStream || !!waveMicCtx;
@@ -1144,6 +1150,7 @@ function applyLogCollapsed(collapsed){
   Storage.saveSettings({ logCollapsed: collapsed });
 }
 applyLogCollapsed(logCollapsed);
+logReady = true;
 els.btnToggleLog.onclick=()=>{
   applyLogCollapsed(!logCollapsed);
   Logger.log('info', logCollapsed ? 'لاگ بسته شد' : 'لاگ باز شد');
@@ -1153,10 +1160,47 @@ document.getElementById('log-header')?.addEventListener('click', (e)=>{
   applyLogCollapsed(!logCollapsed);
 });
 
+// quota strip (ticket/51): collapsed slim head (today numbers + worst-provider dot); details toggle reveals grid/report
+function setQuotaExpanded(v){
+  const detail = $('quota-detail'), toggle = $('quota-toggle'), chev = $('quota-chev');
+  if(!detail || !toggle) return;
+  detail.hidden = !v;
+  toggle.setAttribute('aria-expanded', String(v));
+  if(chev) chev.textContent = v ? '▴' : '▾';
+}
+$('quota-toggle')?.addEventListener('click', ()=> setQuotaExpanded(!!$('quota-detail')?.hidden));
+function refreshQuotaStrip(){
+  const nums = $('quota-nums'), dot = $('quota-dot');
+  if(!nums && !dot) return;
+  let s = null;
+  try{ s = Quota.getSummary('today'); }catch{ return; }
+  if(!s) return;
+  if(nums) nums.textContent = `${s.totals.count} درخواست • ${s.totals.words} کلمه`;
+  if(dot){
+    let worst = 0;
+    for(const m of (s.byModel || [])){
+      const r = m.color === 'danger' ? 3 : m.color === 'warn-orange' ? 2 : m.color === 'warn' ? 1 : 0;
+      if(r > worst) worst = r;
+    }
+    dot.className = 'dot' + (worst >= 3 ? ' err' : worst >= 1 ? ' warn' : '');
+  }
+}
+if(els.quotaGrid) new MutationObserver(()=> refreshQuotaStrip()).observe(els.quotaGrid, { childList: true });
+refreshQuotaStrip();
+
 // output draft + counters + heights
 let selStart=0, selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart; selEnd=els.output.selectionEnd; };
 els.output.addEventListener('click',saveCursor); els.output.addEventListener('keyup',saveCursor); els.output.addEventListener('select',saveCursor);
-const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; };
+const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; autogrowOutput(); };
+// transcript autogrow (ticket/51): grow with content, cap ~60vh, then internal scroll; native resize:vertical kept for manual override
+function autogrowOutput(){
+  if(!els.output) return;
+  const cap = Math.round(window.innerHeight * 0.6);
+  els.output.style.height = 'auto';
+  els.output.style.height = Math.min(els.output.scrollHeight, cap) + 'px';
+  els.output.style.overflowY = els.output.scrollHeight > cap + 1 ? 'auto' : 'hidden';
+}
+window.addEventListener('resize', ()=> autogrowOutput());
 let draftTimer=null;
 const editorHistory={stack:[], index:-1, max:50, pushing:false, push(v){ if(this.pushing) return; if(this.stack[this.index]===v) return; this.stack=this.stack.slice(0,this.index+1); this.stack.push(v); if(this.stack.length>this.max){ this.stack.shift(); } else { this.index++; } this.index=Math.min(this.index,this.stack.length-1); updateHistoryButtons(); }, undo(){ if(this.index<=0) return null; this.index--; updateHistoryButtons(); return this.stack[this.index]; }, redo(){ if(this.index>=this.stack.length-1) return null; this.index++; updateHistoryButtons(); return this.stack[this.index]; }, canUndo(){return this.index>0}, canRedo(){return this.index<this.stack.length-1}};
 function updateHistoryButtons(){ const u=document.getElementById('btn-undo'), r=document.getElementById('btn-redo'); if(u) u.disabled=!editorHistory.canUndo(); if(r) r.disabled=!editorHistory.canRedo(); }
@@ -1235,21 +1279,40 @@ els.output.addEventListener('dblclick', ()=>{
   els.output.style.height=nh;
   Storage.saveHeights({ out: nh });
 });
+// grip drag = manual resize affordance (prototype v2); autogrow resumes on next input
+(()=>{
+  const grip = document.getElementById('grip');
+  if(!grip || !els.output) return;
+  let drag=false, y0=0, h0=0;
+  grip.addEventListener('pointerdown', e=>{ drag=true; y0=e.clientY; h0=els.output.offsetHeight; try{ grip.setPointerCapture(e.pointerId); }catch{} });
+  grip.addEventListener('pointermove', e=>{
+    if(!drag) return;
+    els.output.style.height = Math.max(120, Math.min(h0 + (e.clientY - y0), Math.round(window.innerHeight * 0.6))) + 'px';
+    els.output.style.overflowY = 'auto';
+  });
+  grip.addEventListener('pointerup', ()=>{ if(!drag) return; drag=false; Storage.saveHeights({ out: getComputedStyle(els.output).height }); });
+})();
 
-// waveform
-const waveCtx=els.wave.getContext('2d'); let animId=null;
-function startWave(){
-  const analyser=Audio.getAnalyser(); if(!analyser) return;
-  const data=new Uint8Array(analyser.frequencyBinCount);
-  (function draw(){
-    animId=requestAnimationFrame(draw);
-    analyser.getByteFrequencyData(data);
-    waveCtx.clearRect(0,0,els.wave.width,els.wave.height);
-    const bw=els.wave.width/data.length*2.2; let x=0;
-    for(let i=0;i<data.length;i++){ const h=data[i]/255*els.wave.height, al=0.3+data[i]/255*0.7; waveCtx.fillStyle=isRecording?`rgba(234,67,53,${al})`:`rgba(138,180,248,${al})`; waveCtx.fillRect(x,els.wave.height-h,bw-1,h); x+=bw; if(x>els.wave.width) break; }
-  })();
+// main rec strip (ticket/51): wave.js renderer on the user's saved stack; idle near-still (fake off), live via Audio.getAnalyser()
+let mainWave = null;
+function mainWaveInit(){
+  if(!els.wave) return;
+  try{
+    mainWave = createWaveRenderer(els.wave);
+    mainWave.setConfig(Storage.getWave());
+    mainWave.setFakeEnabled(false);
+    mainWave.start();
+  }catch{ mainWave = null; }
 }
-function stopWave(){ if(animId) cancelAnimationFrame(animId); waveCtx.clearRect(0,0,els.wave.width,els.wave.height); waveCtx.fillStyle='#333439'; waveCtx.fillRect(0,els.wave.height/2-1,els.wave.width,2); }
+function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); }catch{} syncRecStrip(); }
+function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); }catch{} syncRecStrip(); }
+function mainWaveSync(){ try{ mainWave?.setConfig(Storage.getWave()); }catch{} }
+function syncRecStrip(){
+  const strip = $('rec-strip');
+  if(!strip) return;
+  strip.classList.toggle('recording', isRecording);
+  strip.classList.toggle('transcribing', isTranscribing && !isRecording);
+}
 
 let rtVersion = 0;
 let rtSnap = null;
@@ -1304,6 +1367,7 @@ function setMicBusy(busy){
   }
   if (els.btnCancel) els.btnCancel.hidden = !busy;
   if (els.output) els.output.setAttribute('aria-busy', busy ? 'true' : 'false');
+  syncRecStrip();
 }
 function shakeMic(){
   if (!els.btnMic) return;
@@ -1330,7 +1394,7 @@ async function startRecording(){
     if (iconEl) iconEl.textContent = '⏹';
     els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
-    startWave();
+    mainWaveLive();
     if(s.realtime && Realtime.isSupported()){
       if(els.livePreview) els.livePreview.classList.add('on'); if(els.liveBadge) els.liveBadge.classList.add('on'); if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent='';
       const onInterim = makeOnInterim(snap);
@@ -1348,7 +1412,7 @@ function stopRecording(){
   setMicBusy(true);
   transcribingAbort = new AbortController();
   els.btnMic.classList.remove('recording','realtime-active');
-  stopVAD(); stopWave(); Realtime.stop();
+  stopVAD(); mainWaveIdle(); Realtime.stop();
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
   if(snap && (snap.committed+snap.pending)){
     const cursor = snap.basePos + (snap.committed+snap.pending).length;
@@ -1433,6 +1497,7 @@ async function handleTranscription(blob, snap){
       // already handled toast/status above
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
+      if(err.status === 429) setQuotaExpanded(true); // quota errors auto-expand the strip; nothing else does
       let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
       Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
       Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
@@ -1440,6 +1505,7 @@ async function handleTranscription(blob, snap){
     }
   } finally {
     setMicBusy(false);
+    mainWaveIdle();
     transcribingAbort = null;
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent='';
@@ -1465,7 +1531,7 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
 });
 els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
 els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
-stopWave();
+mainWaveInit();
 const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
 Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
