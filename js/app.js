@@ -464,7 +464,8 @@ const modelCache = new Map(); // providerId -> string[]
 function renderModelCodes(listEl, ids, providerId, target){
   listEl.style.display='block';
   listEl.innerHTML='';
-  const filtered = ids.filter(id=> /qwen|gpt-oss|allam|llama|gemini|whisper/i.test(id)).slice(0,30);
+  const isCustom = !['groq','gemini','openrouter'].includes(providerId);
+  const filtered = (isCustom ? ids : ids.filter(id=> /qwen|gpt-oss|allam|llama|gemini|whisper/i.test(id))).slice(0,30);
   const title=document.createElement('b'); title.textContent=`مدل‌های یافت‌شده (${filtered.length}):`; listEl.appendChild(title); listEl.appendChild(document.createElement('br'));
   filtered.forEach(id=>{
     const code=document.createElement('code');
