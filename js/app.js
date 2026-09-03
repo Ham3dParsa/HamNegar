@@ -127,16 +127,16 @@ let polishChainState = [];
 
 function hasKeyFor(id){
   const s=Storage.getSettings();
-  if(typeof id === 'object' && id.provider){
+  const rawId = typeof id==='object' ? id.id : id;
+  if(rawId==='groq') return !!s.groqKey;
+  if(typeof id==='object' && id.provider){
     if(id.provider==='groq') return !!s.groqKey;
     if(id.provider==='openrouter') return !!s.openrouterKey;
     return !!s.geminiKey;
   }
-  if(typeof id === 'string'){
-    if(id==='groq') return !!s.groqKey;
-    if(id.includes('/')) {
-      // legacy slash ids now default to Groq per screenshot (qwen/oss via Groq)
-      if(id.includes(':free')) return !!s.openrouterKey;
+  if(typeof rawId === 'string'){
+    if(rawId.includes('/')) {
+      if(rawId.includes(':free')) return !!s.openrouterKey;
       return !!s.groqKey;
     }
     return !!s.geminiKey;
@@ -171,7 +171,7 @@ function renderChain(container, chain, type){
     item.setAttribute('role','listitem');
     item.setAttribute('aria-label', `${idx+1}. ${meta.label}`);
     const providerBadge = isPolish ? `<span class="chain-badge ${provider==='openrouter'?'':'ok'}" style="font-size:10px">${esc(provider||'groq')}</span>` : '';
-    const toggleHtml = isPolish ? `<label class="chip" style="padding:4px 8px;gap:4px"><input type="checkbox" data-toggle ${enabled?'checked':''} aria-label="فعال"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>` : '';
+    const toggleHtml = `<label class="chip" style="padding:4px 8px;gap:4px"><input type="checkbox" data-toggle ${enabled?'checked':''} aria-label="فعال"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>`;
     item.innerHTML = `
       <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
@@ -185,22 +185,23 @@ function renderChain(container, chain, type){
       <div class="chain-actions">
         <button class="chain-btn" data-up aria-label="بالا" ${idx===0?'disabled':''}>▲</button>
         <button class="chain-btn" data-down aria-label="پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
-        ${isPolish?`<button class="chain-btn" data-remove aria-label="حذف" title="حذف">✕</button>`:''}
+        <button class="chain-btn" data-remove aria-label="حذف" title="حذف">✕</button>
       </div>
     `;
-    // toggle per-model
-    if(isPolish){
-      item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
-        polishChainState[idx].enabled = e.target.checked;
-        persistChains();
-        renderAllChains();
-      });
-      item.querySelector('[data-remove]')?.addEventListener('click', ()=>{
-        polishChainState.splice(idx,1);
-        persistChains();
-        renderAllChains();
-      });
-    }
+    // toggle per-model (both chains) — single path: ensure object form then set enabled
+    item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
+      const arr = type==='stt'? sttChainState : polishChainState;
+      if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], enabled:e.target.checked};
+      else arr[idx].enabled = e.target.checked;
+      persistChains();
+      renderAllChains();
+    });
+    item.querySelector('[data-remove]')?.addEventListener('click', ()=>{
+      const arr = type==='stt'? sttChainState : polishChainState;
+      arr.splice(idx,1);
+      persistChains();
+      renderAllChains();
+    });
     // up/down
     item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
     item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
@@ -256,12 +257,12 @@ function persistChains(){
 // --- settings wiring ---
 function updateBadge(){
   const s=Storage.getSettings();
-  const first = s.sttChain?.[0] || s.primary || 'groq';
-  const label = first==='groq' ? 'Groq' : first;
+  const raw = s.sttChain?.[0] || s.primary || 'groq';
+  const firstId = typeof raw==='object' ? raw.id : raw;
+  const label = firstId==='groq' ? 'Groq' : firstId;
   const pol = s.polishEnabled ? ' • پالیش روشن' : ' • پالیش خاموش';
   els.engineBadge.textContent = `موتور: ${label}${pol}`;
-  // fallback indicator in badge color?
-  els.engineBadge.style.opacity = hasKeyFor(first) ? '1' : '0.6';
+  els.engineBadge.style.opacity = hasKeyFor(raw) ? '1' : '0.6';
 }
 function validate(){
   const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(), or=els.keyOpenrouter?.value.trim()||'';
@@ -375,22 +376,40 @@ els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter')
 let modelsFetched=false;
 els.btnSettings.addEventListener('click', ()=>{ if(!modelsFetched && (Storage.getSettings().groqKey || Storage.getSettings().openrouterKey)){ modelsFetched=true; /* silent prefetch */ } });
 
-$('btn-polish-add')?.addEventListener('click', ()=>{
-  const selM = $('polish-add-model'), selP = $('polish-add-provider');
-  const mid = selM?.value?.trim(), prov = selP?.value || 'groq';
-  if(!mid) return;
-  if(polishChainState.some(e=>e.id===mid && e.provider===prov)){ Logger.toast('قبلاً هست'); return; }
+function detectPolishProvider(modelId){
+  const id=modelId.toLowerCase();
+  if(id.includes(':free')) return 'openrouter';
+  if(id.includes('gemini')) return 'gemini';
+  if(id.startsWith('groq/') || id==='groq') return 'groq';
+  if(id.includes('qwen') || id.includes('gpt-oss') || id.includes('allam')) return 'groq';
+  return 'groq';
+}
+$('polish-add-input')?.addEventListener('keydown', (e)=>{
+  if(e.key!=='Enter') return;
+  const mid=e.target.value.trim(); if(!mid) return;
+  const prov=detectPolishProvider(mid);
+  if(polishChainState.some(x=>x.id===mid && x.provider===prov)){ Logger.toast('قبلاً هست'); e.target.value=''; return; }
   polishChainState.push({ id:mid, provider:prov, enabled:true });
-  persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid} (${prov})`);
+  persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid} (${prov})`); e.target.value='';
+});
+$('stt-add-input')?.addEventListener('keydown', (e)=>{
+  if(e.key!=='Enter') return;
+  const mid=e.target.value.trim(); if(!mid) return;
+  if(!STT_LABELS[mid] && mid!=='groq' && !/^gemini-[a-z0-9.\-]+$/i.test(mid)){ Logger.toast('مدل نامعتبر'); return; }
+  if(sttChainState.some(x=> (typeof x==='object'?x.id:x)===mid)){ Logger.toast('قبلاً هست'); e.target.value=''; return; }
+  sttChainState.push({ id:mid, enabled:true });
+  persistChains(); renderAllChains(); Logger.toast(`افزوده شد: ${mid}`); e.target.value='';
 });
 $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
 $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });
+$('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
+$('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
 loadSettings();
 els.btnSettings.onclick=()=> els.modal.style.display='flex';
 $('btn-close-modal').onclick=()=> els.modal.style.display='none';
 $('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } els.modal.style.display='none'; Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
-$('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=[...STT_DEFAULTS]; renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
+$('btn-reset-stt')?.addEventListener('click', ()=>{ sttChainState=STT_DEFAULTS.map(id=>({id,enabled:true})); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
 $('btn-reset-polish')?.addEventListener('click', ()=>{ polishChainState=POLISH_DEFAULTS.map(e=>({...e})); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
 els.modal.addEventListener('click',e=>{ if(e.target===els.modal) els.modal.style.display='none'; });
 els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });

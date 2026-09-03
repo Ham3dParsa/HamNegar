@@ -38,7 +38,8 @@ export const Quota = {
     if (byModel.length===0){
       const s = Storage.getSettings();
       const chain = s.sttChain?.length ? s.sttChain : [s.primary, s.model];
-      const first = chain[0] || 'groq';
+      const raw = chain[0] || 'groq';
+      const first = typeof raw==='object' ? raw.id : raw;
       const lim = LIMITS[first] || { label:first, rpd:'—', rpm:'—', tpm:'—' };
       byModel = [{ model:first, label: lim.label, count:0, pct:0, color:'none', isFavorite:false, isNearLimit:false }];
     }

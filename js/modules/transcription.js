@@ -61,6 +61,21 @@ async function queryGemini(blob, model, externalSignal){
 }
 
 // Polish adapters — dual provider (Groq OpenAI-compatible + OpenRouter + Gemini fallback)
+// Qwen reasoning models leak <think> into content unless reasoning_format:hidden — strip defensively + length guard
+function cleanPolishOutput(raw){
+  if(!raw) return '';
+  let out = String(raw);
+  out = out.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  // unclosed trailing think block (stream cut)
+  out = out.replace(/<think>[\s\S]*$/gi, '').replace(/<thinking>[\s\S]*$/gi, '');
+  return out.trim();
+}
+function validatePolishOutput(raw, text, model){
+  const out = cleanPolishOutput(raw);
+  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
+  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
+  return out;
+}
 async function queryPolishViaGroq(text, model){
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
@@ -69,13 +84,15 @@ async function queryPolishViaGroq(text, model){
   assertTrustedBase(base, ['api.groq.com']);
   const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const body = { model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000 };
+  // Qwen thinking models: instruct mode, hide reasoning (gpt-oss does NOT support reasoning_format — skip there)
+  if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
-    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
+    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
-  return out;
+  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolishViaGemini(text, model){
   const { geminiKey: k } = Storage.getSettings();
@@ -104,8 +121,7 @@ async function queryPolishViaOpenRouter(text, model){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); const out=j.choices?.[0]?.message?.content?.trim()||'';
-  return out;
+  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolish(text, entry){
   const model = typeof entry === 'string' ? entry : entry.id;
@@ -117,16 +133,16 @@ async function queryPolish(text, entry){
   return queryPolishViaOpenRouter(text, model);
 }
 
-function hasKeyFor(id){
+function hasKeyFor(entry){
   const s=Storage.getSettings();
+  const id = typeof entry === 'object' ? entry.id : entry;
   if(id==='groq') return !!s.groqKey;
-  if(typeof id === 'object' && id.provider) {
-    if(id.provider==='groq') return !!s.groqKey;
-    if(id.provider==='openrouter') return !!s.openrouterKey;
+  if(typeof entry === 'object' && entry.provider){
+    if(entry.provider==='groq') return !!s.groqKey;
+    if(entry.provider==='openrouter') return !!s.openrouterKey;
     return !!s.geminiKey;
   }
-  if(typeof id === 'string' && id.includes('/')) {
-    // legacy: treat slash ids as groq unless :free
+  if(id.includes('/')){
     if(id.includes(':free')) return !!s.openrouterKey;
     return !!s.groqKey;
   }
@@ -143,8 +159,10 @@ export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = (sttChain && sttChain.length) ? sttChain : ['groq','gemini-flash-lite-latest'];
-    let chain = rawChain.filter(id => hasKeyFor(id));
+    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',enabled:true},{id:'gemini-flash-lite-latest',enabled:true}];
+    // support both string[] legacy and object[] new
+    const enabledChain = rawChain.filter(e=> typeof e==='object' ? e.enabled!==false : true);
+    let chain = enabledChain.filter(id => hasKeyFor(id));
     if(chain.length===0){
       throw Object.assign(new Error('کلید STT نیست — تنظیمات را چک کن'),{status:401});
     }
@@ -155,7 +173,8 @@ export const Transcription = {
     try { Logger.rebuildProgress(chain); } catch (e) { Logger.log('warn','rebuildProgress failed', { msg:e.message }); }
     let lastErr=null, usedEngine='—', rawText='';
     for(let i=0;i<chain.length;i++){
-      const id = chain[i];
+      const entry = chain[i];
+      const id = typeof entry === 'object' ? entry.id : entry;
       const isGroq = id==='groq';
       const label = isGroq ? 'Groq' : id;
       const signal = opts.signal;
@@ -291,7 +310,8 @@ export const Transcription = {
     const { geminiKey: k }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw new Error('باید AQ. یا AIza باشد');
     const { sttChain } = Storage.getSettings();
-    const model = (sttChain.find(m=>m!=='groq') ) || 'gemini-flash-lite-latest';
+    const found = sttChain.find(m=> (typeof m==='object'?m.id:m)!=='groq');
+    const model = (typeof found==='object'?found.id:found) || 'gemini-flash-lite-latest';
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:{'x-goog-api-key':k}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();
