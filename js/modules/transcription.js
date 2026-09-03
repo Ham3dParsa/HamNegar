@@ -1,6 +1,6 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, testGroq(), testGemini(), listModels()
-// Depth: chains: STT chain + Polish chain (dual-provider Groq/OpenRouter) with fallback, quota, header handling
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model}), testGroq(), testGemini(), listModels(providerId)
+// Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
 import { Quota } from './quota.js';
@@ -8,7 +8,9 @@ import { Logger } from './logger.js';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
-  let h; try{ h = new URL(base).hostname.toLowerCase(); }catch{ throw Object.assign(new Error('BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
+  let u; try{ u = new URL(base); }catch{ throw Object.assign(new Error('BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
+  if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
+  const h = u.hostname.toLowerCase();
   if(!allowed.includes(h)){
     const msg = `کلید به ${h} ارسال می‌شود — ادامه می‌دهی؟`;
     if(typeof window !== 'undefined' && typeof window.confirm === 'function'){
@@ -76,22 +78,38 @@ function validatePolishOutput(raw, text, model){
   if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
   return out;
 }
-async function queryPolishViaGroq(text, model){
-  const { groqKey: k, groqBaseURL } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error('کلید Groq برای پالیش نیست'),{status:401});
-  if(!k.startsWith('gsk_')) throw Object.assign(new Error('Groq باید gsk_ باشد'),{status:401});
-  const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
-  assertTrustedBase(base, ['api.groq.com']);
-  const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
+const DEFAULT_POLISH_SYSTEM = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
+
+// Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
+// keys+bases, customs by id from Storage. Never logs key material — callers must not log the result.
+function resolveChatProvider(providerId){
+  const s = Storage.getSettings();
+  if(providerId === 'groq') return { key: s.groqKey, base: (s.groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,''), trusted: ['api.groq.com'], extraHeaders: {} };
+  if(providerId === 'openrouter') return { key: s.openrouterKey, base: (s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,''), trusted: ['api.openrouter.ai','openrouter.ai'], extraHeaders: { 'HTTP-Referer': 'https://hamnegar.local', 'X-Title': 'HamNegar' } };
+  const c = (s.customProviders || []).find(x => x.id === providerId);
+  if(!c) throw Object.assign(new Error(`ارائه‌دهنده ناشناس: ${providerId}`),{status:400});
+  return { key: c.key || '', base: (c.baseURL || '').replace(/\/+$/,''), trusted: [], extraHeaders: {} };
+}
+
+// Generic OpenAI-compatible chat — single network path for groq/openrouter/custom polish.
+// Custom hosts are never in `trusted`, so every custom call passes the user confirm gate.
+// Payload semantics match the legacy Groq path (temperature/max_tokens/qwen guards).
+async function queryChat(providerId, text, { system, model } = {}){
+  if(!model || typeof model !== 'string') throw Object.assign(new Error('مدل پالیش مشخص نیست'),{status:400});
+  const { key: k, base, trusted, extraHeaders } = resolveChatProvider(providerId);
+  if(!k) throw Object.assign(new Error(`کلید ${providerId} برای پالیش نیست`),{status:401});
+  if(providerId === 'groq' && !k.startsWith('gsk_')) throw Object.assign(new Error('Groq باید gsk_ باشد'),{status:401});
+  if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
+  assertTrustedBase(base, trusted);
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-  const body = { model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000 };
+  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature:0.2, max_tokens:2000 };
   // Qwen thinking models: instruct mode, hide reasoning (gpt-oss does NOT support reasoning_format — skip there)
   if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
-    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Groq polish'),{status:408}); throw Object.assign(new Error('شبکه Groq polish: '+e.message),{status:0}); }
+    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`, ...extraHeaders},body:JSON.stringify(body),signal:ctrl.signal});
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${providerId} polish`),{status:408}); throw Object.assign(new Error(`شبکه ${providerId} polish: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Groq polish fail',{status:res.status, model, base}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} polish fail`,{status:res.status, model, base}); throw err; }
   const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolishViaGemini(text, model){
@@ -109,57 +127,45 @@ async function queryPolishViaGemini(text, model){
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
   return out;
 }
-async function queryPolishViaOpenRouter(text, model){
-  const { openrouterKey: k, openrouterBaseURL } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error('کلید OpenRouter نیست'),{status:401});
-  const base = (openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,'');
-  assertTrustedBase(base, ['api.openrouter.ai','openrouter.ai']);
-  const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-  let res; try{
-    res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`,'HTTP-Referer':'https://hamnegar.local','X-Title':'HamNegar'},body:JSON.stringify({model, messages:[{role:'system', content:prompt},{role:'user', content:text}], temperature:0.2, max_tokens:2000}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت OpenRouter'),{status:408}); throw Object.assign(new Error('شبکه OpenRouter: '+e.message),{status:0}); }
-  clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','OpenRouter polish fail',{status:res.status, model, base}); throw err; }
-  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
+// Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
+function polishTargetOf(entry){
+  if(typeof entry === 'string'){
+    const clean = entry.replace(':free','');
+    return { model: clean, providerId: entry.includes(':free') ? 'openrouter' : 'groq' };
+  }
+  const model = (entry.id || '').replace(':free','');
+  const rawPid = (typeof entry.providerId === 'string' && entry.providerId.trim()) ? entry.providerId.trim()
+    : (typeof entry.provider === 'string' && entry.provider.trim() ? entry.provider.trim() : '');
+  let providerId = rawPid;
+  if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'gemini' : 'groq');
+  return { model, providerId };
 }
 async function queryPolish(text, entry){
-  const model = typeof entry === 'string' ? entry : entry.id;
-  const provider = typeof entry === 'string' ? (entry.includes(':free') ? 'openrouter' : 'groq') : (entry.provider || 'groq');
-  if(provider === 'groq') return queryPolishViaGroq(text, model);
-  if(provider === 'openrouter') return queryPolishViaOpenRouter(text, model);
-  if(provider === 'gemini') return queryPolishViaGemini(text, model);
-  if(!model.includes('/')) return queryPolishViaGemini(text, model);
-  return queryPolishViaOpenRouter(text, model);
+  const { model, providerId } = polishTargetOf(entry);
+  if(providerId === 'gemini') return queryPolishViaGemini(text, model);
+  return queryChat(providerId, text, { model });
 }
 
-function hasKeyFor(entry){
-  const s=Storage.getSettings();
+function sttProviderOf(entry){
+  if(entry && typeof entry === 'object'){
+    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return entry.providerId.trim();
+    if(typeof entry.provider === 'string' && entry.provider.trim()) return entry.provider.trim();
+  }
   const id = typeof entry === 'object' ? entry.id : entry;
-  if(id==='groq') return !!s.groqKey;
-  if(typeof entry === 'object' && entry.provider){
-    if(entry.provider==='groq') return !!s.groqKey;
-    if(entry.provider==='openrouter') return !!s.openrouterKey;
-    return !!s.geminiKey;
-  }
-  if(id.includes('/')){
-    if(id.includes(':free')) return !!s.openrouterKey;
-    return !!s.groqKey;
-  }
-  return !!s.geminiKey;
+  if(id==='groq') return 'groq';
+  return 'gemini';
+}
+function hasKeyFor(entry){
+  return Storage.hasKeyForProvider(sttProviderOf(entry));
 }
 function hasKeyForPolish(entry){
-  const s=Storage.getSettings();
-  const provider = entry.provider || 'groq';
-  if(provider==='groq') return !!s.groqKey;
-  if(provider==='openrouter') return !!s.openrouterKey;
-  return !!s.geminiKey;
+  return Storage.hasKeyForProvider(polishTargetOf(entry).providerId);
 }
 export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',enabled:true},{id:'gemini-flash-lite-latest',enabled:true}];
+    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-flash-lite-latest',providerId:'gemini',enabled:true}];
     // support both string[] legacy and object[] new
     const enabledChain = rawChain.filter(e=> typeof e==='object' ? e.enabled!==false : true);
     let chain = enabledChain.filter(id => hasKeyFor(id));
@@ -175,7 +181,7 @@ export const Transcription = {
     for(let i=0;i<chain.length;i++){
       const entry = chain[i];
       const id = typeof entry === 'object' ? entry.id : entry;
-      const isGroq = id==='groq';
+      const isGroq = sttProviderOf(entry)==='groq';
       const label = isGroq ? 'Groq' : id;
       const signal = opts.signal;
       if (signal?.aborted) {
@@ -230,7 +236,7 @@ export const Transcription = {
       const enabledChain = polishChain.filter(e=>e.enabled!==false);
       let usablePolish = enabledChain.filter(e => hasKeyForPolish(e));
       if(usablePolish.length !== enabledChain.length){
-        const skippedP = enabledChain.filter(e => !hasKeyForPolish(e)).map(e=>`${e.id}(${e.provider})`);
+        const skippedP = enabledChain.filter(e => !hasKeyForPolish(e)).map(e=>`${e.id}(${e.providerId || e.provider})`);
         if(skippedP.length) Logger.log('info','پالیش بی‌کلید حذف شد', { skipped: skippedP });
       }
       if(usablePolish.length === 0 && enabledChain.length>0){
@@ -245,12 +251,12 @@ export const Transcription = {
             const out = await queryPolish(rawText, entry);
             if(out){
               polished = out;
-              polishModelUsed = `${pm} (${entry.provider})`;
-              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${pm} (${entry.provider})`);
+              polishModelUsed = `${pm} (${entry.providerId || entry.provider})`;
+              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${pm} (${entry.providerId || entry.provider})`);
               break;
             }
           }catch(e){
-            Logger.log('warn',`پالیش ${pm} (${entry.provider}) خطا`,{msg:e.message, status:e.status});
+            Logger.log('warn',`پالیش ${pm} (${entry.providerId || entry.provider}) خطا`,{msg:e.message, status:e.status});
             if(e.status===429) await new Promise(r=>setTimeout(r,500));
             if(i===usablePolish.length-1) break;
           }
@@ -270,7 +276,7 @@ export const Transcription = {
     const ruleFixed = rulePolish(text);
     const { polishChain, polishEnabled } = Storage.getSettings();
     if(!polishEnabled) return ruleFixed;
-    const rawChain = polishChain?.length ? polishChain : [{id:'qwen/qwen3.6-27b',provider:'groq',enabled:true}];
+    const rawChain = polishChain?.length ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
     const enabledChain = rawChain.filter(e=>e && e.enabled!==false);
     const chain = enabledChain.filter(e => hasKeyForPolish(e));
     if(chain.length===0) return ruleFixed;
@@ -279,24 +285,19 @@ export const Transcription = {
     }
     return ruleFixed;
   },
-  async listGroqModels(){
-    const { groqKey: k, groqBaseURL } = Storage.getSettings();
-    if(!k) throw new Error('کلید Groq نیست');
-    const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
-    assertTrustedBase(base, ['api.groq.com']);
+  async listModels(providerId){
+    if(providerId === 'gemini') throw Object.assign(new Error('لیست مدل Gemini پشتیبانی نمی‌شود'),{status:400});
+    const { key: k, base, trusted } = resolveChatProvider(providerId);
+    if(!k) throw new Error(`کلید ${providerId} نیست`);
+    if(!base) throw new Error('BaseURL ارائه‌دهنده خالی است');
+    assertTrustedBase(base, trusted);
     const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     const j=await r.json(); return j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
   },
-  async listOpenRouterModels(){
-    const { openrouterKey: k, openrouterBaseURL } = Storage.getSettings();
-    if(!k) throw new Error('کلید OpenRouter نیست');
-    const base = (openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,'');
-    assertTrustedBase(base, ['api.openrouter.ai','openrouter.ai']);
-    const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
-    if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
-    const j=await r.json(); return j.data?.map(m=>m.id) || [];
-  },
+  // deprecated: app.js (fetchAndShowModels) still calls these — thin wrappers, no logic here
+  async listGroqModels(){ return this.listModels('groq'); },
+  async listOpenRouterModels(){ return this.listModels('openrouter'); },
   async testGroq(){
     const { groqKey: k, groqBaseURL }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!k.startsWith('gsk_')) throw new Error('باید gsk_ باشد');
@@ -316,6 +317,7 @@ export const Transcription = {
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();
   },
+  async queryChat(providerId, text, opts){ return queryChat(providerId, text, opts); },
   async testPolish(){
     return this.polishText('رابطه کاربری زیبا است');
   }
