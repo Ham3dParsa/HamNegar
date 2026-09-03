@@ -19,3 +19,7 @@
 
 ## 5. گیت
 - برنچ `ticket/xx-desc`، کامیت Conventional Commits، `git add file` (نه `git add .` برای فایل‌های بزرگ)، PR به `main`.
+
+## 6. بازبینی (review-gate)
+- پیش از هر `commit`/`push`/`gh pr create` اسکیل `hamnegar-reviewer` را لود کن و فقط با `PASS` جلو برو.
+- تغییر رفتاری: بازبینی کامل ساب‌ایجنت + `git diff --check` تمیز. تغییر docs-only: فقط `git diff --check`.
