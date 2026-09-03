@@ -154,6 +154,23 @@ button:active{transform:scale(.97)}
 .chain-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .hint-inline{font-size:11px;color:var(--muted)}
 .btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}
+/* --- settings tabs + provider cards (ticket/ui-model-config) --- */
+.settings-tabs{display:flex;gap:6px;background:var(--surface2);border:1px solid var(--border);padding:4px;border-radius:12px;position:sticky;top:0;z-index:5}
+.settings-tab{flex:1;padding:8px 10px;font-size:13px;border-radius:8px;background:transparent;color:var(--muted);border:none;justify-content:center}
+.settings-tab.active{background:var(--accent);color:#fff}
+#panel-providers,#panel-easyadd,#panel-chains{display:flex;flex-direction:column;gap:10px;min-width:0}
+#panel-easyadd[hidden],#panel-chains[hidden]{display:none}
+#providers-list{display:flex;flex-direction:column;gap:10px;min-width:0}
+.provider-card{background:#15161a;border:1px solid var(--border);border-radius:12px;padding:0;overflow:hidden}
+.provider-card>summary,.provider-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;list-style:none;flex-wrap:wrap;min-width:0}
+.provider-card>summary::-webkit-details-marker{display:none}
+.provider-body{display:flex;flex-direction:column;gap:8px;padding:0 12px 12px;min-width:0}
+.provider-body input,.provider-body select{min-width:0;max-width:100%}
+.provider-card .dot{flex-shrink:0}
+.dot.ok{background:var(--success)}.dot.missing{background:var(--danger)}
+.easy-target legend{font-size:11px;color:var(--muted);margin-bottom:4px}
+.custom-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+@media(max-width:640px){.settings-tab{font-size:12px;padding:8px 6px}.key-row{flex-wrap:wrap}.key-row .btn-ghost{flex-shrink:0}}
 .mic-group{display:inline-flex;align-items:center;gap:8px}
 #btn-mic:disabled{opacity:.72;cursor:not-allowed}
 #btn-mic.transcribing{background:var(--surface2);border:1px solid var(--accent);animation:breathe 1.6s ease-in-out infinite}
