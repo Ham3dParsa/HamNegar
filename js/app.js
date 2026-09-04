@@ -1599,6 +1599,7 @@ function shakeMic(){
   setTimeout(()=> els.btnMic.classList.remove('shake'), 400);
 }
 async function startRecording(){
+  discardRecording = false; // defensive: a missed onStop must never discard a later recording
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
   const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); openModal(); return; }
@@ -1667,7 +1668,7 @@ async function handleTranscription(blob, snap){
     Logger.log('info','recording discarded by user',{ snapId: snapId||null });
     Logger.toast('ضبط دور ریخته شد', 1500); Logger.setStatus('لغو شد','warn'); Logger.dismissProgress(0);
     setMicBusy(false); transcribingAbort = null;
-    recTimerReset(); syncActionbar(); mainWaveIdle();
+    recTimerReset(); mainWaveIdle();
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
@@ -1767,7 +1768,7 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
 });
 els.btnCopy.onclick=async()=>{
   if(!els.output.value.trim()){ els.btnCopy.classList.remove('shake'); void els.btnCopy.offsetWidth; els.btnCopy.classList.add('shake'); setTimeout(()=>els.btnCopy.classList.remove('shake'),400); Logger.toast('چیزی نیست'); return; }
-  try{ await navigator.clipboard.writeText(els.output.value); }catch{ Logger.toast('کپی ناموفق — دستی کپی کن'); return; }
+  try{ await navigator.clipboard.writeText(els.output.value); }catch(e){ Logger.log('warn','clipboard.writeText failed',{msg:e?.message}); Logger.toast('کپی ناموفق — دستی کپی کن'); return; }
   els.btnCopy.classList.add('ok'); setTimeout(()=>els.btnCopy.classList.remove('ok'),1200);
   Logger.toast('کپی شد');
 };
