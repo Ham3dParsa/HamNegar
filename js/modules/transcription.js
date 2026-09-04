@@ -115,7 +115,7 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} ${layer} fail`,{status:res.status, model, base}); throw err; }
   const j=await res.json(); Logger.log('debug',`${providerId} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
-async function queryPolishViaGemini(text, model){
+async function queryPolishViaGemini(text, model, layer = 'polish'){
   const { geminiKey: k } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Gemini برای پالیش نیست'),{status:401});
   if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
@@ -124,11 +124,11 @@ async function queryPolishViaGemini(text, model){
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
     res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2000}}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Gemini polish'),{status:408}); throw Object.assign(new Error('شبکه Gemini polish: '+e.message),{status:0}); }
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت Gemini ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه Gemini ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Gemini polish fail',{status:res.status, model}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`Gemini ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
-  Logger.log('debug','Gemini polish raw',{model, inLen:text.length, out:out.slice(0,200)});
+  Logger.log('debug',`Gemini ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
   return validatePolishOutput(out, text, model);
 }
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
@@ -144,10 +144,10 @@ function polishTargetOf(entry){
   if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'gemini' : 'groq');
   return { model, providerId };
 }
-async function queryPolish(text, entry){
+async function queryPolish(text, entry, layer = 'polish'){
   const { model, providerId } = polishTargetOf(entry);
-  if(providerId === 'gemini') return queryPolishViaGemini(text, model);
-  return queryChat(providerId, text, { model });
+  if(providerId === 'gemini') return queryPolishViaGemini(text, model, layer);
+  return queryChat(providerId, text, { model, layer });
 }
 
 function sttProviderOf(entry){
