@@ -356,7 +356,7 @@ export const Storage = {
     const s = Storage.getSettings();
     return [
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
-      { id: 'gemini', name: 'Gemini', baseURL: '', hasKey: !!s.geminiKey },
+      { id: 'gemini', name: 'Google AI Studio', baseURL: '', hasKey: !!s.geminiKey },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];

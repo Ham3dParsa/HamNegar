@@ -23,8 +23,8 @@ const els = {
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
-  btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'),
-  groqModelsList: $('groq-models-list'), orModelsList: $('or-models-list'),
+  btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'),
+  groqModelsList: $('groq-models-list'), orModelsList: $('or-models-list'), geminiModelsList: $('gemini-models-list'),
   tabProviders: $('tab-providers'), tabEasyadd: $('tab-easyadd'), tabChains: $('tab-chains'),
   panelProviders: $('panel-providers'), panelEasyadd: $('panel-easyadd'), panelChains: $('panel-chains'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
@@ -505,9 +505,8 @@ function addModelToChain(modelId, providerId, target){
   Logger.toast('افزوده شد');
 }
 async function fetchAndShowModels(providerId, target){
-  const isGroq = providerId==='groq';
-  const btn = isGroq ? els.btnGroqModels : els.btnOrModels;
-  const listEl = isGroq ? els.groqModelsList : els.orModelsList;
+  const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : els.btnOrModels;
+  const listEl = providerId==='groq' ? els.groqModelsList : providerId==='gemini' ? els.geminiModelsList : els.orModelsList;
   if(btn) btn.textContent='...';
   try{
     saveSettings();
@@ -521,6 +520,7 @@ async function fetchAndShowModels(providerId, target){
   finally{ if(btn) btn.textContent='لیست مدل‌ها'; }
 }
 els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq', 'polish'));
+els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini', 'polish'));
 els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter', 'polish'));
 
 // --- custom providers (providers tab only) ---
@@ -669,12 +669,11 @@ function refreshEasyModels(fetchIfMissing){
   if(!sel || !provSel) return;
   const pid = provSel.value;
   const free = els.easyModelInput;
-  const showFree = pid === 'gemini';
-  if(sel) sel.style.display = showFree ? 'none' : '';
-  if(free) free.style.display = showFree ? '' : 'none';
-  if(showFree) return; // gemini: free-text id, listModels('gemini') throws
   const cached = modelCache.get(pid);
-  sel.innerHTML='';
+  const showFree = pid === 'gemini' && !(cached && cached.length);
+  if(sel) sel.style.display = showFree ? 'none' : '';
+  if(free){ free.style.display = showFree ? '' : 'none'; if(!showFree) free.value=''; }
+  if(sel) sel.innerHTML='';
   if(!pid){ const o=document.createElement('option'); o.value=''; o.textContent='— اول ارائه‌دهنده را انتخاب کن —'; sel.appendChild(o); return; }
   if(!cached){
     const o=document.createElement('option'); o.value=''; o.textContent='— «تازه‌سازی مدل‌ها» را بزن —'; sel.appendChild(o);
@@ -688,7 +687,6 @@ function refreshEasyModels(fetchIfMissing){
 }
 async function loadEasyModels(providerId){
   if(!providerId) return;
-  if(providerId === 'gemini'){ refreshEasyModels(false); announce('شناسه مدل Gemini را دستی بنویس'); return; }
   const btn = $('btn-easy-refresh');
   if(btn) btn.textContent='...';
   try{
@@ -698,14 +696,14 @@ async function loadEasyModels(providerId){
     refreshEasyModels(false);
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; if(providerId === 'gemini') refreshEasyModels(false); Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; refreshEasyModels(false); Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
   finally{ if(btn) btn.textContent='تازه‌سازی مدل‌ها'; }
 }
 els.easyProvider?.addEventListener('change', ()=> refreshEasyModels(true));
 $('btn-easy-refresh')?.addEventListener('click', ()=> loadEasyModels(els.easyProvider?.value));
 $('btn-easy-add')?.addEventListener('click', ()=>{
   const pid = els.easyProvider?.value || '';
-  const mid = pid === 'gemini' ? (els.easyModelInput?.value.trim() || '') : (els.easyModel?.value || '');
+  const mid = (els.easyModel?.style.display !== 'none' ? (els.easyModel?.value || '') : (els.easyModelInput?.value || '')).trim();
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
@@ -1518,7 +1516,7 @@ async function handleTranscription(blob, snap){
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
 $('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
-$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Gemini...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Gemini اوکی`,'info'); Logger.toast('Gemini ok'); }catch(e){ Logger.setStatus('❌ Gemini: '+sanitizeMsg(e.message || e),'error'); } };
+  $('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');
