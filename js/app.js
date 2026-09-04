@@ -648,6 +648,9 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
 });
 
 // --- easy-add tab: provider select → model select (listModels cache) → target → Add ---
+// easyFreeMode mirrors which control is visible (manual-id input vs cached select);
+// the Add handler reads the flag, never inline style, so a visibility refactor can't desync it.
+let easyFreeMode = false;
 function buildEasyProviderOptions(){
   const sel = els.easyProvider;
   if(!sel) return;
@@ -671,6 +674,7 @@ function refreshEasyModels(fetchIfMissing){
   const free = els.easyModelInput;
   const cached = modelCache.get(pid);
   const showFree = pid === 'gemini' && !(cached && cached.length);
+  easyFreeMode = showFree;
   if(sel) sel.style.display = showFree ? 'none' : '';
   if(free){ free.style.display = showFree ? '' : 'none'; if(!showFree) free.value=''; }
   if(sel) sel.innerHTML='';
@@ -703,7 +707,7 @@ els.easyProvider?.addEventListener('change', ()=> refreshEasyModels(true));
 $('btn-easy-refresh')?.addEventListener('click', ()=> loadEasyModels(els.easyProvider?.value));
 $('btn-easy-add')?.addEventListener('click', ()=>{
   const pid = els.easyProvider?.value || '';
-  const mid = (els.easyModel?.style.display !== 'none' ? (els.easyModel?.value || '') : (els.easyModelInput?.value || '')).trim();
+  const mid = (easyFreeMode ? (els.easyModelInput?.value || '') : (els.easyModel?.value || '')).trim();
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
@@ -1516,7 +1520,7 @@ async function handleTranscription(blob, snap){
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
 $('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
-  $('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');

@@ -295,7 +295,11 @@ export const Transcription = {
       const { geminiKey: k }=Storage.getSettings();
       if(!k) throw Object.assign(new Error('کلید gemini نیست'),{status:401});
       if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
-      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':k}});
+      const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+      let r; try{
+        r=await fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':k},signal:ctrl.signal});
+      }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?'تایم‌اوت لیست مدل‌ها':'شبکه لیست مدل‌ها: '+e.message),{status:e.name==='AbortError'?408:0}); }
+      clearTimeout(to);
       if(!r.ok){ const e=await parseErr(r); throw Object.assign(new Error(`${fmt(r.status)} — ${e.msg}`),{status:r.status}); }
       const j=await r.json();
       return (j.models||[]).map(m=>String(m.name||'').replace(/^models\//,'')).filter(Boolean);
