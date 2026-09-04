@@ -1,10 +1,15 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, testGroq(), testGemini(), listModels(providerId)
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
+
+// Muse Spark via OpenCode Zen — Responses API (NOT chat/completions; queryChat can't speak it).
+// Auth assumption (ticket 12, re-verify with curl if Zen docs change): Zen key as Bearer.
+const ZEN_RESPONSES_URL = 'https://opencode.ai/zen/v1/responses';
+const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
@@ -148,7 +153,32 @@ function polishTargetOf(entry){
 async function queryPolish(text, entry, layer = 'polish'){
   const { model, providerId } = polishTargetOf(entry);
   if(providerId === 'gemini') return queryPolishViaGemini(text, model, layer);
+  if(providerId === 'zenspark') return queryResponsesText(text, { model, layer });
   return queryChat(providerId, text, { model, layer });
+}
+// Muse Spark (Zen) text ops over the Responses API. Text-only models: never STT
+// (callers gate via isSttEligible/capsFor); prompts/completions may train Meta models.
+async function queryResponsesText(text, { system, model, layer = 'polish' } = {}){
+  if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
+  const { zenKey: k } = Storage.getSettings();
+  if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید Muse Spark برای پالیش نیست' : `کلید Muse Spark برای ${layer} نیست`),{status:401});
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const body = { model, instructions: system || DEFAULT_POLISH_SYSTEM, input: text };
+  let res; try{
+    res=await fetch(ZEN_RESPONSES_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
+  }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?`تایم‌اوت Muse Spark ${layer}`:`شبکه Muse Spark ${layer}: `+e.message),{status:e.name==='AbortError'?408:0}); }
+  clearTimeout(to);
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`zenspark ${layer} fail`,{status:res.status, model}); throw err; }
+  const j=await res.json();
+  let out='';
+  try{
+    const msg=(j.output||[]).find(o=>o && o.type==='message');
+    const part=((msg&&msg.content)||[]).find(c=>c && c.type==='output_text' && typeof c.text==='string');
+    out=(part?part.text:'').trim();
+  }catch{}
+  Logger.log('debug',`zenspark ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  if(!out) Logger.log('warn','zenspark unknown responses shape',{model, keys:Object.keys(j||{})});
+  return validatePolishOutput(out, text, model, layer);
 }
 
 function sttProviderOf(entry){
@@ -291,6 +321,19 @@ export const Transcription = {
     return ruleFixed;
   },
   async listModels(providerId){
+    if(providerId === 'zenspark'){
+      const { zenKey: k }=Storage.getSettings();
+      if(!k) throw Object.assign(new Error('کلید Muse Spark نیست'),{status:401});
+      const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+      let r; try{
+        r=await fetch(ZEN_MODELS_URL,{headers:{'Authorization':`Bearer ${k}`},signal:ctrl.signal});
+      }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?'تایم‌اوت لیست مدل‌ها':'شبکه لیست مدل‌ها: '+e.message),{status:e.name==='AbortError'?408:0}); }
+      clearTimeout(to);
+      if(!r.ok){ const e=await parseErr(r); throw Object.assign(new Error(`${fmt(r.status)} — ${e.msg}`),{status:r.status}); }
+      const j=await r.json();
+      const arr = Array.isArray(j) ? j : (j.data || j.models || []);
+      return (arr||[]).map(m=>String((m&&(m.id||m.name))||'')).filter(id=>/^muse-spark-/i.test(id));
+    }
     if(providerId === 'gemini'){
       const { geminiKey: k }=Storage.getSettings();
       if(!k) throw Object.assign(new Error('کلید gemini نیست'),{status:401});
@@ -331,6 +374,11 @@ export const Transcription = {
     const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}`,{headers:{'x-goog-api-key':k}});
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();
+  },
+  async testZenspark(){
+    const ids = await this.listModels('zenspark');
+    if(!ids.length) throw new Error('لیست خالی برگشت');
+    return true;
   },
   async queryChat(providerId, text, opts){ return queryChat(providerId, text, opts); },
   async testPolish(){

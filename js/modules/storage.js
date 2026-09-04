@@ -2,14 +2,14 @@
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
 // Depth: hides 11+ keys, serialization, defaults, and migration behind getSettings/saveSettings plus
 // provider helpers (getProviders/hasKeyForProvider). Chains (STT + polish) share one entry shape
-// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|custom id.
+// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|'zenspark'|custom id.
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
-export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter'];
-// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|custom id
+export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter','zenspark'];
+// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|zenspark|custom id
 export const POLISH_DEFAULTS = [
   { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
   { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
@@ -113,6 +113,7 @@ const KEYS = {
   GEMINI: 'KEY_GEMINI',
   OPENROUTER: 'KEY_OPENROUTER',
   OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
+  ZEN: 'KEY_ZEN',
   CUSTOM_PROVIDERS: 'CUSTOM_PROVIDERS',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
@@ -303,6 +304,7 @@ export const Storage = {
       geminiKey: localStorage.getItem(KEYS.GEMINI) || '',
       openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
       openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
+      zenKey: localStorage.getItem(KEYS.ZEN) || '',
       primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
       model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
       sttChain,
@@ -339,6 +341,7 @@ export const Storage = {
     if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
     if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
     if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
+    if ('zenKey' in patch) localStorage.setItem(KEYS.ZEN, String(patch.zenKey || '').trim());
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
@@ -358,6 +361,7 @@ export const Storage = {
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
       { id: 'gemini', name: 'Google AI Studio', baseURL: '', hasKey: !!s.geminiKey },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
+      { id: 'zenspark', name: 'Muse Spark (Zen)', baseURL: '', hasKey: !!s.zenKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];
   },
@@ -366,6 +370,7 @@ export const Storage = {
     if(providerId === 'groq') return !!s.groqKey;
     if(providerId === 'gemini') return !!s.geminiKey;
     if(providerId === 'openrouter') return !!s.openrouterKey;
+    if(providerId === 'zenspark') return !!s.zenKey;
     const c = s.customProviders.find(x => x.id === providerId);
     return !!(c && c.key);
   },
