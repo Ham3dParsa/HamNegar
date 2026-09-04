@@ -859,8 +859,15 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
 
 // --- manual Gemini id (empty-state action): rail provider + target radios → Add ---
 $('btn-easy-add')?.addEventListener('click', ()=>{
-  const pid = flowProv === 'custom' ? '' : flowProv === 'all' ? 'gemini' : flowProv;
+  let pid = flowProv === 'custom' ? '' : flowProv;
   const mid = (els.easyModelInput?.value || '').trim();
+  if(flowProv === 'all'){
+    // derive provider from the id itself so a Groq id never lands in the gemini chain
+    if(/^gemini/i.test(mid)) pid = 'gemini';
+    else if(mid.includes(':free')) pid = 'openrouter';
+    else if(mid.includes('/') || /^whisper/i.test(mid)) pid = 'groq';
+    else { Logger.toast('مدل نامعتبر — شناسه باید با gemini شروع شود یا مسیر ارائه‌دهنده داشته باشد'); return; }
+  }
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
