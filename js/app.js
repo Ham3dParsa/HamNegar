@@ -472,7 +472,8 @@ const modelCache = new Map(); // providerId -> string[]
 const fetchStamp = new Map(); // providerId -> cache-line label
 let flowProv = 'all';
 let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capability OR, 'free' = AND modifier
-let flowLastPid = 'groq';
+let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-retry (disabled pre-fetch)
+const M_ERR_LABEL = '✕ دریافت مدل‌ها ناموفق بود. ';
 function flowTarget(){ return document.querySelector('input[name="easy-target"]:checked')?.value || 'stt'; }
 function capsFor(id, pid){
   const s = String(id || '');
@@ -485,6 +486,8 @@ function capsFor(id, pid){
   if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
   return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
 }
+// Single source of truth for STT-eligibility: every add path + row disabled state must use this.
+function isSttEligible(id, pid){ return capsFor(id, pid).caps.includes('stt'); }
 function ptagFor(pid){
   if (pid === 'groq') return 'groq';
   if (pid === 'gemini') return 'google';
@@ -602,8 +605,11 @@ function renderFlowList(){
     btn.className = 'btn-ghost btn-sm';
     btn.textContent = loc ? 'حذف' : 'افزودن';
     btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
-    btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + flowTarget() + ')');
-    btn.disabled = !hasKey && !loc;
+    // Same capsFor source as add paths: t2t-only rows are not addable when target=STT (remove stays enabled).
+    const targetNow = flowTarget();
+    const sttBlocked = !loc && targetNow === 'stt' && !isSttEligible(d.id, d.providerId);
+    if (sttBlocked) { btn.title = 'این مدل متنی است — برای STT مناسب نیست (مقصد را پالیش کن)'; btn.disabled = true; }
+    else { btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'); btn.disabled = !hasKey && !loc; }
     btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
     card.append(main, btn);
     box.appendChild(card);
@@ -612,9 +618,13 @@ function renderFlowList(){
   if (empty) {
     empty.hidden = rows.length !== 0;
     const mw = $('m-manual-wrap');
-    if (mw) mw.hidden = !(rows.length === 0 && flowProv === 'gemini');
+    // Gate: show manual Gemini-id input on empty state whenever the resolved manual pid
+    // accepts a Gemini id (rail gemini → gemini; rail all → defaults to gemini; other rails → foreign pid, hidden).
+    if (mw) mw.hidden = !(rows.length === 0 && (flowProv === 'gemini' || flowProv === 'all'));
   }
   if (err && !err.dataset.failed) err.hidden = true;
+  const retry = $('m-retry');
+  if (retry) retry.disabled = !flowLastPid;
   updateNokey();
   const count = $('m-count');
   if (count) {
@@ -641,8 +651,7 @@ function toggleFlowModel(modelId, providerId){
   const target = flowTarget();
   if (pid === 'gemini' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   if (target === 'stt') {
-    const okStt = pid === 'groq' || /^gemini/i.test(mid) || Object.prototype.hasOwnProperty.call(STT_LABELS, mid);
-    if (!okStt) { Logger.toast('مدل نامعتبر برای STT'); return; }
+    if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   }
   if (!Storage.hasKeyForProvider(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
   addModelToChain(mid, pid, target);
@@ -678,7 +687,7 @@ async function fetchAndShowModels(providerId){
     renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(errBox){ errBox.hidden = false; errBox.dataset.failed = '1'; errBox.firstChild.textContent = '✕ ' + safe + ' '; } }
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(errBox){ errBox.hidden = false; errBox.dataset.failed = '1'; if(errBox.firstChild) errBox.firstChild.textContent = M_ERR_LABEL + safe + ' '; } }
   finally{ if(btn) btn.textContent='لیست مدل‌ها'; syncCacheLines(); }
 }
 els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
@@ -709,6 +718,7 @@ document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('cl
 }));
 document.querySelectorAll('input[name="easy-target"]').forEach(r => r.addEventListener('change', renderFlowList));
 $('m-retry')?.addEventListener('click', ()=>{
+  if (!flowLastPid) return;
   const err = $('m-err');
   if(err){ err.hidden = true; delete err.dataset.failed; }
   fetchAndShowModels(flowProv === 'all' || flowProv === 'custom' ? flowLastPid : flowProv);
@@ -856,8 +866,7 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
   if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target === 'stt'){
-    const okStt = pid === 'groq' || /^gemini/i.test(mid) || Object.prototype.hasOwnProperty.call(STT_LABELS, mid);
-    if(!okStt){ Logger.toast('مدل نامعتبر برای STT'); return; }
+    if(!isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   }
   if(!Storage.hasKeyForProvider(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
   addModelToChain(mid, pid, target);
