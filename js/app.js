@@ -864,12 +864,18 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   if(flowProv === 'all'){
     // derive provider from the id itself so a Groq id never lands in the gemini chain;
-    // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so only
-    // known Groq patterns map to groq — anything else must pick its rail explicitly
+    // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so:
+    // 1) exact hit in any fetched list (covers future releases + custom providers),
+    // 2) only known Groq patterns map to groq — anything else must pick its rail explicitly
     if(/^gemini/i.test(mid)) pid = 'gemini';
     else if(mid.includes(':free')) pid = 'openrouter';
-    else if(/^whisper/i.test(mid) || /^(qwen\/|llama|allam|.*gpt-oss)/i.test(mid)) pid = 'groq';
-    else { Logger.toast('ارائه‌دهنده نامشخص است — ریل ارائه‌دهنده را انتخاب کن'); return; }
+    else {
+      let hit = '';
+      try{ for(const [p, ids] of modelCache){ if(Array.isArray(ids) && ids.includes(mid)){ hit = p; break; } } }catch{}
+      if(hit) pid = hit;
+      else if(/^whisper/i.test(mid) || /^(qwen\/|llama|allam|gpt-oss)/i.test(mid)) pid = 'groq';
+      else { Logger.toast('ارائه‌دهنده نامشخص است — ریل ارائه‌دهنده را انتخاب کن'); return; }
+    }
   }
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
