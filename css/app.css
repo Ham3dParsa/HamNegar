@@ -307,3 +307,155 @@ button:active{transform:scale(.97)}
 .wave-ctrl-label{font-size:13px;color:var(--muted)}
 @media(prefers-reduced-motion:reduce){.wave-card,.wave-item{transition:none !important;animation:none !important}}
 @media(max-width:640px){.header{padding:8px 10px}#output{font-size:16px}button{padding:10px 14px;font-size:14px}.actionbar{gap:10px;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}.abtn,.abtn-cancel{padding:12px 16px;min-height:56px;font-size:14px}#toast{bottom:calc(124px + env(safe-area-inset-bottom))}#btn-mic{width:88px;height:88px}.rec-strip{margin:6px 10px 0}.main{padding:0 10px 10px}.qs-head{flex-wrap:wrap}}
+/* ===== ticket 09 — GLOBAL fluid-layout + modern scrollbars (append-only; ticket-08 internals untouched) =====
+   Port of the demo GLOBAL fluid block, adapted to the REAL repo selectors. No HTML/JS changes. */
+html,body{max-width:100%}
+body{overflow-x:clip}
+.header.topbar,.main,.tcard,.quota-strip,#log-panel,.rec-strip,#file-warning,#log-splitter,
+#settings-modal .modal-box,.pref-section,.wave-sticky,.wave-item,.chain-list,
+#panel-models,#models-flow,#panel-chains,#panel-wave{max-width:100%}
+.header.topbar,.main,.tcard,.quota-strip,#log-panel,.rec-strip,.pref-section,.wave-sticky,
+.provider-card,.quota-card,.chain-list,#panel-models,#models-flow,#models-list,#m-chips,
+.wave-item,.wave-body,.status-bar,.tfoot,.output-meta{min-width:0}
+/* --- scrollbars: thin modern (<=8px, transparent track, neutral thumb; Firefox thin) --- */
+.main,#log-body,#settings-modal .modal-box,.options-drawer .drawer-body,#output{scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
+.main::-webkit-scrollbar,#log-body::-webkit-scrollbar,#settings-modal .modal-box::-webkit-scrollbar,
+.options-drawer .drawer-body::-webkit-scrollbar,#output::-webkit-scrollbar{width:8px;height:8px}
+.main::-webkit-scrollbar-track,#log-body::-webkit-scrollbar-track,
+#settings-modal .modal-box::-webkit-scrollbar-track,
+.options-drawer .drawer-body::-webkit-scrollbar-track,#output::-webkit-scrollbar-track{background:transparent}
+.main::-webkit-scrollbar-thumb,#log-body::-webkit-scrollbar-thumb,
+#settings-modal .modal-box::-webkit-scrollbar-thumb,.options-drawer .drawer-body::-webkit-scrollbar-thumb,
+#output::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
+/* --- rails: scroll-x with HIDDEN scrollbar at all widths (stage-row compat + real rails) --- */
+#models-flow .rail,.stt-progress__steps,#m-chips,.settings-tabs,.wave-seg{scrollbar-width:none;-ms-overflow-style:none}
+#models-flow .rail::-webkit-scrollbar,.stt-progress__steps::-webkit-scrollbar,#m-chips::-webkit-scrollbar,
+.settings-tabs::-webkit-scrollbar,.wave-seg::-webkit-scrollbar{display:none}
+#models-flow .rail{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
+.stt-progress__steps,#m-chips{max-width:100%}
+.wave-seg{overflow-x:auto}
+/* --- topbar --- */
+.header.topbar{gap:clamp(6px,1.5vw,12px);overflow:visible}
+.header.topbar:has(.options-drawer[open]){overflow:visible}
+.brand-mini{min-width:0;flex:0 1 auto}
+.brand-mini>span:not(.ver){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.brand-mini .ver{flex:0 0 auto}
+#engine-badge{flex:0 0 auto;min-width:0;max-width:min(46vw,240px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip{min-width:0;max-width:100%}
+.options-drawer{margin-inline-start:auto;min-width:0;flex:0 1 auto}
+.options-drawer .drawer-body{min-width:min(280px,calc(100vw - 32px));max-width:calc(100vw - 16px)}
+#btn-settings{flex:0 0 auto}
+/* --- file:// banner --- */
+#file-warning{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+#file-warning code{overflow-wrap:anywhere;word-break:break-all}
+/* --- wave strip --- */
+.rec-strip{margin-inline:clamp(6px,2vw,14px);min-width:0;width:auto}
+.rec-strip canvas{max-width:100%}
+/* --- status bar --- */
+.status-bar{flex-wrap:wrap;row-gap:6px;min-width:0;width:100%}
+.status-right{flex:1 1 auto;min-width:0}
+#status-text{flex:1 1 auto;min-width:0;max-width:none}
+.counts{flex:0 0 auto;margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* --- transcript card --- */
+.tcard{min-width:0;width:100%}
+#output{width:100%;max-width:100%;min-width:0}
+#output[style]{max-width:100%}
+.tfoot{flex-wrap:wrap;row-gap:4px;min-width:0}
+.tfoot>span:first-child{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.grip{flex:0 0 auto}
+.output-meta{flex-wrap:wrap;row-gap:4px;min-width:0}
+/* --- stagebar compat (absent in real repo; kept so the menu-open fix survives any port) --- */
+#stagebar{min-width:0;width:100%}
+.stage-row{flex-wrap:nowrap;overflow-x:auto;max-width:100%;gap:clamp(4px,1.2vw,8px)}
+#stagebar:has(details[open]) .stage-row{overflow:visible}
+.sbtn{flex:0 0 auto;min-width:0;max-width:60vw;overflow:hidden}
+.sbtn .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.scope{flex:0 0 auto;min-width:0;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo{flex:0 1 auto;min-width:min(160px,40vw)}
+/* --- quota strip --- */
+.quota-strip{min-width:0;width:100%}
+.qs-head{min-width:0;text-align:start}
+.qs-nums{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.quota-grid{grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr))}
+.quota-card{min-width:0}
+.quota-card .meta{min-width:0}
+.quota-card .meta span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* --- log panel (inline-style heights touched ONLY via attribute selectors) --- */
+#log-panel{width:100%;min-width:0}
+#log-panel[style]{max-height:50vh;min-height:42px;max-width:100%}
+#log-splitter{max-width:100%}
+#log-header{min-width:0}
+#log-header>b{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#log-header>div[style]{flex:0 1 auto;min-width:0;flex-wrap:wrap;display:flex;gap:6px}
+#log-header .log-filters{flex:0 1 auto;min-width:0;flex-wrap:wrap}
+#log-header .log-filter{flex:0 0 auto}
+#log-search{flex:1 1 110px;min-width:90px;max-width:220px;width:auto}
+#log-body{min-width:0;max-width:100%}
+.log-line{overflow-wrap:anywhere;word-break:break-word;min-width:0}
+/* --- actionbar: fluid shrinking buttons, fixed mic, no page overflow --- */
+.actionbar{max-width:100vw;gap:clamp(8px,2vw,14px);padding-inline:clamp(8px,2.5vw,14px);flex-wrap:nowrap}
+.actionbar .abtn,.actionbar .abtn-cancel{flex:0 1 auto;min-width:0;padding-inline:clamp(12px,3vw,24px)}
+#btn-mic{flex:0 0 auto}
+/* --- settings modal shell --- */
+#settings-modal{padding:clamp(8px,2.5vw,16px)}
+#settings-modal .modal-box{width:min(100%,640px);min-width:0;max-width:100%;max-height:92dvh}
+#settings-modal .modal-wide{max-width:min(100%,640px)}
+#settings-modal .modal-box h3{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.settings-tabs{gap:clamp(4px,1vw,6px);min-width:0}
+.settings-tab{flex:1 1 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;justify-content:center;padding:8px clamp(4px,1.5vw,10px)}
+#settings-modal .modal-actions{flex-wrap:wrap;row-gap:8px}
+/* --- provider cards + key rows --- */
+.provider-card{min-width:0}
+.provider-head{min-width:0}
+.provider-head b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.key-row{display:flex;gap:8px;min-width:0;flex-wrap:wrap}
+.key-row input,.key-row select{flex:1 1 140px;min-width:0;max-width:100%}
+/* --- chains tab --- */
+#panel-chains{min-width:0}
+.chain-list{min-width:0}
+.chain-label{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chain-foot{min-width:0}
+.chain-foot .hint-inline{flex:1 1 auto;min-width:0}
+/* --- panel-models (ticket 08): global-level guards only, row internals untouched --- */
+#models-flow .fetch-bar{min-width:0}
+#models-flow #m-q{min-width:0;max-width:100%}
+#m-chips{min-width:0}
+#models-flow .endpoint,#models-flow .cacheline{min-width:0;overflow:hidden;text-overflow:ellipsis}
+/* --- wave tab --- */
+#panel-wave{min-width:0}
+.wave-sticky{min-width:0}
+.wave-preview-wrap{min-width:0}
+.wave-preview-wrap canvas{max-width:100%}
+.wave-row-btns{min-width:0}
+.wave-mini-sens{min-width:0;flex:0 1 auto;flex-wrap:wrap;max-width:100%}
+.wave-mini-sens input{width:clamp(70px,20vw,110px);min-width:0;max-width:100%}
+#panel-wave input[type=range]{max-width:100%;min-width:0}
+.wave-cards{grid-template-columns:repeat(2,minmax(0,1fr));min-width:0}
+.wave-card{min-width:0}
+.wave-card b,.wave-card span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wave-item{min-width:0}
+.wave-item details summary{min-width:0;flex-wrap:wrap}
+.wave-title{flex:1 1 auto;min-width:60px}
+.wave-tools{flex:0 1 auto;flex-wrap:wrap;min-width:0}
+.wave-body{min-width:0}
+.wave-seg{min-width:0}
+.wave-name-input{min-width:0;max-width:min(220px,40vw)}
+/* --- narrow breakpoints --- */
+@media(max-width:768px){
+.status-bar{font-size:12px}
+#engine-badge{max-width:38vw}
+}
+@media(max-width:640px){
+.header{padding:8px clamp(8px,2.5vw,10px)}
+#log-search{flex:1 1 100%;max-width:none}
+#log-header>div[style]{flex:1 1 100%}
+.wave-cards{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:390px){
+#engine-badge{max-width:32vw;font-size:11px;padding:6px 9px}
+.options-drawer .drawer-handle{font-size:12px;padding:6px 10px}
+.status-bar{padding:7px 9px}
+.counts{font-size:11px}
+.scope{display:none}
+.quota-grid{grid-template-columns:minmax(0,1fr)}
+}
