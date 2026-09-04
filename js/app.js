@@ -861,15 +861,17 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
 $('btn-easy-add')?.addEventListener('click', ()=>{
   let pid = flowProv === 'custom' ? '' : flowProv;
   const mid = (els.easyModelInput?.value || '').trim();
+  if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   if(flowProv === 'all'){
-    // derive provider from the id itself so a Groq id never lands in the gemini chain
+    // derive provider from the id itself so a Groq id never lands in the gemini chain;
+    // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so only
+    // known Groq patterns map to groq — anything else must pick its rail explicitly
     if(/^gemini/i.test(mid)) pid = 'gemini';
     else if(mid.includes(':free')) pid = 'openrouter';
-    else if(mid.includes('/') || /^whisper/i.test(mid)) pid = 'groq';
-    else { Logger.toast('مدل نامعتبر — شناسه باید با gemini شروع شود یا مسیر ارائه‌دهنده داشته باشد'); return; }
+    else if(/^whisper/i.test(mid) || /^(qwen\/|llama|allam|.*gpt-oss)/i.test(mid)) pid = 'groq';
+    else { Logger.toast('ارائه‌دهنده نامشخص است — ریل ارائه‌دهنده را انتخاب کن'); return; }
   }
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
-  if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
   if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target === 'stt'){
