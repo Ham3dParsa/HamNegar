@@ -76,9 +76,10 @@ function validatePolishOutput(raw, text, model){
   const out = cleanPolishOutput(raw);
   if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
   if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
+  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
   return out;
 }
-const DEFAULT_POLISH_SYSTEM = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان.`;
+const DEFAULT_POLISH_SYSTEM = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان. اگر متن فارسی نیست یا هیچ اصلاحی لازم ندارد، عین متن ورودی را بدون حتی یک کلمه اضافه برگردان؛ هرگز نظر، توضیح یا عذرخواهی نده.`;
 
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
 // keys+bases, customs by id from Storage. Never logs key material — callers must not log the result.
@@ -110,14 +111,14 @@ async function queryChat(providerId, text, { system, model } = {}){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${providerId} polish`),{status:408}); throw Object.assign(new Error(`شبکه ${providerId} polish: `+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} polish fail`,{status:res.status, model, base}); throw err; }
-  const j=await res.json(); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
+  const j=await res.json(); Logger.log('debug',`${providerId} polish raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
 }
 async function queryPolishViaGemini(text, model){
   const { geminiKey: k } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Gemini برای پالیش نیست'),{status:401});
   if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی و نگارشی را درست کن، معنی و لحن را عوض نکن، توضیح نده، فقط متن اصلاح‌شده را برگردان. نمونه: «رابطه کاربری» وقتی منظور UI است باید «رابط کاربری» شود.\nمتن:\n${text}`;
+  const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی و نگارشی را درست کن، معنی و لحن را عوض نکن، توضیح نده، فقط متن اصلاح‌شده را برگردان. اگر متن فارسی نیست یا هیچ اصلاحی لازم ندارد، عین متن ورودی را بدون حتی یک کلمه اضافه برگردان؛ هرگز نظر، توضیح یا عذرخواهی نده. نمونه: «رابطه کاربری» وقتی منظور UI است باید «رابط کاربری» شود.\nمتن:\n${text}`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
     res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2000}}),signal:ctrl.signal});
@@ -125,7 +126,8 @@ async function queryPolishViaGemini(text, model){
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Gemini polish fail',{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
-  return out;
+  Logger.log('debug','Gemini polish raw',{model, inLen:text.length, out:out.slice(0,200)});
+  return validatePolishOutput(out, text, model);
 }
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
 function polishTargetOf(entry){
