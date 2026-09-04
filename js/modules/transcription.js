@@ -161,12 +161,12 @@ async function queryPolish(text, entry, layer = 'polish'){
 async function queryResponsesText(text, { system, model, layer = 'polish' } = {}){
   if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
   const { zenKey: k } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید Muse Spark برای پالیش نیست' : `کلید Muse Spark برای ${layer} نیست`),{status:401});
+  if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید OpenCode_Zen برای پالیش نیست' : `کلید OpenCode_Zen برای ${layer} نیست`),{status:401});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   const body = { model, instructions: system || DEFAULT_POLISH_SYSTEM, input: text };
   let res; try{
     res=await fetch(ZEN_RESPONSES_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?`تایم‌اوت Muse Spark ${layer}`:`شبکه Muse Spark ${layer}: `+e.message),{status:e.name==='AbortError'?408:0}); }
+  }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?`تایم‌اوت OpenCode_Zen ${layer}`:`شبکه OpenCode_Zen ${layer}: `+e.message),{status:e.name==='AbortError'?408:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`zenspark ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json();
@@ -323,7 +323,7 @@ export const Transcription = {
   async listModels(providerId){
     if(providerId === 'zenspark'){
       const { zenKey: k }=Storage.getSettings();
-      if(!k) throw Object.assign(new Error('کلید Muse Spark نیست'),{status:401});
+      if(!k) throw Object.assign(new Error('کلید OpenCode_Zen نیست'),{status:401});
       const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
       let r; try{
         r=await fetch(ZEN_MODELS_URL,{headers:{'Authorization':`Bearer ${k}`},signal:ctrl.signal});
