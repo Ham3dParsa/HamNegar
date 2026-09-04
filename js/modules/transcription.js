@@ -1,5 +1,5 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model}), testGroq(), testGemini(), listModels(providerId)
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, testGroq(), testGemini(), listModels(providerId)
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
@@ -72,14 +72,15 @@ function cleanPolishOutput(raw){
   out = out.replace(/<think>[\s\S]*$/gi, '').replace(/<thinking>[\s\S]*$/gi, '');
   return out.trim();
 }
-function validatePolishOutput(raw, text, model){
+function validatePolishOutput(raw, text, model, layer = 'polish'){
   const out = cleanPolishOutput(raw);
-  if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
+  if(!out) throw Object.assign(new Error(layer==='polish' ? 'پالیش خالی برگشت' : `خروجی ${layer} خالی بود`),{status:500});
+  if(layer !== 'polish') return out;
   if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
-  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
+  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)|(no (editing|correction) (needed|required))|((the (original|input) text) is)|(no changes (needed|made))/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
   return out;
 }
-const DEFAULT_POLISH_SYSTEM = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان. اگر متن فارسی نیست یا هیچ اصلاحی لازم ندارد، عین متن ورودی را بدون حتی یک کلمه اضافه برگردان؛ هرگز نظر، توضیح یا عذرخواهی نده.`;
+const DEFAULT_POLISH_SYSTEM = `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`;
 
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
 // keys+bases, customs by id from Storage. Never logs key material — callers must not log the result.
@@ -92,13 +93,15 @@ function resolveChatProvider(providerId){
   return { key: c.key || '', base: (c.baseURL || '').replace(/\/+$/,''), trusted: [], extraHeaders: {} };
 }
 
-// Generic OpenAI-compatible chat — single network path for groq/openrouter/custom polish.
+// Generic OpenAI-compatible chat — single network path for groq/openrouter/custom TEXT ops
+// (polish, translate, ...). `layer` names the operation in logs so each layer filters
+// separately (search the layer name in the log box); callers pass layer:'translate' etc.
+async function queryChat(providerId, text, { system, model, layer = 'polish' } = {}){
 // Custom hosts are never in `trusted`, so every custom call passes the user confirm gate.
 // Payload semantics match the legacy Groq path (temperature/max_tokens/qwen guards).
-async function queryChat(providerId, text, { system, model } = {}){
-  if(!model || typeof model !== 'string') throw Object.assign(new Error('مدل پالیش مشخص نیست'),{status:400});
+  if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
   const { key: k, base, trusted, extraHeaders } = resolveChatProvider(providerId);
-  if(!k) throw Object.assign(new Error(`کلید ${providerId} برای پالیش نیست`),{status:401});
+  if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${providerId} برای پالیش نیست` : `کلید ${providerId} برای ${layer} نیست`),{status:401});
   if(providerId === 'groq' && !k.startsWith('gsk_')) throw Object.assign(new Error('Groq باید gsk_ باشد'),{status:401});
   if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
   assertTrustedBase(base, trusted);
@@ -108,26 +111,26 @@ async function queryChat(providerId, text, { system, model } = {}){
   if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
     res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`, ...extraHeaders},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${providerId} polish`),{status:408}); throw Object.assign(new Error(`شبکه ${providerId} polish: `+e.message),{status:0}); }
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${providerId} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${providerId} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} polish fail`,{status:res.status, model, base}); throw err; }
-  const j=await res.json(); Logger.log('debug',`${providerId} polish raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model);
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} ${layer} fail`,{status:res.status, model, base}); throw err; }
+  const j=await res.json(); Logger.log('debug',`${providerId} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
 }
-async function queryPolishViaGemini(text, model){
+async function queryPolishViaGemini(text, model, layer = 'polish'){
   const { geminiKey: k } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error('کلید Gemini برای پالیش نیست'),{status:401});
+  if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید Gemini برای پالیش نیست' : `کلید Gemini برای ${layer} نیست`),{status:401});
   if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const prompt = `تو ویراستار فارسی هستی. فقط غلط‌های املایی و نگارشی را درست کن، معنی و لحن را عوض نکن، توضیح نده، فقط متن اصلاح‌شده را برگردان. اگر متن فارسی نیست یا هیچ اصلاحی لازم ندارد، عین متن ورودی را بدون حتی یک کلمه اضافه برگردان؛ هرگز نظر، توضیح یا عذرخواهی نده. نمونه: «رابطه کاربری» وقتی منظور UI است باید «رابط کاربری» شود.\nمتن:\n${text}`;
+  const prompt = `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; do not change the language, meaning or tone, do not explain, return ONLY the corrected text. If no correction is needed, return the input verbatim; never comment or apologize. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)\nText:\n${text}`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
     res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2000}}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error('تایم‌اوت Gemini polish'),{status:408}); throw Object.assign(new Error('شبکه Gemini polish: '+e.message),{status:0}); }
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت Gemini ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه Gemini ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error','Gemini polish fail',{status:res.status, model}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`Gemini ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
-  Logger.log('debug','Gemini polish raw',{model, inLen:text.length, out:out.slice(0,200)});
-  return validatePolishOutput(out, text, model);
+  Logger.log('debug',`Gemini ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  return validatePolishOutput(out, text, model, layer);
 }
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
 function polishTargetOf(entry){
@@ -142,10 +145,10 @@ function polishTargetOf(entry){
   if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'gemini' : 'groq');
   return { model, providerId };
 }
-async function queryPolish(text, entry){
+async function queryPolish(text, entry, layer = 'polish'){
   const { model, providerId } = polishTargetOf(entry);
-  if(providerId === 'gemini') return queryPolishViaGemini(text, model);
-  return queryChat(providerId, text, { model });
+  if(providerId === 'gemini') return queryPolishViaGemini(text, model, layer);
+  return queryChat(providerId, text, { model, layer });
 }
 
 function sttProviderOf(entry){
