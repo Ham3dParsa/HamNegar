@@ -76,7 +76,7 @@ function validatePolishOutput(raw, text, model){
   const out = cleanPolishOutput(raw);
   if(!out) throw Object.assign(new Error('پالیش خالی برگشت'),{status:500});
   if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
-  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم).{0,30}(نمی‌توانم))|((نمی‌توانم).{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
+  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
   return out;
 }
 const DEFAULT_POLISH_SYSTEM = `تو ویراستار فارسی هستی. فقط غلط‌های املایی/نگارشی را اصلاح کن، بدون توضیح اضافه. «رابطه کاربری» (UI) را به «رابط کاربری» تبدیل کن. فقط متن اصلاح‌شده را برگردان. اگر متن فارسی نیست یا هیچ اصلاحی لازم ندارد، عین متن ورودی را بدون حتی یک کلمه اضافه برگردان؛ هرگز نظر، توضیح یا عذرخواهی نده.`;
