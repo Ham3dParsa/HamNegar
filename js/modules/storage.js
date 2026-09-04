@@ -361,7 +361,7 @@ export const Storage = {
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
       { id: 'gemini', name: 'Google AI Studio', baseURL: '', hasKey: !!s.geminiKey },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
-      { id: 'zenspark', name: 'Muse Spark (Zen)', baseURL: '', hasKey: !!s.zenKey },
+      { id: 'zenspark', name: 'OpenCode_Zen', baseURL: '', hasKey: !!s.zenKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];
   },

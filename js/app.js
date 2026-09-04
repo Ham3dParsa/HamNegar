@@ -489,7 +489,7 @@ function capsFor(id, pid){
     || /whisper|stt|transcrib/i.test(low);
   const free = /free/i.test(low);
   if (/^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || {}).sub || 'Google AI Studio' };
-  if (/^muse-spark-/i.test(s)) return { caps: ['t2t'], free: /contributor-free/i.test(s), fa: 'Muse Spark (رایگان contributor)' };
+  if (/^muse-spark-/i.test(s)) return { caps: ['t2t'], free: /contributor-free/i.test(s), fa: /1\.3/i.test(s) ? 'muse spark 1.3 contributor (رایگان)' : /1\.2/i.test(s) ? 'muse spark 1.2 contributor (رایگان)' : 'muse spark contributor (رایگان)' };
   if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
   return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
 }
@@ -534,7 +534,7 @@ function flowScopeLabel(){
     : flowProv === 'groq' ? 'Groq'
     : flowProv === 'gemini' ? 'Google AI Studio'
     : flowProv === 'openrouter' ? 'OpenRouter'
-    : flowProv === 'zenspark' ? 'Muse Spark'
+    : flowProv === 'zenspark' ? 'OpenCode_Zen'
     : flowProv === 'custom' ? 'سفارشی' : flowProv;
 }
 function renderKeyVisibility(){
@@ -1538,23 +1538,55 @@ function makeOnInterim(snap){
 let isRecording=false, vadTimer=null;
 let isTranscribing=false;
 let transcribingAbort=null;
+// ticket 15 — actionbar variant A: hero morph + cancel visible during rec AND transcribing + BIG timer chip
+let recStartMs=0, recTimerId=null;
+const FA_DIGITS='۰۱۲۳۴۵۶۷۸۹';
+function recFa(n){ return String(n).replace(/\d/g, d=> FA_DIGITS[d]); }
+function recTimerPaint(){
+  const el=document.getElementById('mic-timer');
+  if(!el || el.hidden) return;
+  const s=Math.max(0, Math.floor((performance.now()-recStartMs)/1000));
+  el.textContent=`${recFa(String(Math.floor(s/60)).padStart(2,'0'))}:${recFa(String(s%60).padStart(2,'0'))}`;
+}
+function recTimerStart(){
+  recStartMs=performance.now();
+  const el=document.getElementById('mic-timer');
+  if(el){ el.hidden=false; el.classList.add('live'); }
+  recTimerPaint();
+  if(recTimerId) clearInterval(recTimerId);
+  recTimerId=setInterval(recTimerPaint, 250);
+}
+function recTimerStop(){
+  if(recTimerId){ clearInterval(recTimerId); recTimerId=null; }
+  document.getElementById('mic-timer')?.classList.remove('live');
+}
+function recTimerReset(){
+  recTimerStop();
+  const el=document.getElementById('mic-timer');
+  if(el){ el.textContent='۰۰:۰۰'; el.hidden=true; }
+}
+function syncActionbar(){
+  const mic=els.btnMic, cb=els.btnCancel, tm=document.getElementById('mic-timer');
+  if(!mic) return;
+  mic.classList.toggle('recording', isRecording);
+  mic.classList.toggle('transcribing', isTranscribing);
+  mic.setAttribute('aria-busy', isTranscribing?'true':'false');
+  mic.setAttribute('aria-label', isRecording?'توقف و تبدیل':isTranscribing?'در حال تبدیل':'میکروفون');
+  const showCancel=(isRecording||isTranscribing);
+  if(cb){
+    if(cb.hasAttribute('hidden')!==!showCancel) cb.hidden=!showCancel;
+    cb.classList.remove('cancel-appear'); void cb.offsetWidth;
+    if(showCancel) cb.classList.add('cancel-appear');
+  }
+  if(tm) tm.hidden=!(isRecording||isTranscribing);
+  updateHistoryButtons();
+}
 function setMicBusy(busy){
   isTranscribing = busy;
   if (els.btnMic) {
     els.btnMic.disabled = busy;
-    els.btnMic.classList.toggle('transcribing', busy);
-    els.btnMic.setAttribute('aria-busy', busy ? 'true' : 'false');
-    const icon = els.btnMic.querySelector('.mic-icon');
-    const label = els.btnMic.querySelector('.mic-label');
-    if (busy) {
-      if (label) label.textContent = 'در حال تبدیل…';
-      if (icon) icon.textContent = '';
-    } else {
-      if (label) label.textContent = isRecording ? '⏹ پایان و تبدیل' : 'شروع صحبت';
-      if (icon) icon.textContent = '🎤';
-    }
   }
-  if (els.btnCancel) els.btnCancel.hidden = !busy;
+  syncActionbar();
   if (els.output) els.output.setAttribute('aria-busy', busy ? 'true' : 'false');
   syncRecStrip();
 }
@@ -1577,11 +1609,9 @@ async function startRecording(){
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
     snap.startMs = performance.now();
     isRecording=true;
-    const labelEl = els.btnMic.querySelector('.mic-label');
-    const iconEl = els.btnMic.querySelector('.mic-icon');
-    if (labelEl) labelEl.textContent = '⏹ پایان و تبدیل'; else els.btnMic.textContent = '⏹ پایان و تبدیل';
-    if (iconEl) iconEl.textContent = '⏹';
-    els.btnMic.classList.add('recording'); if(s.realtime) els.btnMic.classList.add('realtime-active');
+    recTimerStart();
+    if(s.realtime) els.btnMic.classList.add('realtime-active');
+    syncActionbar();
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     mainWaveLive();
     if(s.realtime && Realtime.isSupported()){
@@ -1598,9 +1628,11 @@ function stopRecording(){
   if(!isRecording) return;
   const snap = rtSnap;
   Audio.stop(); isRecording=false;
+  recTimerStop(); // frozen chip stays visible through transcribing (variant A)
   setMicBusy(true);
   transcribingAbort = new AbortController();
-  els.btnMic.classList.remove('recording','realtime-active');
+  els.btnMic.classList.remove('realtime-active');
+  syncActionbar();
   stopVAD(); mainWaveIdle(); Realtime.stop();
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
   if(snap && (snap.committed+snap.pending)){
@@ -1635,6 +1667,7 @@ async function handleTranscription(blob, snap){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
+    recTimerReset(); syncActionbar();
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
@@ -1694,6 +1727,7 @@ async function handleTranscription(blob, snap){
     }
   } finally {
     setMicBusy(false);
+    recTimerReset(); syncActionbar();
     mainWaveIdle();
     transcribingAbort = null;
     if(!snap || snapId===rtVersion){ rtSnap=null; }
@@ -1707,7 +1741,7 @@ async function handleTranscription(blob, snap){
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
 $('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
-$('btn-test-zen').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Muse Spark...','warn'); try{ await Transcription.testZenspark(); Logger.setStatus(`✅ Muse Spark اوکی`,'info'); Logger.toast('Muse Spark ok'); }catch(e){ Logger.setStatus('❌ Muse Spark: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-zen').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست OpenCode_Zen...','warn'); try{ await Transcription.testZenspark(); Logger.setStatus(`✅ OpenCode_Zen اوکی`,'info'); Logger.toast('OpenCode_Zen ok'); }catch(e){ Logger.setStatus('❌ OpenCode_Zen: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');
@@ -1719,8 +1753,13 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
     Logger.toast(`پالیش: ${out}`);
   }catch(e){ Logger.setStatus('❌ پالیش: '+sanitizeMsg(e.message || e),'error'); }
 });
-els.btnCopy.onclick=async()=>{ if(!els.output.value.trim()){ Logger.toast('چیزی نیست'); return; } await navigator.clipboard.writeText(els.output.value); const p=els.btnCopy.textContent; els.btnCopy.textContent='✓ کپی شد'; els.btnCopy.style.background='#137333'; setTimeout(()=>{ els.btnCopy.textContent=p; els.btnCopy.style.background=''; },1200); Logger.toast('کپی شد'); };
-els.btnClear.onclick=()=>{ els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+els.btnCopy.onclick=async()=>{
+  if(!els.output.value.trim()){ els.btnCopy.classList.remove('shake'); void els.btnCopy.offsetWidth; els.btnCopy.classList.add('shake'); setTimeout(()=>els.btnCopy.classList.remove('shake'),400); Logger.toast('چیزی نیست'); return; }
+  try{ await navigator.clipboard.writeText(els.output.value); }catch{}
+  els.btnCopy.classList.add('ok'); setTimeout(()=>els.btnCopy.classList.remove('ok'),1200);
+  Logger.toast('کپی شد');
+};
+els.btnClear.onclick=()=>{ if(!els.output.value.trim()){ els.btnClear.classList.remove('shake'); void els.btnClear.offsetWidth; els.btnClear.classList.add('shake'); setTimeout(()=>els.btnClear.classList.remove('shake'),400); Logger.toast('متن خالی است'); return; } els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
 mainWaveInit();
 const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
