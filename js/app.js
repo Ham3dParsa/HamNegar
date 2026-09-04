@@ -24,13 +24,11 @@ const els = {
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
   btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'),
-  groqModelsList: $('groq-models-list'), orModelsList: $('or-models-list'), geminiModelsList: $('gemini-models-list'),
-  tabProviders: $('tab-providers'), tabEasyadd: $('tab-easyadd'), tabChains: $('tab-chains'),
-  panelProviders: $('panel-providers'), panelEasyadd: $('panel-easyadd'), panelChains: $('panel-chains'),
+  tabModels: $('tab-models'), tabChains: $('tab-chains'),
+  panelModels: $('panel-models'), panelChains: $('panel-chains'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
-  customModelsList: $('custom-models-list'),
-  easyProvider: $('easy-provider-select'), easyModel: $('easy-model-select'), easyModelInput: $('easy-model-input'),
+  easyModelInput: $('easy-model-input'),
 };
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
@@ -385,9 +383,10 @@ function validate(){
     const v=els.openrouterBaseUrl.value.trim();
     if(v){ try{ const u=new URL(v); if(u.protocol!=='https:') throw 0; els.openrouterBaseUrl.style.borderColor=''; }catch{ els.openrouterBaseUrl.style.borderColor='var(--danger)'; } } else els.openrouterBaseUrl.style.borderColor='';
   }
-  // re-render badges live + provider status pills (keys editable ONLY in providers tab)
+  // re-render badges live + provider status pills (keys editable ONLY in models tab)
   renderProvidersStatus();
   renderAllChains();
+  try{ renderFlowList(); }catch{}
 }
 function renderProvidersStatus(){
   let providers = [];
@@ -412,7 +411,7 @@ function loadSettings(){
   if(els.togglePolish) els.togglePolish.checked=s.polishEnabled;
   els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
   renderCustomProviders();
-  buildEasyProviderOptions();
+  flowInit();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
   if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ openModal(); Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
@@ -451,10 +450,10 @@ if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
 if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
 if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
 
-// --- settings tabs (providers | easy-add | chains) ---
+// --- settings tabs (models | chains | wave) ---
 function switchTab(name){
-  const tabs = { providers: els.tabProviders, easyadd: els.tabEasyadd, chains: els.tabChains, wave: els.tabWave };
-  const panels = { providers: els.panelProviders, easyadd: els.panelEasyadd, chains: els.panelChains, wave: els.panelWave };
+  const tabs = { models: els.tabModels, chains: els.tabChains, wave: els.tabWave };
+  const panels = { models: els.panelModels, chains: els.panelChains, wave: els.panelWave };
   for(const k of Object.keys(tabs)){
     const active = k === name;
     tabs[k]?.classList.toggle('active', active);
@@ -463,30 +462,191 @@ function switchTab(name){
   }
   if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
 }
-els.tabProviders?.addEventListener('click', ()=> switchTab('providers'));
-els.tabEasyadd?.addEventListener('click', ()=> switchTab('easyadd'));
+els.tabModels?.addEventListener('click', ()=> switchTab('models'));
 els.tabChains?.addEventListener('click', ()=> switchTab('chains'));
 els.tabWave?.addEventListener('click', ()=> switchTab('wave'));
 
-// --- provider model lists: single path via Transcription.listModels(providerId) ---
+// --- models flow card (ticket/08): rail is single truth, inline key cards, ONE search + ONE chip row → flat list ---
+// Data source is modelCache (Transcription.listModels) + known chain labels; rows toggle real chains.
 const modelCache = new Map(); // providerId -> string[]
-function renderModelCodes(listEl, ids, providerId, target){
-  listEl.style.display='block';
-  listEl.innerHTML='';
-  const isCustom = !['groq','gemini','openrouter'].includes(providerId);
-  const filtered = (isCustom ? ids : ids.filter(id=> /qwen|gpt-oss|allam|llama|gemini|whisper/i.test(id))).slice(0,30);
-  const title=document.createElement('b'); title.textContent=`مدل‌های یافت‌شده (${filtered.length}):`; listEl.appendChild(title); listEl.appendChild(document.createElement('br'));
-  filtered.forEach(id=>{
-    const code=document.createElement('code');
-    code.style.cssText='display:inline-block;margin:2px;padding:2px 6px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;cursor:pointer';
-    code.textContent=id; // textContent: never inject model ids as HTML
-    code.addEventListener('click', ()=> addModelToChain(id, providerId, target));
-    listEl.appendChild(code);
-  });
-  const hint=document.createElement('div'); hint.style.marginTop='6px';
-  const span=document.createElement('span'); span.className='hint-inline';
-  span.textContent = target==='stt' ? 'کلیک روی مدل → به زنجیره STT اضافه می‌شود' : 'کلیک روی مدل → به زنجیره پالیش اضافه می‌شود';
-  hint.appendChild(span); listEl.appendChild(hint);
+const fetchStamp = new Map(); // providerId -> cache-line label
+let flowProv = 'all';
+let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capability OR, 'free' = AND modifier
+let flowLastPid = 'groq';
+function flowTarget(){ return document.querySelector('input[name="easy-target"]:checked')?.value || 'stt'; }
+function capsFor(id, pid){
+  const s = String(id || '');
+  const low = s.toLowerCase();
+  const isStt = s === 'groq' || /^gemini/i.test(s)
+    || Object.prototype.hasOwnProperty.call(STT_LABELS, s)
+    || /whisper|stt|transcrib/i.test(low);
+  const free = /free/i.test(low);
+  if (/^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || {}).sub || 'Google AI Studio' };
+  if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
+  return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
+}
+function ptagFor(pid){
+  if (pid === 'groq') return 'groq';
+  if (pid === 'gemini') return 'google';
+  if (pid === 'openrouter') return 'openrouter';
+  try { const c = Storage.getSettings().customProviders.find(x => x.id === pid); if (c) return c.name || 'سفارشی'; } catch {}
+  return pid || 'سفارشی';
+}
+function allFlowModels(){
+  const out = [], seen = new Set();
+  const push = (id, pid) => {
+    const clean = String(id || '').trim();
+    if (!clean) return;
+    const k = pid + ':' + clean;
+    if (seen.has(k)) return;
+    seen.add(k);
+    const { caps, free, fa } = capsFor(clean, pid);
+    out.push({ id: clean, providerId: pid, caps, free, fa });
+  };
+  push('groq', 'groq');
+  for (const id of Object.keys(STT_LABELS)) if (id !== 'groq') push(id, /^gemini/i.test(id) ? 'gemini' : 'groq');
+  for (const id of Object.keys(POLISH_LABELS)) push(id, providerIdOf({ id }, 'groq'));
+  for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, pid);
+  return out;
+}
+function chainLoc(id, pid){
+  const si = sttChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === pid);
+  if (si >= 0) return { type: 'stt', index: si };
+  const pi = polishChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === pid);
+  if (pi >= 0) return { type: 'polish', index: pi };
+  return null;
+}
+function flowScopeLabel(){
+  return flowProv === 'all' ? 'همه ارائه‌دهنده‌ها'
+    : flowProv === 'groq' ? 'Groq'
+    : flowProv === 'gemini' ? 'Google AI Studio'
+    : flowProv === 'openrouter' ? 'OpenRouter'
+    : flowProv === 'custom' ? 'سفارشی' : flowProv;
+}
+function renderKeyVisibility(){
+  const show = {
+    groq: flowProv === 'all' || flowProv === 'groq',
+    gemini: flowProv === 'all' || flowProv === 'gemini',
+    openrouter: flowProv === 'all' || flowProv === 'openrouter',
+    custom: flowProv === 'all' || flowProv === 'custom',
+  };
+  const cardGroq = $('provider-card-groq'), cardGemini = $('provider-card-gemini'), cardOr = $('provider-card-openrouter');
+  const customList = $('custom-providers-list'), customAdd = $('custom-add-card');
+  if (cardGroq) cardGroq.hidden = !show.groq;
+  if (cardGemini) cardGemini.hidden = !show.gemini;
+  if (cardOr) cardOr.hidden = !show.openrouter;
+  if (customList) customList.hidden = !show.custom;
+  if (customAdd) customAdd.hidden = !show.custom;
+}
+function updateNokey(){
+  const el = $('m-nokey');
+  if (!el) return;
+  if (flowProv === 'all' || flowProv === 'custom') { el.hidden = true; return; }
+  let has = false;
+  try { has = Storage.hasKeyForProvider(flowProv); } catch {}
+  el.hidden = has;
+}
+function syncCacheLines(){
+  for (const pid of ['groq', 'gemini', 'openrouter']) {
+    const el = document.getElementById('cache-' + pid);
+    if (el) el.textContent = fetchStamp.get(pid) || 'نه هنوز — «لیست مدل‌ها» را بزن';
+  }
+}
+function renderFlowList(){
+  const box = $('models-list');
+  if (!box) return;
+  renderKeyVisibility();
+  syncCacheLines();
+  const q = ($('m-q')?.value || '').trim().toLowerCase();
+  box.innerHTML = '';
+  const rows = allFlowModels()
+    .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter'].includes(d.providerId) : d.providerId === flowProv)
+    .filter(d => {
+      const capsSel = [...flowChips].filter(c => c === 'stt' || c === 't2t');
+      if (capsSel.length && !capsSel.some(c => d.caps.includes(c))) return false;
+      if (flowChips.has('free') && !d.free) return false;
+      return true;
+    })
+    .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
+  for (const d of rows) {
+    const hasKey = (() => { try { return Storage.hasKeyForProvider(d.providerId); } catch { return false; } })();
+    const loc = chainLoc(d.id, d.providerId);
+    const card = document.createElement('div');
+    card.className = 'mrow';
+    card.dataset.p = d.providerId;
+    const main = document.createElement('div');
+    main.className = 'mmain';
+    const title = document.createElement('div');
+    title.className = 'mtitle';
+    const b = document.createElement('b');
+    b.textContent = d.id;
+    b.dir = 'ltr';
+    const badges = document.createElement('span');
+    badges.className = 'mbadges';
+    for (const c of d.caps) { const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
+    if (d.free) { const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
+    if (loc) { const ic = document.createElement('span'); ic.className = 'badge inchain'; ic.textContent = 'در زنجیره'; badges.appendChild(ic); }
+    const tag = document.createElement('span');
+    tag.className = 'ptag';
+    tag.textContent = ptagFor(d.providerId);
+    const key = document.createElement('span');
+    key.className = 'chain-badge ' + (hasKey ? 'ok' : 'missing');
+    key.textContent = hasKey ? '✓ کلید' : '⚠ بی‌کلید';
+    title.append(b, badges, tag, key);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = d.fa || d.providerId;
+    main.append(title, meta);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-ghost btn-sm';
+    btn.textContent = loc ? 'حذف' : 'افزودن';
+    btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
+    btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + flowTarget() + ')');
+    btn.disabled = !hasKey && !loc;
+    btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
+    card.append(main, btn);
+    box.appendChild(card);
+  }
+  const empty = $('m-empty'), err = $('m-err');
+  if (empty) {
+    empty.hidden = rows.length !== 0;
+    const mw = $('m-manual-wrap');
+    if (mw) mw.hidden = !(rows.length === 0 && flowProv === 'gemini');
+  }
+  if (err && !err.dataset.failed) err.hidden = true;
+  updateNokey();
+  const count = $('m-count');
+  if (count) {
+    const total = sttChainState.length + polishChainState.length;
+    const chipLabel = flowChips.size ? [...flowChips].join('+') : 'all';
+    count.textContent = `${rows.length} مدل در ${flowScopeLabel()} (چیپ: ${chipLabel}) — ${total} مدل در زنجیره`;
+  }
+}
+function toggleFlowModel(modelId, providerId){
+  const mid = String(modelId || '').trim(), pid = String(providerId || '').trim();
+  if (!mid || !pid) return;
+  const loc = chainLoc(mid, pid);
+  if (loc) {
+    const arr = loc.type === 'stt' ? sttChainState : polishChainState;
+    const [removed] = arr.splice(loc.index, 1);
+    lastDeleted = { entry: removed, index: loc.index, type: loc.type };
+    persistChains();
+    renderAllChains();
+    renderFlowList();
+    announce(`مدل ${mid} حذف شد — برای بازگردانی «واگرد» را بزن`);
+    showUndoToast(mid);
+    return;
+  }
+  const target = flowTarget();
+  if (pid === 'gemini' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
+  if (target === 'stt') {
+    const okStt = pid === 'groq' || /^gemini/i.test(mid) || Object.prototype.hasOwnProperty.call(STT_LABELS, mid);
+    if (!okStt) { Logger.toast('مدل نامعتبر برای STT'); return; }
+  }
+  if (!Storage.hasKeyForProvider(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
+  addModelToChain(mid, pid, target);
+  renderFlowList();
 }
 function addModelToChain(modelId, providerId, target){
   const mid = String(modelId||'').trim();
@@ -504,24 +664,63 @@ function addModelToChain(modelId, providerId, target){
   announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
   Logger.toast('افزوده شد');
 }
-async function fetchAndShowModels(providerId, target){
+async function fetchAndShowModels(providerId){
+  flowLastPid = providerId;
   const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : els.btnOrModels;
-  const listEl = providerId==='groq' ? els.groqModelsList : providerId==='gemini' ? els.geminiModelsList : els.orModelsList;
+  const errBox = $('m-err');
   if(btn) btn.textContent='...';
   try{
     saveSettings();
     const ids = await Transcription.listModels(providerId);
     modelCache.set(providerId, ids);
-    if(listEl) renderModelCodes(listEl, ids, providerId, 'polish');
-    refreshEasyModels(false);
+    fetchStamp.set(providerId, 'به‌روزشده: همین حالا (حافظه)');
+    if(errBox){ errBox.hidden = true; delete errBox.dataset.failed; }
+    renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+safe; } }
-  finally{ if(btn) btn.textContent='لیست مدل‌ها'; }
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(errBox){ errBox.hidden = false; errBox.dataset.failed = '1'; errBox.firstChild.textContent = '✕ ' + safe + ' '; } }
+  finally{ if(btn) btn.textContent='لیست مدل‌ها'; syncCacheLines(); }
 }
-els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq', 'polish'));
-els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini', 'polish'));
-els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter', 'polish'));
+els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
+els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini'));
+els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
+
+// --- models flow card wiring: rail → key card filter + ONE search + ONE chip row + manual Gemini id ---
+document.querySelectorAll('#prov-rail button').forEach(b => b.addEventListener('click', ()=>{
+  document.querySelectorAll('#prov-rail button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  flowProv = b.dataset.prov || 'all';
+  const openCard = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'openrouter' ? $('provider-card-openrouter') : flowProv === 'custom' ? $('custom-add-card') : null;
+  if(openCard && 'open' in openCard) openCard.open = true;
+  renderFlowList();
+}));
+$('m-q')?.addEventListener('input', renderFlowList);
+document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
+  const cap = c.dataset.cap;
+  if(cap === 'all') flowChips.clear();
+  else if(flowChips.has(cap)) flowChips.delete(cap);
+  else flowChips.add(cap);
+  document.querySelectorAll('#m-chips .fchip').forEach(x=>{
+    const on = x.dataset.cap === 'all' ? flowChips.size === 0 : flowChips.has(x.dataset.cap);
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-pressed', String(on));
+  });
+  renderFlowList();
+}));
+document.querySelectorAll('input[name="easy-target"]').forEach(r => r.addEventListener('change', renderFlowList));
+$('m-retry')?.addEventListener('click', ()=>{
+  const err = $('m-err');
+  if(err){ err.hidden = true; delete err.dataset.failed; }
+  fetchAndShowModels(flowProv === 'all' || flowProv === 'custom' ? flowLastPid : flowProv);
+});
+$('m-nokey-link')?.addEventListener('click', (e)=>{
+  e.preventDefault();
+  const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
+  if(card && 'open' in card) card.open = true;
+  const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : els.keyOpenrouter;
+  input?.focus?.();
+});
+function flowInit(){ renderFlowList(); }
 
 // --- custom providers (providers tab only) ---
 function slugifyCustomId(name){
@@ -561,7 +760,7 @@ function renderCustomProviders(){
       // drop chain entries pointing at removed provider
       sttChainState = sttChainState.filter(x=> providerIdOf(x,'') !== c.id);
       polishChainState = polishChainState.filter(x=> providerIdOf(x,'') !== c.id);
-      persistChains(); renderCustomProviders(); buildEasyProviderOptions(); renderAllChains();
+      persistChains(); renderCustomProviders(); renderFlowList(); renderAllChains();
       Logger.toast('حذف شد');
     });
     head.append(dot, name, pill, spacer, base, rm);
@@ -598,7 +797,7 @@ $('btn-custom-add')?.addEventListener('click', ()=>{
     Storage.saveSettings({ customProviders: [...cur, { id, name, baseURL, key }] });
   }catch(e){ Logger.toast(e.message || 'BaseURL نامعتبر'); return; }
   els.customName.value=''; els.customBaseUrl.value=''; els.customKey.value='';
-  renderCustomProviders(); buildEasyProviderOptions(); renderProvidersStatus();
+  renderCustomProviders(); renderFlowList(); renderProvidersStatus();
   Logger.toast('ارائه‌دهنده اضافه شد');
 });
 $('btn-custom-test')?.addEventListener('click', async ()=>{
@@ -621,7 +820,7 @@ $('btn-custom-test')?.addEventListener('click', async ()=>{
       try{
         Storage.saveSettings({ customProviders: [...cur, { id, name, baseURL, key }] });
       }catch(e){ Logger.setStatus('❌ سفارشی: '+sanitizeMsg(e.message || e),'error'); return; }
-      renderCustomProviders(); buildEasyProviderOptions(); renderProvidersStatus();
+      renderCustomProviders(); renderFlowList(); renderProvidersStatus();
     }
     await Transcription.listModels(id);
     Logger.setStatus('✅ ارائه‌دهنده سفارشی اوکی','info'); Logger.toast('ok');
@@ -633,7 +832,6 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
   if(!stored){ Logger.toast('اول ارائه‌دهنده را اضافه کن'); return; }
   const baseURL = els.customBaseUrl?.value.trim() || stored.baseURL || '';
   const key = els.customKey?.value || stored.key || '';
-  const listEl = els.customModelsList;
   if(!baseURL || !key){ Logger.toast('BaseURL و کلید لازم است'); return; }
   try{
     // Route through Transcription seam so untrusted custom hosts hit the user-confirm gate.
@@ -641,73 +839,18 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
     const cur = Storage.getSettings().customProviders.slice();
     Storage.saveSettings({ customProviders: cur.map(x => x.id === stored.id ? { ...x, baseURL, key } : x) });
     const ids = await Transcription.listModels(stored.id);
-    if(listEl) renderModelCodes(listEl, ids, stored.id, 'polish');
+    modelCache.set(stored.id, ids);
+    fetchStamp.set(stored.id, 'به‌روزشده: همین حالا (حافظه)');
+    renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(listEl){ listEl.style.display='block'; listEl.textContent='خطا: '+safe; } }
+  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
 });
 
-// --- easy-add tab: provider select → model select (listModels cache) → target → Add ---
-// easyFreeMode mirrors which control is visible (manual-id input vs cached select);
-// the Add handler reads the flag, never inline style, so a visibility refactor can't desync it.
-let easyFreeMode = false;
-function buildEasyProviderOptions(){
-  const sel = els.easyProvider;
-  if(!sel) return;
-  const prev = sel.value;
-  sel.innerHTML='';
-  let providers = [];
-  try{ providers = Storage.getProviders(); }catch{ providers = []; }
-  for(const p of providers){
-    const opt = document.createElement('option');
-    opt.value = p.id;
-    opt.textContent = `${p.name} — ${p.hasKey ? '✓ کلید' : '⚠ بی‌کلید'}`;
-    sel.appendChild(opt);
-  }
-  if(prev && [...sel.options].some(o=> o.value===prev)) sel.value = prev;
-  refreshEasyModels(false);
-}
-function refreshEasyModels(fetchIfMissing){
-  const sel = els.easyModel, provSel = els.easyProvider;
-  if(!sel || !provSel) return;
-  const pid = provSel.value;
-  const free = els.easyModelInput;
-  const cached = modelCache.get(pid);
-  const showFree = pid === 'gemini' && !(cached && cached.length);
-  easyFreeMode = showFree;
-  if(sel) sel.style.display = showFree ? 'none' : '';
-  if(free){ free.style.display = showFree ? '' : 'none'; if(!showFree) free.value=''; }
-  if(sel) sel.innerHTML='';
-  if(!pid){ const o=document.createElement('option'); o.value=''; o.textContent='— اول ارائه‌دهنده را انتخاب کن —'; sel.appendChild(o); return; }
-  if(!cached){
-    const o=document.createElement('option'); o.value=''; o.textContent='— «تازه‌سازی مدل‌ها» را بزن —'; sel.appendChild(o);
-    if(fetchIfMissing) loadEasyModels(pid);
-    return;
-  }
-  if(!cached.length){ const o=document.createElement('option'); o.value=''; o.textContent='— مدلی یافت نشد —'; sel.appendChild(o); return; }
-  for(const id of cached){
-    const o=document.createElement('option'); o.value=id; o.textContent=id; sel.appendChild(o);
-  }
-}
-async function loadEasyModels(providerId){
-  if(!providerId) return;
-  const btn = $('btn-easy-refresh');
-  if(btn) btn.textContent='...';
-  try{
-    saveSettings();
-    const ids = await Transcription.listModels(providerId);
-    modelCache.set(providerId, ids);
-    refreshEasyModels(false);
-    Logger.toast(`مدل‌ها: ${ids.length}`);
-    announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; refreshEasyModels(false); Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
-  finally{ if(btn) btn.textContent='تازه‌سازی مدل‌ها'; }
-}
-els.easyProvider?.addEventListener('change', ()=> refreshEasyModels(true));
-$('btn-easy-refresh')?.addEventListener('click', ()=> loadEasyModels(els.easyProvider?.value));
+// --- manual Gemini id (empty-state action): rail provider + target radios → Add ---
 $('btn-easy-add')?.addEventListener('click', ()=>{
-  const pid = els.easyProvider?.value || '';
-  const mid = (easyFreeMode ? (els.easyModelInput?.value || '') : (els.easyModel?.value || '')).trim();
+  const pid = flowProv === 'custom' ? '' : flowProv === 'all' ? 'gemini' : flowProv;
+  const mid = (els.easyModelInput?.value || '').trim();
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
   if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
   const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
@@ -718,6 +861,7 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
   }
   if(!Storage.hasKeyForProvider(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
   addModelToChain(mid, pid, target);
+  renderFlowList();
 });
 $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
 $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });

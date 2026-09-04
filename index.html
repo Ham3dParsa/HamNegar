@@ -64,24 +64,34 @@
   <div class="modal-box modal-wide">
     <h3>⚙️ تنظیمات</h3>
     <div class="settings-tabs" role="tablist" aria-label="بخش‌های تنظیمات">
-      <button type="button" class="settings-tab active" id="tab-providers" role="tab" aria-selected="true" aria-controls="panel-providers">ارائه‌دهنده‌ها</button>
-      <button type="button" class="settings-tab" id="tab-easyadd" role="tab" aria-selected="false" aria-controls="panel-easyadd">افزودن آسان</button>
+      <button type="button" class="settings-tab active" id="tab-models" role="tab" aria-selected="true" aria-controls="panel-models">مدل‌ها</button>
       <button type="button" class="settings-tab" id="tab-chains" role="tab" aria-selected="false" aria-controls="panel-chains">زنجیره‌ها</button>
       <button type="button" class="settings-tab" id="tab-wave" role="tab" aria-selected="false" aria-controls="panel-wave">موج صدا</button>
     </div>
 
-    <!-- Providers tab: keys editable ONLY here -->
-    <section id="panel-providers" role="tabpanel" aria-labelledby="tab-providers">
-      <div id="providers-list">
+    <!-- Models tab: ONE flow card — rail (single truth) → inline key card → search+chips → flat list -->
+    <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
+      <div class="flow-card" id="models-flow">
+        <div class="rail" id="prov-rail" role="listbox" aria-label="ارائه‌دهنده‌ها">
+          <button type="button" data-prov="groq">Groq</button>
+          <button type="button" data-prov="gemini">Google AI Studio</button>
+          <button type="button" data-prov="openrouter">OpenRouter</button>
+          <button type="button" data-prov="custom">＋ سفارشی</button>
+          <button type="button" data-prov="all" class="active">همه</button>
+        </div>
+        <div id="models-keys-slot">
         <details class="provider-card" id="provider-card-groq" open>
           <summary class="provider-head"><span class="dot" id="dot-groq"></span><b>Groq</b><span class="chain-badge" id="pill-groq">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست Groq</button></summary>
           <div class="provider-body">
             <label for="key-groq">Groq API Key:</label>
             <div class="key-row"><input type="password" id="key-groq" placeholder="gsk_..."><button type="button" class="btn-ghost btn-sm" id="btn-groq-models">لیست مدل‌ها</button></div>
             <div id="hint-groq" class="hint">با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.</div>
-            <label for="groq-base-url">Groq Base URL (قابل تنظیم):</label>
-            <div class="key-row"><input type="text" id="groq-base-url" placeholder="https://api.groq.com/openai/v1" dir="ltr"></div>
-            <div id="groq-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
+            <div class="hint-inline endpoint" dir="ltr"><a href="https://api.groq.com/openai/v1/models" target="_blank" rel="noopener">api.groq.com/openai/v1/models</a></div>
+            <div class="hint-inline cacheline" id="cache-groq">نه هنوز — «لیست مدل‌ها» را بزن</div>
+            <details class="hint" style="cursor:pointer"><summary>پیشرفته (baseURL)</summary>
+              <label for="groq-base-url">Groq Base URL (قابل تنظیم):</label>
+              <div class="key-row"><input type="text" id="groq-base-url" placeholder="https://api.groq.com/openai/v1" dir="ltr"></div>
+            </details>
             <details class="hint" style="cursor:pointer"><summary>محدودیت‌های رایگان Groq — Chat Completions (30 RPM)</summary>
               <table style="width:100%;font-size:11px;margin-top:6px;border-collapse:collapse"><thead><tr style="color:var(--muted)"><th style="text-align:right">مدل</th><th>RPM</th><th>RPD</th><th>TPM</th><th>TPD</th></tr></thead><tbody>
               <tr><td>allam-2-7b</td><td>30</td><td>7K</td><td>6K</td><td>500K</td></tr>
@@ -100,7 +110,8 @@
             <label for="key-gemini">Google AI Studio API Key (Auth):</label>
             <div class="key-row"><input type="password" id="key-gemini" placeholder="AQ...."><button type="button" class="btn-ghost btn-sm" id="btn-gemini-models">لیست مدل‌ها</button></div>
             <div id="hint-gemini" class="hint">کلید را از <code>aistudio.google.com</code> بگیر؛ با <code>AQ.</code> شروع می‌شود (قدیمی <code>AIza</code> هم فعلا کار می‌کند). راهنمای مدل‌ها: <a href="https://ai.google.dev/gemini-api/docs/models" target="_blank" rel="noopener">ai.google.dev</a>.</div>
-            <div id="gemini-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
+            <div class="hint-inline endpoint" dir="ltr"><a href="https://generativelanguage.googleapis.com/v1beta/models" target="_blank" rel="noopener">generativelanguage.googleapis.com/v1beta/models</a></div>
+            <div class="hint-inline cacheline" id="cache-gemini">نه هنوز — «لیست مدل‌ها» را بزن</div>
           </div>
         </details>
 
@@ -108,11 +119,14 @@
           <summary class="provider-head"><span class="dot" id="dot-openrouter"></span><b>OpenRouter</b><span class="chain-badge" id="pill-openrouter">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-polish">تست پالیش</button></summary>
           <div class="provider-body">
             <label for="key-openrouter">OpenRouter API Key:</label>
-            <div class="key-row"><input type="password" id="key-openrouter" placeholder="sk-or-v1-..."></div>
+            <div class="key-row"><input type="password" id="key-openrouter" placeholder="sk-or-v1-..."><button type="button" class="btn-ghost btn-sm" id="btn-or-models">لیست مدل‌ها</button></div>
             <div id="hint-openrouter" class="hint">از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Groq انجام می‌شود.</div>
-            <label for="openrouter-base-url">OpenRouter Base URL:</label>
-            <div class="key-row"><input type="text" id="openrouter-base-url" placeholder="https://openrouter.ai/api/v1" dir="ltr"><button type="button" class="btn-ghost btn-sm" id="btn-or-models">لیست مدل‌ها</button></div>
-            <div id="or-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
+            <div class="hint-inline endpoint" dir="ltr"><a href="https://openrouter.ai/api/v1/models" target="_blank" rel="noopener">openrouter.ai/api/v1/models</a></div>
+            <div class="hint-inline cacheline" id="cache-openrouter">نه هنوز — «لیست مدل‌ها» را بزن</div>
+            <details class="hint" style="cursor:pointer"><summary>پیشرفته (baseURL)</summary>
+              <label for="openrouter-base-url">OpenRouter Base URL:</label>
+              <div class="key-row"><input type="text" id="openrouter-base-url" placeholder="https://openrouter.ai/api/v1" dir="ltr"></div>
+            </details>
           </div>
         </details>
 
@@ -132,28 +146,32 @@
               <button type="button" class="btn-ghost btn-sm" id="btn-custom-models">بارگذاری مدل‌ها</button>
               <button type="button" class="btn-ghost btn-sm" id="btn-custom-add">افزودن</button>
             </div>
-            <div id="custom-models-list" class="hint" style="display:none;max-height:120px;overflow:auto"></div>
           </div>
         </details>
-      </div>
-    </section>
-
-    <!-- Easy-add tab: provider → model → target → Add -->
-    <section id="panel-easyadd" role="tabpanel" aria-labelledby="tab-easyadd" hidden>
-      <div class="pref-section">
-        <div class="pref-head"><h4>➕ افزودن آسان مدل</h4></div>
-        <label for="easy-provider-select">ارائه‌دهنده:</label>
-        <div class="key-row"><select id="easy-provider-select"></select><button type="button" class="btn-ghost btn-sm" id="btn-easy-refresh">تازه‌سازی مدل‌ها</button></div>
-        <label for="easy-model-select">مدل:</label>
-        <select id="easy-model-select"><option value="">— اول ارائه‌دهنده را انتخاب کن —</option></select>
-        <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" style="display:none">
-        <div class="hint" id="easy-models-hint">مدل‌ها از حافظه (listModels) می‌آیند؛ با «تازه‌سازی» به‌روز می‌شوند. اگر لیست خالی ماند، شناسه را دستی بنویس.</div>
-        <fieldset class="easy-target" style="border:none;display:flex;gap:8px;flex-wrap:wrap">
-          <legend class="hint-inline">مقصد:</legend>
-          <label class="chip"><input type="radio" name="easy-target" id="easy-target-stt" value="stt" checked> <strong>STT</strong></label>
-          <label class="chip"><input type="radio" name="easy-target" id="easy-target-polish" value="polish"> <strong>پالیش</strong></label>
-        </fieldset>
-        <button type="button" class="btn-ghost" id="btn-easy-add">افزودن به زنجیره</button>
+        </div>
+        <div class="state-card state-warn" id="m-nokey" hidden>⚠ کلید این ارائه‌دهنده ثبت نشده — فهرست ممکن است ناقص باشد. <a href="#" id="m-nokey-link">وارد کردن کلید</a></div>
+        <div class="fetch-bar">
+          <label for="m-q" class="hint-inline">جست‌وجوی کلیدواژه در مدل‌ها:</label>
+          <input type="search" id="m-q" placeholder="جست‌وجوی مدل… (مثل whisper)">
+          <div class="fchips" id="m-chips" role="group" aria-label="پالایه قابلیت">
+            <button type="button" class="fchip active" data-cap="all" aria-pressed="true">همه All</button>
+            <button type="button" class="fchip" data-cap="stt" aria-pressed="false">🎙 رونویسی STT</button>
+            <button type="button" class="fchip" data-cap="t2t" aria-pressed="false">✍️ متنی T2T</button>
+            <button type="button" class="fchip" data-cap="free" aria-pressed="false">🆓 رایگان Free</button>
+          </div>
+          <fieldset class="easy-target" style="border:none;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0;margin:0">
+            <legend class="hint-inline">مقصد:</legend>
+            <label class="chip"><input type="radio" name="easy-target" id="easy-target-stt" value="stt" checked> <strong>STT</strong></label>
+            <label class="chip"><input type="radio" name="easy-target" id="easy-target-polish" value="polish"> <strong>پالیش</strong></label>
+          </fieldset>
+          <div class="count hint-inline" id="m-count" aria-live="polite"></div>
+          <div class="hint" id="easy-models-hint">مدل‌ها از حافظه (listModels) می‌آیند؛ با «لیست مدل‌ها»ی هر ارائه‌دهنده به‌روز می‌شوند.</div>
+        </div>
+        <div id="models-list"></div>
+        <div class="state-card state-err" id="m-err" hidden>✕ دریافت مدل‌ها ناموفق بود. <button type="button" class="btn-ghost btn-sm" id="m-retry">تلاش مجدد</button></div>
+        <div class="state-card state-empty" id="m-empty" hidden>نتیجه‌ای با این پالایه‌ها نیست — جست‌وجو یا چیپ‌ها را عوض کن.
+          <span id="m-manual-wrap" hidden> <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" aria-label="شناسه دستی Gemini"> <button type="button" class="btn-ghost btn-sm" id="btn-easy-add">افزودن دستی Gemini</button></span>
+        </div>
       </div>
     </section>
 
@@ -171,7 +189,7 @@
         <p class="pref-sub" style="font-size:11px;color:var(--muted);margin:4px 0">اولویت از بالا به پایین — ▲▼ یا بکش ⋮⋮ برای جابجایی، سوییچ برای خاموش/روشن، ✕ برای حذف. وضعیت کلید فقط نمایشی است (✓/⚠).</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
-          <span class="hint-inline">افزودن مدل فقط از زبانه «افزودن آسان»</span>
+          <span class="hint-inline">افزودن مدل فقط از زبانه «مدل‌ها»</span>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی STT</button>
         </div>
       </section>
