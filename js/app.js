@@ -37,7 +37,11 @@ Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl:
 // --- log filter/search UI lives in app.js (seam: logger stays 3-call log/setStatus/toast) ---
 let currentFilter = 'all';
 let searchQuery = '';
-function passes(level, text) {
+let isolatedRun = null; // ticket/16: click a run separator to isolate that run (click again to clear)
+function isSep(el){ return !!el && !!el.classList && el.classList.contains('log-sep'); }
+function passes(level, text, el) {
+  if (isSep(el)) return true; // separators are structural — always visible
+  if (isolatedRun != null && String(el?.dataset?.run || '') !== String(isolatedRun)) return false;
   if (currentFilter !== 'all' && level !== currentFilter) return false;
   if (searchQuery && !text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
   return true;
@@ -46,8 +50,13 @@ function applyFilters() {
   if (!els.logBody) return;
   for (const el of els.logBody.children) {
     const lvl = el.dataset.level || 'info';
-    const ok = passes(lvl, el.textContent);
+    const ok = passes(lvl, el.textContent, el);
     el.classList.toggle('hidden', !ok);
+  }
+  for (const sep of els.logBody.querySelectorAll('.log-sep')) {
+    const active = isolatedRun != null && String(sep.dataset.run) === String(isolatedRun);
+    sep.classList.toggle('isolated', active);
+    sep.setAttribute('aria-pressed', active ? 'true' : 'false');
   }
 }
 function buildFilterUI() {
@@ -100,12 +109,28 @@ let logReady = false; // flipped after initial collapsed state applies (guards T
 Logger.log = (level, msg, data) => {
   _origLog(level, msg, data);
   const el = els.logBody.lastElementChild;
-  if (el && !passes(level, el.textContent)) el.classList.add('hidden');
+  if (el && !passes(level, el.textContent, el)) el.classList.add('hidden');
   if (level === 'error' && logReady && els.logPanel?.classList.contains('collapsed')) {
     applyLogCollapsed(false);
     Logger.toast('خطای جدید — لاگ باز شد');
   }
 };
+// ticket/16: separator click/keyboard isolates that run (combines with level filter + search)
+function toggleRunIsolation(sep){
+  if (!sep) return;
+  const run = sep.dataset.run;
+  isolatedRun = (isolatedRun != null && String(isolatedRun) === String(run)) ? null : run;
+  applyFilters();
+  Logger.toast(isolatedRun != null ? `فقط اجرای #${isolatedRun} — کلیک دوباره: همه` : 'نمایش همه اجراها');
+}
+els.logBody?.addEventListener('click', (e) => {
+  const sep = e.target?.closest?.('.log-sep');
+  if (sep && els.logBody.contains(sep)) toggleRunIsolation(sep);
+});
+els.logBody?.addEventListener('keydown', (e) => {
+  const sep = e.target?.closest?.('.log-sep');
+  if (sep && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleRunIsolation(sep); }
+});
 
 if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
 
@@ -1688,6 +1713,7 @@ async function handleTranscription(blob, snap){
   try{
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const signal = transcribingAbort?.signal;
+    Logger.groupRun('🎙 رونویسی');
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
     if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { code:'STALE', aborted:true }); }
     if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { code:'ABORTED', aborted:true }); }
@@ -1773,6 +1799,216 @@ els.btnCopy.onclick=async()=>{
   Logger.toast('کپی شد');
 };
 els.btnClear.onclick=()=>{ if(!els.output.value.trim()){ els.btnClear.classList.remove('shake'); void els.btnClear.offsetWidth; els.btnClear.classList.add('shake'); setTimeout(()=>els.btnClear.classList.remove('shake'),400); Logger.toast('متن خالی است'); return; } els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+// --- stagebar (ticket/16): manual polish/translate stages on current text + per-run log groups ---
+// Behavior adapted from temp/hamnegar-demo runStage/runTranslate (same owner labels, scope,
+// raw stack, language combo); pipelines use the production polish chain + Transcription.translate.
+const STAGE_LANGS = [
+  ['🇮🇷 فارسی', 'fa'], ['🇬🇧 English', 'en'], ['🇩🇪 Deutsch', 'de'], ['🇫🇷 Français', 'fr'],
+  ['🇪🇸 Español', 'es'], ['🇮🇹 Italiano', 'it'], ['🇹🇷 Türkçe', 'tr'], ['🇸🇦 العربية', 'ar'],
+  ['🇷🇺 Русский', 'ru'], ['🇨🇳 中文', 'zh'],
+];
+const SYS_SIMPLE = 'تو ویراستار فارسی هستی. فقط غلط‌های املایی و علائم نگارشی را اصلاح کن (نیم‌فاصله، «رابطه کاربری»→«رابط کاربری» وقتی UI است). دستور زبان و سبک را عوض نکن. فقط متن اصلاح‌شده را برگردان.';
+const SYS_ADV = 'تو ویراستار فارسی هستی. املا، علائم نگارشی و دستور زبان را با هم اصلاح کن. معنی، اعداد و نام‌ها را حفظ کن. فقط متن اصلاح‌شده را برگردان.';
+const SYS_GRAMMAR = 'فقط دستور زبان و صرف کلمات را اصلاح کن. املا، سبک و علائم را عوض نکن، بازنویسی نکن. فقط متن اصلاح‌شده را برگردان.';
+let stageRawStack = [];
+let langHi = 0, langView = STAGE_LANGS.slice();
+function stageScope(){
+  const v = els.output.value;
+  const a = Math.min(selStart, v.length), b = Math.min(selEnd, v.length);
+  if (b > a) return { text: v.slice(a, b), start: a, end: b, kind: 'selection', sel: v.slice(a, b) };
+  return { text: v, start: 0, end: v.length, kind: 'full' };
+}
+function updateStageScope(){
+  const badge = $('stage-scope');
+  if (!badge) return;
+  const g = stageScope();
+  badge.textContent = g.kind === 'selection'
+    ? 'دامنه: انتخاب («' + g.sel.slice(0, 24) + (g.sel.length > 24 ? '…' : '') + '»)'
+    : 'دامنه: کل متن';
+}
+['select', 'keyup', 'mouseup'].forEach(ev => els.output.addEventListener(ev, updateStageScope));
+els.output.addEventListener('focus', updateStageScope);
+// stagebar button visibility (session-only: storage seam is locked, so no persistence here)
+const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…'], ['stage-raw', 'خام']];
+function stageBarApplyVisibility(){
+  const menu = $('stage-edit-menu');
+  if (menu && !menu.dataset.built) {
+    menu.dataset.built = '1';
+    for (const [id, label] of STAGE_BTNS) {
+      const lab = document.createElement('label');
+      lab.className = 'switch';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.setAttribute('aria-label', 'نمایش دکمه ' + label);
+      cb.addEventListener('change', () => { const btn = $(id); if (btn) btn.hidden = !cb.checked; });
+      lab.append(cb, document.createTextNode(' ' + label));
+      menu.appendChild(lab);
+    }
+  }
+}
+function stageModelPick(){
+  const sel = $('stage-model');
+  try { const o = sel?.value && JSON.parse(sel.value); if (o?.id) return o; } catch {}
+  const first = polishChainState.find(e => e.enabled !== false);
+  if (!first) return null;
+  return { id: entryIdOf(first), providerId: providerIdOf(first, 'groq') };
+}
+function renderStageModelOptions(){
+  const sel = $('stage-model');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const head = document.createElement('option');
+  head.value = '';
+  head.textContent = 'همان مدل متن اصلی';
+  sel.appendChild(head);
+  const seen = new Set();
+  for (const e of polishChainState) {
+    const id = entryIdOf(e), pid = providerIdOf(e, 'groq');
+    const key = `${pid}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const o = document.createElement('option');
+    o.value = JSON.stringify({ id, providerId: pid });
+    o.textContent = `${id} (${pid})${e.enabled === false ? ' — خاموش' : ''}`;
+    sel.appendChild(o);
+  }
+  if (prev) sel.value = prev;
+}
+function stageApply(scope, next){
+  const v = els.output.value;
+  els.output.value = v.slice(0, scope.start) + next + v.slice(scope.end);
+  els.output.focus();
+  els.output.setSelectionRange(scope.start + next.length, scope.start + next.length);
+  saveCursor(); updateCounts(); Storage.saveDraft(els.output.value);
+  editorHistory.push(els.output.value);
+  updateStageScope(); syncActionbar();
+}
+function stageQuotaSplit(model, words, chars){
+  try {
+    Quota.record(model, { durationMs: 0, words, chars, kind: 'postprocess' });
+    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+    Dashboard.renderOverall();
+  } catch {}
+}
+async function runStage(kind, faLabel, sysPrompt, logTitle){
+  const scope = stageScope();
+  if (!scope.text.trim()) { Logger.toast('متنی برای پالایش نیست'); return; }
+  Logger.groupRun(logTitle);
+  Logger.setStatus('✨ ' + faLabel + '…', 'warn');
+  try {
+    const pick = stageModelPick();
+    if (!pick) throw Object.assign(new Error('مدل متنی در زنجیره نیست'), { status: 401 });
+    if (!Storage.hasKeyForProvider(pick.providerId)) throw Object.assign(new Error('⚠ کلید ' + pick.providerId + ' نیست'), { status: 401 });
+    stageRawStack.push(els.output.value);
+    const rawBtn = $('stage-raw');
+    if (rawBtn) rawBtn.disabled = false;
+    // default layer 'polish': polish guards stay on for stages
+    const out = await Transcription.queryChat(pick.providerId, scope.text, { system: sysPrompt, model: pick.id });
+    stageApply(scope, out);
+    stageQuotaSplit(pick.id, scope.text.split(/\s+/).length, scope.text.length);
+    Logger.log('info', `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${pick.id} (${pick.providerId})`);
+    Logger.setStatus('✅ ' + faLabel + ' نشست', 'info');
+    Logger.toast(faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'));
+  } catch (e) {
+    const safe = sanitizeMsg(e.message || e);
+    Logger.setStatus('❌ ' + faLabel + ': ' + safe, 'error');
+    Logger.toast('❌ ' + faLabel + ': ' + safe.slice(0, 60));
+  }
+}
+async function runTranslate(code){
+  const scope = stageScope();
+  if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
+  stageRawStack.push(els.output.value);
+  const rawBtn = $('stage-raw');
+  if (rawBtn) rawBtn.disabled = false;
+  Logger.groupRun('🌐 ترجمه → ' + code);
+  Logger.setStatus('🌐 ترجمه → ' + code + '…', 'warn');
+  try {
+    const out = await Transcription.translate(scope.text, code);
+    stageApply(scope, out);
+    stageQuotaSplit('translate-' + code, scope.text.split(/\s+/).length, scope.text.length);
+    Logger.log('info', `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'}`);
+    Logger.setStatus('✅ ترجمه نشست', 'info');
+    Logger.toast('ترجمه → ' + code + ' ✓');
+  } catch (e) {
+    const safe = sanitizeMsg(e.message || e);
+    Logger.setStatus('❌ ترجمه: ' + safe, 'error');
+    Logger.toast('❌ ترجمه: ' + safe.slice(0, 60));
+  }
+}
+$('stage-simple')?.addEventListener('click', () => runStage('simple', 'پالایش ساده', SYS_SIMPLE, '✨ پالایش ساده'));
+$('stage-advanced')?.addEventListener('click', () => runStage('advanced', 'پالایش پیشرفته', SYS_ADV, '✨ پالایش پیشرفته'));
+$('stage-grammar')?.addEventListener('click', () => runStage('grammar', 'پالایش دستوری', SYS_GRAMMAR, '📝 پالایش دستوری'));
+$('stage-tr-quick')?.addEventListener('click', () => {
+  const t = els.output.value.trim();
+  runTranslate(/^[A-Za-z]/.test(t) ? 'fa' : 'en');
+});
+$('stage-tr-panel')?.addEventListener('click', (e) => {
+  const p = $('tr-panel');
+  if (!p) return;
+  p.hidden = !p.hidden;
+  e.currentTarget.setAttribute('aria-pressed', String(!p.hidden));
+  if (!p.hidden) { $('stage-lang-search')?.focus(); renderLangs(); }
+});
+$('stage-raw')?.addEventListener('click', () => {
+  const prev = stageRawStack.pop();
+  if (prev == null) return;
+  els.output.value = prev; saveCursor(); updateCounts(); Storage.saveDraft(prev);
+  editorHistory.push(prev);
+  const rawBtn = $('stage-raw');
+  if (rawBtn) rawBtn.disabled = !stageRawStack.length;
+  updateStageScope(); syncActionbar();
+  Logger.log('info', '↩ برگشت به خام', { chars: prev.length });
+  Logger.toast('به خام برگشت');
+});
+// searchable language combo (~10 langs, filter + ↑↓ + Enter, outside-click/Esc close)
+function renderLangs(){
+  const box = $('stage-lang-opts');
+  if (!box) return;
+  box.innerHTML = '';
+  (langView.length ? langView : [['— موردی نیست', '__none__']]).forEach(([label, code], i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('role', 'option');
+    if (i === langHi) b.classList.add('hl');
+    b.addEventListener('mouseenter', () => { langHi = i; paintLangHi(); });
+    b.addEventListener('click', () => {
+      if (code !== '__none__') { const p = $('tr-panel'); if (p) p.hidden = true; runTranslate(code); }
+    });
+    box.appendChild(b);
+  });
+}
+function paintLangHi(){
+  const box = $('stage-lang-opts');
+  if (!box) return;
+  [...box.children].forEach((x, i) => x.classList.toggle('hl', i === langHi));
+}
+$('stage-lang-search')?.addEventListener('input', (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  langView = STAGE_LANGS.filter(([l, c]) => l.toLowerCase().includes(q) || c.includes(q));
+  langHi = 0;
+  renderLangs();
+});
+$('stage-lang-search')?.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); langHi = Math.min(langView.length - 1, langHi + 1); paintLangHi(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); langHi = Math.max(0, langHi - 1); paintLangHi(); }
+  else if (e.key === 'Enter' && langView[langHi]) { const p = $('tr-panel'); if (p) p.hidden = true; runTranslate(langView[langHi][1]); }
+  else if (e.key === 'Escape') { const p = $('tr-panel'); if (p) p.hidden = true; }
+});
+document.addEventListener('click', (e) => {
+  const panel = $('tr-panel');
+  if (panel && !panel.hidden && !e.target.closest('#tr-panel') && !e.target.closest('#stage-tr-panel')) panel.hidden = true;
+  const det = $('stage-settings');
+  if (det && det.open && !e.target.closest('#stage-settings')) det.removeAttribute('open');
+});
+const _renderAllChainsBase = renderAllChains;
+renderAllChains = function(){ _renderAllChainsBase(); try { renderStageModelOptions(); } catch {} };
+stageBarApplyVisibility();
+renderStageModelOptions();
+updateStageScope();
 mainWaveInit();
 const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();

@@ -1,5 +1,5 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, translate(text,lang,entry?)->text (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
@@ -121,12 +121,12 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} ${layer} fail`,{status:res.status, model, base}); throw err; }
   const j=await res.json(); Logger.log('debug',`${providerId} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
 }
-async function queryPolishViaGemini(text, model, layer = 'polish'){
+async function queryPolishViaGemini(text, model, layer = 'polish', system = null){
   const { geminiKey: k } = Storage.getSettings();
   if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید Gemini برای پالیش نیست' : `کلید Gemini برای ${layer} نیست`),{status:401});
   if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const prompt = `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; do not change the language, meaning or tone, do not explain, return ONLY the corrected text. If no correction is needed, return the input verbatim; never comment or apologize. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)\nText:\n${text}`;
+  const prompt = (system || `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; do not change the language, meaning or tone, do not explain, return ONLY the corrected text. If no correction is needed, return the input verbatim; never comment or apologize. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`) + `\nText:\n${text}`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
     res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2000}}),signal:ctrl.signal});
@@ -181,6 +181,27 @@ async function queryResponsesText(text, { system, model, layer = 'polish' } = {}
   return validatePolishOutput(out, text, model, layer);
 }
 
+// Translate (ticket/16): same text-model chain as polish (default = first enabled polish
+// entry), but a language-neutral translate prompt on layer='translate' so the polish
+// meta-commentary/length guards in validatePolishOutput don't false-fire (layer!=='polish'
+// returns after the empty-output check). STT/polish paths untouched.
+const TRANSLATE_NAMES = { fa:'Persian (فارسی)', en:'English', de:'German', fr:'French', es:'Spanish', it:'Italian', tr:'Turkish', ar:'Arabic', ru:'Russian', zh:'Chinese' };
+function translateSystem(lang){
+  const dest = TRANSLATE_NAMES[lang] || String(lang || '').slice(0, 24) || 'English';
+  return `You are an accurate translator. Translate the input text into ${dest}. Preserve numbers, names and formatting. Return ONLY the translation — never commentary, explanation or apology.`;
+}
+async function translateText(text, lang, entry){
+  if(!text || !text.trim()) throw Object.assign(new Error('متنی برای ترجمه نیست'),{status:400});
+  const { polishChain } = Storage.getSettings();
+  const pick = entry || (polishChain || []).find(e => e && e.enabled !== false) || (polishChain || [])[0];
+  if(!pick) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
+  const { model, providerId } = polishTargetOf(pick);
+  if(!Storage.hasKeyForProvider(providerId)) throw Object.assign(new Error(`⚠ کلید ${providerId} نیست`),{status:401});
+  const system = translateSystem(lang);
+  if(providerId === 'gemini') return queryPolishViaGemini(text, model, 'translate', system);
+  if(providerId === 'zenspark') return queryResponsesText(text, { system, model, layer: 'translate' });
+  return queryChat(providerId, text, { system, model, layer: 'translate' });
+}
 function sttProviderOf(entry){
   if(entry && typeof entry === 'object'){
     if(typeof entry.providerId === 'string' && entry.providerId.trim()) return entry.providerId.trim();
@@ -381,6 +402,7 @@ export const Transcription = {
     return true;
   },
   async queryChat(providerId, text, opts){ return queryChat(providerId, text, opts); },
+  async translate(text, lang, entry){ return translateText(text, lang, entry); },
   async testPolish(){
     return this.polishText('رابطه کاربری زیبا است');
   }

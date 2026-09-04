@@ -43,6 +43,28 @@
     <div class="tfoot"><span>💡 پیش‌نویس خودکار ذخیره می‌شود</span><span class="grip" id="grip" title="بکش تا اندازه عوض شود">↕ بکش</span></div>
   </section>
   <div class="output-meta"><span class="hint-inline">تاریخچه واگرد/ازنو در نوار اقدام پایین است</span></div>
+  <section id="stagebar" aria-label="نوار مراحل پالایش و ترجمه">
+    <div class="stage-row" role="toolbar" aria-label="مراحل پالایش">
+      <button type="button" id="stage-simple" class="sbtn"><span class="t">✨ پالایش ساده</span><small>املا و علائم نگارشی</small></button>
+      <button type="button" id="stage-advanced" class="sbtn"><span class="t">✨ پالایش پیشرفته</span><small>املا + دستور زبان</small></button>
+      <button type="button" id="stage-grammar" class="sbtn"><span class="t">📝 پالایش دستوری</span><small>فقط دستور</small></button>
+      <button type="button" id="stage-tr-quick" class="sbtn ghost">🌐 <span class="t">EN⇄FA</span></button>
+      <button type="button" id="stage-tr-panel" class="sbtn ghost" aria-pressed="false">🌍 <span class="t">ترجمه…</span></button>
+      <button type="button" id="stage-raw" class="sbtn ghost" disabled>↩ <span class="t">خام</span></button>
+      <details id="stage-settings" class="settings icon-only"><summary title="تنظیمات مراحل" aria-label="تنظیمات مراحل">⚙️</summary>
+        <div class="menu">
+          <label style="font-size:12px;color:var(--muted)">مدل متنی <select class="model" id="stage-model"><option value="">همان مدل متن اصلی</option></select></label>
+          <div class="menu-div">نمایش دکمه‌ها</div>
+          <div id="stage-edit-menu"></div>
+        </div>
+      </details>
+      <span class="scope" id="stage-scope">دامنه: کل متن</span>
+    </div>
+    <div class="combo" id="tr-panel" hidden>
+      <input id="stage-lang-search" placeholder="جستجوی زبان… (مثل en، عربی)" role="combobox" aria-expanded="true" aria-controls="stage-lang-opts" autocomplete="off" aria-label="جستجوی زبان">
+      <div class="list" id="stage-lang-opts" role="listbox"></div>
+    </div>
+  </section>
   <section class="quota-strip" id="quota-strip">
     <button class="qs-head" id="quota-toggle" aria-expanded="false" aria-controls="quota-detail"><span id="quota-chev">▾</span> <b>سهمیه امروز</b> <span class="qs-nums" id="quota-nums">—</span><span class="dot" id="quota-dot"></span></button>
     <div id="quota-detail" hidden>
