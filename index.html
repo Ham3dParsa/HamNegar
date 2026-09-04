@@ -73,11 +73,11 @@
     <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
       <div class="flow-card" id="models-flow">
         <div class="rail" id="prov-rail" role="listbox" aria-label="ارائه‌دهنده‌ها">
-          <button type="button" data-prov="groq">Groq</button>
-          <button type="button" data-prov="gemini">Google AI Studio</button>
-          <button type="button" data-prov="openrouter">OpenRouter</button>
-          <button type="button" data-prov="custom">＋ سفارشی</button>
-          <button type="button" data-prov="all" class="active">همه</button>
+          <button type="button" role="option" aria-selected="false" data-prov="groq">Groq</button>
+          <button type="button" role="option" aria-selected="false" data-prov="gemini">Google AI Studio</button>
+          <button type="button" role="option" aria-selected="false" data-prov="openrouter">OpenRouter</button>
+          <button type="button" role="option" aria-selected="false" data-prov="custom">＋ سفارشی</button>
+          <button type="button" role="option" aria-selected="true" data-prov="all" class="active">همه</button>
         </div>
         <div id="models-keys-slot">
         <details class="provider-card" id="provider-card-groq" open>

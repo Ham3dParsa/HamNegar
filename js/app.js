@@ -386,7 +386,7 @@ function validate(){
   // re-render badges live + provider status pills (keys editable ONLY in models tab)
   renderProvidersStatus();
   renderAllChains();
-  try{ renderFlowList(); }catch{}
+  try{ renderFlowListSoon(); }catch{}
 }
 function renderProvidersStatus(){
   let providers = [];
@@ -473,6 +473,8 @@ const fetchStamp = new Map(); // providerId -> cache-line label
 let flowProv = 'all';
 let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capability OR, 'free' = AND modifier
 let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-retry (disabled pre-fetch)
+let flowRenderT = null; // debounce: validate()/search fire per keystroke, list rebuild is ~30 nodes
+function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ renderFlowList(); }catch{} }, 150); }
 const M_ERR_LABEL = '✕ دریافت مدل‌ها ناموفق بود. ';
 function flowTarget(){ return document.querySelector('input[name="easy-target"]:checked')?.value || 'stt'; }
 function capsFor(id, pid){
@@ -698,12 +700,15 @@ els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter')
 document.querySelectorAll('#prov-rail button').forEach(b => b.addEventListener('click', ()=>{
   document.querySelectorAll('#prov-rail button').forEach(x => x.classList.remove('active'));
   b.classList.add('active');
+  syncRailAria();
   flowProv = b.dataset.prov || 'all';
   const openCard = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'openrouter' ? $('provider-card-openrouter') : flowProv === 'custom' ? $('custom-add-card') : null;
   if(openCard && 'open' in openCard) openCard.open = true;
   renderFlowList();
 }));
-$('m-q')?.addEventListener('input', renderFlowList);
+function syncRailAria(){ document.querySelectorAll('#prov-rail button').forEach(x=>x.setAttribute('aria-selected', String(x.classList.contains('active')))); }
+syncRailAria();
+$('m-q')?.addEventListener('input', renderFlowListSoon);
 document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
   const cap = c.dataset.cap;
   if(cap === 'all') flowChips.clear();
@@ -866,14 +871,14 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
     // derive provider from the id itself so a Groq id never lands in the gemini chain;
     // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so:
     // 1) exact hit in any fetched list (covers future releases + custom providers),
-    // 2) only known Groq patterns map to groq — anything else must pick its rail explicitly
+    // 2) whisper- only (Groq-exclusive in our provider set) — anything else picks its rail
     if(/^gemini/i.test(mid)) pid = 'gemini';
     else if(mid.includes(':free')) pid = 'openrouter';
     else {
       let hit = '';
       try{ for(const [p, ids] of modelCache){ if(Array.isArray(ids) && ids.includes(mid)){ hit = p; break; } } }catch{}
       if(hit) pid = hit;
-      else if(/^whisper/i.test(mid) || /^(qwen\/|llama|allam|gpt-oss)/i.test(mid)) pid = 'groq';
+      else if(/^whisper/i.test(mid)) pid = 'groq';
       else { Logger.toast('ارائه‌دهنده نامشخص است — ریل ارائه‌دهنده را انتخاب کن'); return; }
     }
   }
@@ -1252,9 +1257,9 @@ function waveMicStop(){
 function wavePrevStart(){ try { waveRenderer?.start(); } catch {} }
 function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
 
+let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on fresh profiles (no keys)
 loadSettings();
 // --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
-let lastModalFocus = null;
 function modalFocusables(){
   const box = els.modal.querySelector('.modal-box');
   if(!box) return [];
