@@ -23,7 +23,8 @@ const els = {
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
-  btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'),
+  btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'), btnZenModels: $('btn-zen-models'),
+  keyZen: $('key-zen'),
   tabModels: $('tab-models'), tabChains: $('tab-chains'),
   panelModels: $('panel-models'), panelChains: $('panel-chains'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
@@ -403,7 +404,7 @@ function renderProvidersStatus(){
 }
 function loadSettings(){
   const s=Storage.getSettings();
-  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey; if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey;
+  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey;   if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey; if(els.keyZen) els.keyZen.value=s.zenKey;
   if(els.groqBaseUrl) els.groqBaseUrl.value=s.groqBaseURL || GROQ_BASE_DEFAULT;
   if(els.openrouterBaseUrl) els.openrouterBaseUrl.value=s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT;
   sttChainState=[...s.sttChain];
@@ -414,7 +415,7 @@ function loadSettings(){
   flowInit();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ openModal(); Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ openModal(); Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   try{
@@ -422,6 +423,7 @@ function saveSettings(){
       groqKey: els.keyGroq.value,
       geminiKey: els.keyGemini.value,
       openrouterKey: els.keyOpenrouter?.value||'',
+      zenKey: els.keyZen?.value||'',
       groqBaseURL: els.groqBaseUrl?.value||'',
       openrouterBaseURL: els.openrouterBaseUrl?.value||'',
       realtime: els.toggleRealtime.checked,
@@ -446,6 +448,7 @@ function saveSettings(){
 }
 els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
 if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
+if(els.keyZen) els.keyZen.addEventListener('input',validate);
 if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
 if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
 if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
@@ -485,6 +488,7 @@ function capsFor(id, pid){
     || /whisper|stt|transcrib/i.test(low);
   const free = /free/i.test(low);
   if (/^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || {}).sub || 'Google AI Studio' };
+  if (/^muse-spark-/i.test(s)) return { caps: ['t2t'], free: /contributor-free/i.test(s), fa: 'Muse Spark (رایگان contributor)' };
   if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
   return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
 }
@@ -494,6 +498,7 @@ function ptagFor(pid){
   if (pid === 'groq') return 'groq';
   if (pid === 'gemini') return 'google';
   if (pid === 'openrouter') return 'openrouter';
+  if (pid === 'zenspark') return 'zen';
   try { const c = Storage.getSettings().customProviders.find(x => x.id === pid); if (c) return c.name || 'سفارشی'; } catch {}
   return pid || 'سفارشی';
 }
@@ -509,6 +514,8 @@ function allFlowModels(){
     out.push({ id: clean, providerId: pid, caps, free, fa });
   };
   push('groq', 'groq');
+  push('muse-spark-1.3-contributor-free', 'zenspark');
+  push('muse-spark-1.2-contributor-free', 'zenspark');
   for (const id of Object.keys(STT_LABELS)) if (id !== 'groq') push(id, /^gemini/i.test(id) ? 'gemini' : 'groq');
   for (const id of Object.keys(POLISH_LABELS)) push(id, providerIdOf({ id }, 'groq'));
   for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, pid);
@@ -526,6 +533,7 @@ function flowScopeLabel(){
     : flowProv === 'groq' ? 'Groq'
     : flowProv === 'gemini' ? 'Google AI Studio'
     : flowProv === 'openrouter' ? 'OpenRouter'
+    : flowProv === 'zenspark' ? 'Muse Spark'
     : flowProv === 'custom' ? 'سفارشی' : flowProv;
 }
 function renderKeyVisibility(){
@@ -533,13 +541,15 @@ function renderKeyVisibility(){
     groq: flowProv === 'all' || flowProv === 'groq',
     gemini: flowProv === 'all' || flowProv === 'gemini',
     openrouter: flowProv === 'all' || flowProv === 'openrouter',
+    zenspark: flowProv === 'all' || flowProv === 'zenspark',
     custom: flowProv === 'all' || flowProv === 'custom',
   };
-  const cardGroq = $('provider-card-groq'), cardGemini = $('provider-card-gemini'), cardOr = $('provider-card-openrouter');
+  const cardGroq = $('provider-card-groq'), cardGemini = $('provider-card-gemini'), cardOr = $('provider-card-openrouter'), cardZen = $('provider-card-zenspark');
   const customList = $('custom-providers-list'), customAdd = $('custom-add-card');
   if (cardGroq) cardGroq.hidden = !show.groq;
   if (cardGemini) cardGemini.hidden = !show.gemini;
   if (cardOr) cardOr.hidden = !show.openrouter;
+  if (cardZen) cardZen.hidden = !show.zenspark;
   if (customList) customList.hidden = !show.custom;
   if (customAdd) customAdd.hidden = !show.custom;
 }
@@ -552,7 +562,7 @@ function updateNokey(){
   el.hidden = has;
 }
 function syncCacheLines(){
-  for (const pid of ['groq', 'gemini', 'openrouter']) {
+  for (const pid of ['groq', 'gemini', 'openrouter', 'zenspark']) {
     const el = document.getElementById('cache-' + pid);
     if (el) el.textContent = fetchStamp.get(pid) || 'نه هنوز — «لیست مدل‌ها» را بزن';
   }
@@ -565,7 +575,7 @@ function renderFlowList(){
   const q = ($('m-q')?.value || '').trim().toLowerCase();
   box.innerHTML = '';
   const rows = allFlowModels()
-    .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter'].includes(d.providerId) : d.providerId === flowProv)
+    .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter', 'zenspark'].includes(d.providerId) : d.providerId === flowProv)
     .filter(d => {
       const capsSel = [...flowChips].filter(c => c === 'stt' || c === 't2t');
       if (capsSel.length && !capsSel.some(c => d.caps.includes(c))) return false;
@@ -663,6 +673,7 @@ function addModelToChain(modelId, providerId, target){
   const mid = String(modelId||'').trim();
   const pid = String(providerId||'').trim();
   if(!mid || !pid) return;
+  if(target==='stt' && !isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target==='stt'){
     if(sttChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'gemini')===pid)){ Logger.toast('قبلاً هست'); return; }
     sttChainState.push({ id:mid, providerId:pid, enabled:true });
@@ -677,7 +688,7 @@ function addModelToChain(modelId, providerId, target){
 }
 async function fetchAndShowModels(providerId){
   flowLastPid = providerId;
-  const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : els.btnOrModels;
+  const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : providerId==='zenspark' ? els.btnZenModels : els.btnOrModels;
   const errBox = $('m-err');
   if(btn) btn.textContent='...';
   try{
@@ -695,6 +706,7 @@ async function fetchAndShowModels(providerId){
 els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
 els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini'));
 els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
+els.btnZenModels?.addEventListener('click', ()=> fetchAndShowModels('zenspark'));
 
 // --- models flow card wiring: rail → key card filter + ONE search + ONE chip row + manual Gemini id ---
 document.querySelectorAll('#prov-rail button').forEach(b => b.addEventListener('click', ()=>{
@@ -702,7 +714,7 @@ document.querySelectorAll('#prov-rail button').forEach(b => b.addEventListener('
   b.classList.add('active');
   syncRailAria();
   flowProv = b.dataset.prov || 'all';
-  const openCard = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'openrouter' ? $('provider-card-openrouter') : flowProv === 'custom' ? $('custom-add-card') : null;
+  const openCard = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'openrouter' ? $('provider-card-openrouter') : flowProv === 'zenspark' ? $('provider-card-zenspark') : flowProv === 'custom' ? $('custom-add-card') : null;
   if(openCard && 'open' in openCard) openCard.open = true;
   renderFlowList();
 }));
@@ -1694,6 +1706,7 @@ async function handleTranscription(blob, snap){
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
 $('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-zen').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Muse Spark...','warn'); try{ await Transcription.testZenspark(); Logger.setStatus(`✅ Muse Spark اوکی`,'info'); Logger.toast('Muse Spark ok'); }catch(e){ Logger.setStatus('❌ Muse Spark: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');

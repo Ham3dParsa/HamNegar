@@ -113,6 +113,7 @@ const KEYS = {
   GEMINI: 'KEY_GEMINI',
   OPENROUTER: 'KEY_OPENROUTER',
   OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
+  ZEN: 'KEY_ZEN',
   CUSTOM_PROVIDERS: 'CUSTOM_PROVIDERS',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
@@ -303,6 +304,7 @@ export const Storage = {
       geminiKey: localStorage.getItem(KEYS.GEMINI) || '',
       openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
       openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
+      zenKey: localStorage.getItem(KEYS.ZEN) || '',
       primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
       model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
       sttChain,
@@ -339,6 +341,7 @@ export const Storage = {
     if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
     if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
     if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
+    if ('zenKey' in patch) localStorage.setItem(KEYS.ZEN, String(patch.zenKey || '').trim());
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
@@ -358,6 +361,7 @@ export const Storage = {
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
       { id: 'gemini', name: 'Google AI Studio', baseURL: '', hasKey: !!s.geminiKey },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
+      { id: 'zenspark', name: 'Muse Spark (Zen)', baseURL: '', hasKey: !!s.zenKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];
   },
@@ -366,6 +370,7 @@ export const Storage = {
     if(providerId === 'groq') return !!s.groqKey;
     if(providerId === 'gemini') return !!s.geminiKey;
     if(providerId === 'openrouter') return !!s.openrouterKey;
+    if(providerId === 'zenspark') return !!s.zenKey;
     const c = s.customProviders.find(x => x.id === providerId);
     return !!(c && c.key);
   },
