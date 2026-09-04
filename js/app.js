@@ -1538,6 +1538,7 @@ function makeOnInterim(snap){
 let isRecording=false, vadTimer=null;
 let isTranscribing=false;
 let transcribingAbort=null;
+let discardRecording=false; // cancel during rec: drop the blob instead of transcribing
 // ticket 15 — actionbar variant A: hero morph + cancel visible during rec AND transcribing + BIG timer chip
 let recStartMs=0, recTimerId=null;
 const FA_DIGITS='۰۱۲۳۴۵۶۷۸۹';
@@ -1570,13 +1571,13 @@ function syncActionbar(){
   if(!mic) return;
   mic.classList.toggle('recording', isRecording);
   mic.classList.toggle('transcribing', isTranscribing);
-  mic.setAttribute('aria-busy', isTranscribing?'true':'false');
+  mic.setAttribute('aria-busy', (isRecording||isTranscribing)?'true':'false');
   mic.setAttribute('aria-label', isRecording?'توقف و تبدیل':isTranscribing?'در حال تبدیل':'میکروفون');
   const showCancel=(isRecording||isTranscribing);
   if(cb){
     if(cb.hasAttribute('hidden')!==!showCancel) cb.hidden=!showCancel;
-    cb.classList.remove('cancel-appear'); void cb.offsetWidth;
-    if(showCancel) cb.classList.add('cancel-appear');
+    cb.classList.remove('cancel-appear');
+    if(showCancel){ void cb.offsetWidth; cb.classList.add('cancel-appear'); }
   }
   if(tm) tm.hidden=!(isRecording||isTranscribing);
   updateHistoryButtons();
@@ -1646,12 +1647,13 @@ els.btnMic.onclick=()=> {
   isRecording?stopRecording():startRecording();
 };
 function cancelTranscription(){
+  if (isRecording) { discardRecording = true; stopRecording(); return; } // variant A: cancel works mid-recording (discard)
   if (transcribingAbort) transcribingAbort.abort();
   // UI handled in handleTranscription catch — keep abort signal until finally
 }
 els.btnCancel?.addEventListener('click', cancelTranscription);
 document.addEventListener('keydown', (e)=>{
-  if (e.key === 'Escape' && isTranscribing && transcribingAbort) cancelTranscription();
+  if (e.key === 'Escape' && (isRecording || (isTranscribing && transcribingAbort))) cancelTranscription();
 });
 function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
@@ -1660,6 +1662,16 @@ async function handleTranscription(blob, snap){
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
+  if(discardRecording){
+    discardRecording = false;
+    Logger.log('info','recording discarded by user',{ snapId: snapId||null });
+    Logger.toast('ضبط دور ریخته شد', 1500); Logger.setStatus('لغو شد','warn'); Logger.dismissProgress(0);
+    setMicBusy(false); transcribingAbort = null;
+    recTimerReset(); syncActionbar(); mainWaveIdle();
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
+    return;
+  }
   // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
   if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); }
   Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? (snap.committed+snap.pending).length : 0});
@@ -1755,7 +1767,7 @@ $('btn-test-polish')?.addEventListener('click', async()=>{
 });
 els.btnCopy.onclick=async()=>{
   if(!els.output.value.trim()){ els.btnCopy.classList.remove('shake'); void els.btnCopy.offsetWidth; els.btnCopy.classList.add('shake'); setTimeout(()=>els.btnCopy.classList.remove('shake'),400); Logger.toast('چیزی نیست'); return; }
-  try{ await navigator.clipboard.writeText(els.output.value); }catch{}
+  try{ await navigator.clipboard.writeText(els.output.value); }catch{ Logger.toast('کپی ناموفق — دستی کپی کن'); return; }
   els.btnCopy.classList.add('ok'); setTimeout(()=>els.btnCopy.classList.remove('ok'),1200);
   Logger.toast('کپی شد');
 };
