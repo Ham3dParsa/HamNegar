@@ -2,14 +2,14 @@
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
 // Depth: hides 11+ keys, serialization, defaults, and migration behind getSettings/saveSettings plus
 // provider helpers (getProviders/hasKeyForProvider). Chains (STT + polish) share one entry shape
-// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|custom id.
+// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|'zenspark'|custom id.
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
-export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter'];
-// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|custom id
+export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter','zenspark'];
+// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|zenspark|custom id
 export const POLISH_DEFAULTS = [
   { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
   { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },

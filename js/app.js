@@ -172,6 +172,7 @@ function sanitizeMsg(msg){
     .replace(/sk-or-[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
     .replace(/AIza[A-Za-z0-9_-]+/g, '[کلید حذف شد]')
     .replace(/AQ\.[A-Za-z0-9_.-]+/g, '[کلید حذف شد]')
+    .replace(/eyJ[A-Za-z0-9_-]{8,}/g, '[کلید حذف شد]')
     .replace(/Bearer\s+\S+/gi, 'Bearer [کلید حذف شد]')
     .slice(0, 120);
 }
@@ -742,9 +743,9 @@ $('m-retry')?.addEventListener('click', ()=>{
 });
 $('m-nokey-link')?.addEventListener('click', (e)=>{
   e.preventDefault();
-  const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
+  const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'zenspark' ? $('provider-card-zenspark') : $('provider-card-openrouter');
   if(card && 'open' in card) card.open = true;
-  const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : els.keyOpenrouter;
+  const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : flowProv === 'zenspark' ? els.keyZen : els.keyOpenrouter;
   input?.focus?.();
 });
 function flowInit(){ renderFlowList(); }
