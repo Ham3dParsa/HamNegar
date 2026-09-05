@@ -506,7 +506,7 @@ let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-
 let flowRenderT = null; // debounce: validate()/search fire per keystroke, list rebuild is ~30 nodes
 function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ renderFlowList(); }catch{} }, 150); }
 const M_ERR_LABEL = '✕ دریافت مدل‌ها ناموفق بود. ';
-function flowTarget(){ return document.querySelector('input[name="easy-target"]:checked')?.value || 'stt'; }
+let activePickerTarget = 'stt'; // single add-target source (easy-target radios removed in ticket 2)
 function capsFor(id, pid){
   const s = String(id || '');
   const low = s.toLowerCase();
@@ -645,7 +645,7 @@ function renderFlowList(){
     btn.textContent = loc ? 'حذف' : 'افزودن';
     btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
     // Same capsFor source as add paths: t2t-only rows are not addable when target=STT (remove stays enabled).
-    const targetNow = flowTarget();
+    const targetNow = activePickerTarget;
     const sttBlocked = !loc && targetNow === 'stt' && !isSttEligible(d.id, d.providerId);
     if (sttBlocked) { btn.title = 'این مدل متنی است — برای STT مناسب نیست (مقصد را پالیش کن)'; btn.disabled = true; }
     else { btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'); btn.disabled = !hasKey && !loc; }
@@ -687,7 +687,7 @@ function toggleFlowModel(modelId, providerId){
     showUndoToast(mid);
     return;
   }
-  const target = flowTarget();
+  const target = activePickerTarget;
   if (pid === 'gemini' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   if (target === 'stt') {
     if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
@@ -760,7 +760,6 @@ document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('cl
   });
   renderFlowList();
 }));
-document.querySelectorAll('input[name="easy-target"]').forEach(r => r.addEventListener('change', renderFlowList));
 $('m-retry')?.addEventListener('click', ()=>{
   if (!flowLastPid) return;
   const err = $('m-err');
@@ -922,7 +921,7 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
     }
   }
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
-  const target = document.querySelector('input[name="easy-target"]:checked')?.value || 'stt';
+  const target = activePickerTarget;
   if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target === 'stt'){
     if(!isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
@@ -1309,7 +1308,6 @@ document.querySelectorAll('[data-edit-prov]').forEach(b => b.addEventListener('c
   const inp = $(PROV_KEY_ID[pid]);
   if(inp) inp.focus();
 }));
-let activePickerTarget = 'stt';
 let pickerOpener = null;
 function openModelPicker(target, opener){
   activePickerTarget = target === 'polish' ? 'polish' : 'stt';
@@ -1365,7 +1363,7 @@ function renderModelPickerList(){
     btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'));
     if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; }
     else if(activePickerTarget === 'stt' && !isSttEligible(d.id, d.providerId)){ btn.textContent = 'افزودن'; btn.title = 'این مدل متنی است — برای STT مناسب نیست'; btn.disabled = true; }
-    else{ btn.textContent = 'افزودن'; btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(false); }); }
+    else{ btn.textContent = 'افزودن'; btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(true); }); }
     card.append(main, btn);
     box.appendChild(card);
   }
