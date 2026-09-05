@@ -1,5 +1,5 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, translate(text,lang,entry?)->text (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, textChain(text,{system,layer})->{text,model,providerId} (full polish-chain fallback for stages/translate), translate(text,lang,entry?)->{text,model,providerId} (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
@@ -181,6 +181,45 @@ async function queryResponsesText(text, { system, model, layer = 'polish' } = {}
   return validatePolishOutput(out, text, model, layer);
 }
 
+// Full-chain text op (ticket/16 chain fallback): iterates ENABLED polishChain entries
+// that have keys, dispatching per provider through the existing adapters (no new
+// seam). Default single qwen entry when the chain is empty, mirroring polishText.
+// layer names the op in logs ('polish' keeps polish guards in validatePolishOutput,
+// 'translate' skips them). 401/403 entries are skipped with a warn log; 429 backs
+// off before the next entry. All throws are typed (err.status set).
+async function textChain(text, { system, layer = 'polish', prefer } = {}){
+  if(!text || !text.trim()) throw Object.assign(new Error(layer==='translate' ? 'متنی برای ترجمه نیست' : 'متنی برای پالایش نیست'),{status:400});
+  const { polishChain } = Storage.getSettings();
+  const rawChain = (polishChain && polishChain.length) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
+  const chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
+  if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
+    chain.unshift({ id: prefer.id, providerId: prefer.providerId, enabled: true });
+  }
+  if(chain.length===0) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
+  let lastErr=null;
+  for(let i=0;i<chain.length;i++){
+    const entry = chain[i];
+    const { model, providerId } = polishTargetOf(entry);
+    try{
+      let out;
+      if(providerId === 'gemini') out = await queryPolishViaGemini(text, model, layer, system);
+      else if(providerId === 'zenspark') out = await queryResponsesText(text, { system, model, layer });
+      else out = await queryChat(providerId, text, { system, model, layer });
+      if(out){
+        if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${model} (${providerId})`);
+        else Logger.log('debug',`${layer} ok`,{model, providerId});
+        return { text: out, model, providerId };
+      }
+      Logger.log('warn',`${providerId} ${layer} empty`,{model});
+    }catch(e){
+      lastErr=e;
+      if(e.status===401 || e.status===403){ Logger.log('warn',`${providerId} ${layer} skipped (key)`,{model, status:e.status}); continue; }
+      Logger.log('warn',`${providerId} ${layer} fail (${i+1}/${chain.length})`,{model, msg:e.message, status:e.status});
+      if(e.status===429 && i<chain.length-1) await new Promise(r=>setTimeout(r,600));
+    }
+  }
+  throw lastErr || Object.assign(new Error(layer==='translate' ? 'ترجمه ناموفق بود' : 'پالایش ناموفق بود'),{status:500});
+}
 // Translate (ticket/16): same text-model chain as polish (default = first enabled polish
 // entry), but a language-neutral translate prompt on layer='translate' so the polish
 // meta-commentary/length guards in validatePolishOutput don't false-fire (layer!=='polish'
@@ -192,15 +231,17 @@ function translateSystem(lang){
 }
 async function translateText(text, lang, entry){
   if(!text || !text.trim()) throw Object.assign(new Error('متنی برای ترجمه نیست'),{status:400});
-  const { polishChain } = Storage.getSettings();
-  const pick = entry || (polishChain || []).find(e => e && e.enabled !== false) || (polishChain || [])[0];
-  if(!pick) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
-  const { model, providerId } = polishTargetOf(pick);
-  if(!Storage.hasKeyForProvider(providerId)) throw Object.assign(new Error(`⚠ کلید ${providerId} نیست`),{status:401});
   const system = translateSystem(lang);
-  if(providerId === 'gemini') return queryPolishViaGemini(text, model, 'translate', system);
-  if(providerId === 'zenspark') return queryResponsesText(text, { system, model, layer: 'translate' });
-  return queryChat(providerId, text, { system, model, layer: 'translate' });
+  if(entry){
+    const { model, providerId } = polishTargetOf(entry);
+    if(!Storage.hasKeyForProvider(providerId)) throw Object.assign(new Error(`⚠ کلید ${providerId} نیست`),{status:401});
+    let t;
+    if(providerId === 'gemini') t = await queryPolishViaGemini(text, model, 'translate', system);
+    else if(providerId === 'zenspark') t = await queryResponsesText(text, { system, model, layer: 'translate' });
+    else t = await queryChat(providerId, text, { system, model, layer: 'translate' });
+    return { text: t, model, providerId };
+  }
+  return textChain(text, { system, layer: 'translate' });
 }
 function sttProviderOf(entry){
   if(entry && typeof entry === 'object'){
@@ -402,6 +443,7 @@ export const Transcription = {
     return true;
   },
   async queryChat(providerId, text, opts){ return queryChat(providerId, text, opts); },
+  async textChain(text, opts){ return textChain(text, opts); },
   async translate(text, lang, entry){ return translateText(text, lang, entry); },
   async testPolish(){
     return this.polishText('رابطه کاربری زیبا است');

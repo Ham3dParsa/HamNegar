@@ -1807,10 +1807,22 @@ const STAGE_LANGS = [
   ['🇪🇸 Español', 'es'], ['🇮🇹 Italiano', 'it'], ['🇹🇷 Türkçe', 'tr'], ['🇸🇦 العربية', 'ar'],
   ['🇷🇺 Русский', 'ru'], ['🇨🇳 中文', 'zh'],
 ];
-const SYS_SIMPLE = 'تو ویراستار فارسی هستی. فقط غلط‌های املایی و علائم نگارشی را اصلاح کن (نیم‌فاصله، «رابطه کاربری»→«رابط کاربری» وقتی UI است). دستور زبان و سبک را عوض نکن. فقط متن اصلاح‌شده را برگردان.';
-const SYS_ADV = 'تو ویراستار فارسی هستی. املا، علائم نگارشی و دستور زبان را با هم اصلاح کن. معنی، اعداد و نام‌ها را حفظ کن. فقط متن اصلاح‌شده را برگردان.';
-const SYS_GRAMMAR = 'فقط دستور زبان و صرف کلمات را اصلاح کن. املا، سبک و علائم را عوض نکن، بازنویسی نکن. فقط متن اصلاح‌شده را برگردان.';
+const SYS_SIMPLE = 'You are a proofreader. Fix only spelling, orthography and punctuation in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+const SYS_ADV = 'You are a proofreader. Fix spelling, punctuation and grammar together in the SAME language as the input text; preserve meaning, numbers and names, never change the language or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+const SYS_GRAMMAR = 'Fix only grammar and word inflection in the SAME language as the input text. Do not change spelling, style or punctuation, do not rewrite, never change the language. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
 let stageRawStack = [];
+const STAGE_RAW_MAX = 25;
+// Slice-scoped undo: push the pre-stage scope slice (not the whole doc) so خام
+// splices just that slice back — earlier stages' results and foreign edits outside
+// the range survive. newEnd is filled in after apply (post-stage range).
+function stagePushRaw(scope){
+  const entry = { start: scope.start, end: scope.end, text: scope.text, newEnd: scope.end };
+  stageRawStack.push(entry);
+  while (stageRawStack.length > STAGE_RAW_MAX) stageRawStack.shift();
+  const rawBtn = $('stage-raw');
+  if (rawBtn) rawBtn.disabled = false;
+  return entry;
+}
 let langHi = 0, langView = STAGE_LANGS.slice();
 function stageScope(){
   const v = els.output.value;
@@ -1892,58 +1904,73 @@ function stageQuotaSplit(model, words, chars){
     Dashboard.renderOverall();
   } catch {}
 }
+function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } }
 async function runStage(kind, faLabel, sysPrompt, logTitle){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای پالایش نیست'); return; }
   Logger.groupRun(logTitle);
   Logger.setStatus('✨ ' + faLabel + '…', 'warn');
+  setStageBusy(true);
+  const vlen = els.output.value.length;
   try {
+    // Explicit stage-model choice (dropdown) goes first, rest of the enabled chain
+    // stays as fallback; default (head option) follows chain order. Layer 'polish'
+    // keeps the polish guards in validatePolishOutput.
     const pick = stageModelPick();
-    if (!pick) throw Object.assign(new Error('مدل متنی در زنجیره نیست'), { status: 401 });
-    if (!Storage.hasKeyForProvider(pick.providerId)) throw Object.assign(new Error('⚠ کلید ' + pick.providerId + ' نیست'), { status: 401 });
-    stageRawStack.push(els.output.value);
-    const rawBtn = $('stage-raw');
-    if (rawBtn) rawBtn.disabled = false;
-    // default layer 'polish': polish guards stay on for stages
-    const out = await Transcription.queryChat(pick.providerId, scope.text, { system: sysPrompt, model: pick.id });
-    stageApply(scope, out);
-    stageQuotaSplit(pick.id, scope.text.split(/\s+/).length, scope.text.length);
-    Logger.log('info', `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${pick.id} (${pick.providerId})`);
+    const explicit = $('stage-model')?.value ? pick : null;
+    const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
+    if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
+    const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
+    if(els.output.value.length !== vlen){ Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    const undo = stagePushRaw(scope);
+    stageApply(scope, out.text);
+    undo.newEnd = scope.start + out.text.length;
+    stageQuotaSplit(out.model, scope.text.split(/\s+/).length, scope.text.length);
+    Logger.log('info', `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${out.model} (${out.providerId})`);
     Logger.setStatus('✅ ' + faLabel + ' نشست', 'info');
     Logger.toast(faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'));
   } catch (e) {
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ' + faLabel + ': ' + safe, 'error');
     Logger.toast('❌ ' + faLabel + ': ' + safe.slice(0, 60));
-  }
+  } finally { setStageBusy(false); }
 }
 async function runTranslate(code){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
-  stageRawStack.push(els.output.value);
-  const rawBtn = $('stage-raw');
-  if (rawBtn) rawBtn.disabled = false;
   Logger.groupRun('🌐 ترجمه → ' + code);
   Logger.setStatus('🌐 ترجمه → ' + code + '…', 'warn');
+  setStageBusy(true);
+  const vlen = els.output.value.length;
   try {
-    const out = await Transcription.translate(scope.text, code);
+    const res = await Transcription.translate(scope.text, code);
+    if(els.output.value.length !== vlen){ Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    const out = res.text;
+    const undo = stagePushRaw(scope);
     stageApply(scope, out);
-    stageQuotaSplit('translate-' + code, scope.text.split(/\s+/).length, scope.text.length);
-    Logger.log('info', `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'}`);
+    undo.newEnd = scope.start + out.length;
+    stageQuotaSplit(res.model, scope.text.split(/\s+/).length, scope.text.length);
+    Logger.log('info', `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${res.model} (${res.providerId})`);
     Logger.setStatus('✅ ترجمه نشست', 'info');
     Logger.toast('ترجمه → ' + code + ' ✓');
   } catch (e) {
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ترجمه: ' + safe, 'error');
     Logger.toast('❌ ترجمه: ' + safe.slice(0, 60));
-  }
+  } finally { setStageBusy(false); }
 }
 $('stage-simple')?.addEventListener('click', () => runStage('simple', 'پالایش ساده', SYS_SIMPLE, '✨ پالایش ساده'));
 $('stage-advanced')?.addEventListener('click', () => runStage('advanced', 'پالایش پیشرفته', SYS_ADV, '✨ پالایش پیشرفته'));
 $('stage-grammar')?.addEventListener('click', () => runStage('grammar', 'پالایش دستوری', SYS_GRAMMAR, '📝 پالایش دستوری'));
 $('stage-tr-quick')?.addEventListener('click', () => {
   const t = els.output.value.trim();
-  runTranslate(/^[A-Za-z]/.test(t) ? 'fa' : 'en');
+  // Rationale: ASCII-only Latin text is most likely English → 'fa'. Latin with
+  // diacritics (äöüßéèêàçñ…) is likely another European language → 'en', and
+  // non-Latin scripts (Persian/Arabic/CJK…) → 'en'. Heuristic only — the
+  // «ترجمه…» panel is the escape hatch for misses.
+  let code = 'en';
+  if (/[A-Za-z]/.test(t) && !/[^\x00-\x7F]/.test(t)) code = 'fa';
+  runTranslate(code);
 });
 $('stage-tr-panel')?.addEventListener('click', (e) => {
   const p = $('tr-panel');
@@ -1955,12 +1982,19 @@ $('stage-tr-panel')?.addEventListener('click', (e) => {
 $('stage-raw')?.addEventListener('click', () => {
   const prev = stageRawStack.pop();
   if (prev == null) return;
-  els.output.value = prev; saveCursor(); updateCounts(); Storage.saveDraft(prev);
-  editorHistory.push(prev);
+  const v = els.output.value;
+  const start = Math.max(0, Math.min(prev.start, v.length));
+  const newEnd = Math.max(start, Math.min(prev.newEnd ?? prev.end, v.length));
+  const restored = v.slice(0, start) + prev.text + v.slice(newEnd);
+  els.output.value = restored;
+  els.output.focus();
+  try { els.output.setSelectionRange(start + prev.text.length, start + prev.text.length); } catch {}
+  saveCursor(); updateCounts(); Storage.saveDraft(restored);
+  editorHistory.push(restored);
   const rawBtn = $('stage-raw');
   if (rawBtn) rawBtn.disabled = !stageRawStack.length;
   updateStageScope(); syncActionbar();
-  Logger.log('info', '↩ برگشت به خام', { chars: prev.length });
+  Logger.log('info', '↩ برگشت به خام (دامنه)', { chars: prev.text.length });
   Logger.toast('به خام برگشت');
 });
 // searchable language combo (~10 langs, filter + ↑↓ + Enter, outside-click/Esc close)
