@@ -19,6 +19,10 @@
 
 ## 5. گیت
 - برنچ `ticket/xx-desc`، کامیت Conventional Commits، `git add file` (نه `git add .` برای فایل‌های بزرگ)، PR به `main`.
+- شاخه `main` همیشه تمیز: هرگز روی checkout اصلی کار نکن، مستقیم روی `main` کامیت نزن، فایل اسکرچ/پروتوتایپ در `main` نگذار.
+- هر کار اجرایی در worktree ایزوله: `git worktree add .worktrees/<branch> -b <branch> origin/main`؛ فقط همان worktree را لمس کن؛ بعد از مرج، worktree را پاک کن (`git worktree remove --force`).
+- اسکرچ‌ها (`temp/`، پروتوتایپ دورانداختنی، پلن موقت) هرگز به `main` نمی‌آیند؛ در صورت نیاز به نگهداری، روی برنچ `archive/...` (بدون PR، بیرون `main`).
+- شروع و پایان هر وظیفه: `git status --short` — چیزی جز فایل‌های همان تیکت نباید دیده شود.
 
 ## 6. بازبینی (review-gate)
 - پیش از هر `commit`/`push`/`gh pr create` اسکیل `hamnegar-reviewer` را لود کن و فقط با `PASS` جلو برو.
