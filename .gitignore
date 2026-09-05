@@ -15,3 +15,6 @@ Thumbs.db
 
 # worktrees (parallel-work-guard)
 .worktrees/
+
+# local demo/prototype scratch (never commit)
+temp/
