@@ -25,8 +25,10 @@ const els = {
   btnCancel: $('btn-cancel-stt'),
   btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'), btnZenModels: $('btn-zen-models'),
   keyZen: $('key-zen'),
-  tabModels: $('tab-models'), tabChains: $('tab-chains'),
-  panelModels: $('panel-models'), panelChains: $('panel-chains'),
+  tabPipeline: $('tab-pipeline'), panelPipeline: $('panel-pipeline'),
+  btnAddStt: $('btn-add-stt'), btnAddPolish: $('btn-add-polish'),
+  providerDrawer: $('provider-drawer'),
+  modelPickerSheet: $('model-picker-sheet'), modelPickerSearch: $('model-picker-search'), modelPickerList: $('model-picker-list'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   easyModelInput: $('easy-model-input'),
@@ -479,10 +481,10 @@ if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
 if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
 if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
 
-// --- settings tabs (models | chains | wave) ---
+// --- settings tabs (pipeline | wave) ---
 function switchTab(name){
-  const tabs = { models: els.tabModels, chains: els.tabChains, wave: els.tabWave };
-  const panels = { models: els.panelModels, chains: els.panelChains, wave: els.panelWave };
+  const tabs = { pipeline: els.tabPipeline, wave: els.tabWave };
+  const panels = { pipeline: els.panelPipeline, wave: els.panelWave };
   for(const k of Object.keys(tabs)){
     const active = k === name;
     tabs[k]?.classList.toggle('active', active);
@@ -491,8 +493,7 @@ function switchTab(name){
   }
   if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
 }
-els.tabModels?.addEventListener('click', ()=> switchTab('models'));
-els.tabChains?.addEventListener('click', ()=> switchTab('chains'));
+els.tabPipeline?.addEventListener('click', ()=> switchTab('pipeline'));
 els.tabWave?.addEventListener('click', ()=> switchTab('wave'));
 
 // --- models flow card (ticket/08): rail is single truth, inline key cards, ONE search + ONE chip row → flat list ---
@@ -1297,6 +1298,81 @@ function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
 
 let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
 loadSettings();
+// --- pipeline tab (ticket/pipeline-js-wiring): providers hub + model picker sheet ---
+const PROV_CARD_ID = { groq: 'provider-card-groq', gemini: 'provider-card-gemini', openrouter: 'provider-card-openrouter', zenspark: 'provider-card-zenspark' };
+const PROV_KEY_ID = { groq: 'key-groq', gemini: 'key-gemini', openrouter: 'key-openrouter', zenspark: 'key-zen' };
+document.querySelectorAll('[data-edit-prov]').forEach(b => b.addEventListener('click', ()=>{
+  const pid = b.getAttribute('data-edit-prov');
+  if(els.providerDrawer) els.providerDrawer.open = true;
+  const card = $(PROV_CARD_ID[pid]);
+  if(card && card.tagName === 'DETAILS') card.open = true;
+  const inp = $(PROV_KEY_ID[pid]);
+  if(inp) inp.focus();
+}));
+let activePickerTarget = 'stt';
+let pickerOpener = null;
+function openModelPicker(target, opener){
+  activePickerTarget = target === 'polish' ? 'polish' : 'stt';
+  pickerOpener = opener || null;
+  if(els.modelPickerSearch) els.modelPickerSearch.value = '';
+  if(els.modelPickerSheet) els.modelPickerSheet.hidden = false;
+  renderModelPickerList();
+  if(els.modelPickerSearch) els.modelPickerSearch.focus();
+}
+function closeModelPicker(restoreFocus){
+  if(els.modelPickerSheet) els.modelPickerSheet.hidden = true;
+  if(restoreFocus && pickerOpener && pickerOpener.focus) pickerOpener.focus();
+  pickerOpener = null;
+}
+function renderModelPickerList(){
+  const box = els.modelPickerList;
+  if(!box) return;
+  const q = (els.modelPickerSearch?.value || '').trim().toLowerCase();
+  box.innerHTML = '';
+  const rows = allFlowModels()
+    .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
+  if(!rows.length){ box.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن.'; return; }
+  for(const d of rows){
+    let hasKey = false;
+    try{ hasKey = Storage.hasKeyForProvider(d.providerId); }catch{ hasKey = false; }
+    const loc = chainLoc(d.id, d.providerId);
+    const inTarget = !!loc && loc.type === activePickerTarget;
+    const card = document.createElement('div');
+    card.className = 'mrow';
+    card.dataset.p = d.providerId;
+    const main = document.createElement('div');
+    main.className = 'mmain';
+    const title = document.createElement('div');
+    title.className = 'mtitle';
+    const b = document.createElement('b');
+    b.textContent = d.id;
+    b.dir = 'ltr';
+    const badges = document.createElement('span');
+    badges.className = 'mbadges';
+    for(const c of d.caps){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
+    if(d.free){ const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
+    const tag = document.createElement('span');
+    tag.className = 'ptag';
+    tag.textContent = ptagFor(d.providerId);
+    title.append(b, badges, tag);
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = d.fa || d.providerId;
+    main.append(title, meta);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-ghost btn-sm';
+    btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'));
+    if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; }
+    else if(activePickerTarget === 'stt' && !isSttEligible(d.id, d.providerId)){ btn.textContent = 'افزودن'; btn.title = 'این مدل متنی است — برای STT مناسب نیست'; btn.disabled = true; }
+    else{ btn.textContent = 'افزودن'; btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(false); }); }
+    card.append(main, btn);
+    box.appendChild(card);
+  }
+}
+els.btnAddStt?.addEventListener('click', (e)=> openModelPicker('stt', e.currentTarget));
+els.btnAddPolish?.addEventListener('click', (e)=> openModelPicker('polish', e.currentTarget));
+els.modelPickerSearch?.addEventListener('input', renderModelPickerList);
 // --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
 function modalFocusables(){
   const box = els.modal.querySelector('.modal-box');
@@ -1326,7 +1402,7 @@ function closeModal(){
 }
 els.modal.addEventListener('keydown', (e)=>{
   if(els.modal.style.display !== 'flex') return;
-  if(e.key === 'Escape'){ e.preventDefault(); closeModal(); return; } // Esc: close WITHOUT saving
+  if(e.key === 'Escape'){ e.preventDefault(); if(els.modelPickerSheet && !els.modelPickerSheet.hidden){ closeModelPicker(true); return; } closeModal(); return; } // Esc: sheet first, else close WITHOUT saving
   if(e.key !== 'Tab') return;
   const f = modalFocusables();
   if(!f.length) return;
