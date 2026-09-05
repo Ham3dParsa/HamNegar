@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<!-- saved from url=(0104)file:///C:/Users/HamedParsa/AppData/Local/Temp/opencode/prototype-wave-settings.html?style=warm-presence -->
+<html lang="fa" dir="rtl"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پروتوتایپ پشته موج — چسبان + ۵ موج</title>
+<link href="./پروتوتایپ پشته موج — چسبان + ۵ موج_files/css2" rel="stylesheet">
+<style>
+:root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--danger:#ea4335;--text:#e8eaed;--muted:#9aa0a6}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"Vazirmatn","Segoe UI",system-ui,sans-serif}
+body{background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;font-size:15px}
+.banner{background:#14273c;border:1px solid #2b4d75;color:#cfe3ff;border-radius:10px;padding:8px 14px;font-size:13px;margin-bottom:14px;max-width:720px;text-align:center;line-height:1.9}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:720px;display:flex;flex-direction:column;gap:12px}
+/* 1 — sticky attached preview: stays in viewport while cards + pro scroll below */
+.sticky-preview{position:sticky;top:8px;z-index:50;background:#15161a;border:2px solid var(--accent);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.sticky-preview .pref-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.sticky-preview h4{font-size:14px;font-weight:700}
+#preview-wrap{height:84px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+#preview-wrap canvas{width:100%;height:100%;display:block}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{background:#34363a}
+.btn-mic{background:var(--accent);color:#fff}
+.btn-mic.mic-on{background:var(--danger)}
+.mini-sens{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted)}
+.mini-sens input{width:110px;accent-color:var(--accent)}
+.mini-sens b{color:var(--text);font-size:12px;min-width:38px;text-align:center}
+#status-chip{font-size:12px;color:var(--muted);text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:4px 14px;width:max-content;margin:0 auto}
+#status-chip.live{color:#cfe3ff;border-color:var(--accent)}
+.pref-section{background:#15161a;border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.pref-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pref-head h4{font-size:13px;font-weight:700}
+.pref-sub{font-size:11px;color:var(--muted)}
+.style-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(max-width:560px){.style-grid{grid-template-columns:1fr}}
+.style-card{background:var(--surface2);border:2px solid var(--border);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px;cursor:pointer;text-align:right;color:var(--text);width:100%}
+.style-card:hover{border-color:var(--accent2)}
+.style-card.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,.18)}
+.style-card canvas{width:100%;height:56px;display:block;background:#111113;border:1px solid var(--border);border-radius:8px}
+.style-card b{font-size:13px}
+.style-card span{font-size:11px;color:var(--muted);line-height:1.7}
+/* 2 — wave stack rows */
+.wave-row{background:var(--surface2);border:2px solid var(--border);border-radius:12px;overflow:hidden}
+.wave-row details summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;list-style:none}
+.wave-row details summary::-webkit-details-marker{display:none}
+.wave-row.muted{opacity:.55}
+.wave-row .dot{width:14px;height:14px;border-radius:50%;border:1px solid var(--border);flex:none}
+.wave-body{padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border);padding-top:10px}
+.wave-tools{display:flex;gap:4px;margin-inline-start:auto}
+.wave-tools button{padding:4px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px}
+.wave-tools button:disabled{opacity:.35;cursor:default}
+.ctrl-label{font-size:13px;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.segmented{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);padding:3px;border-radius:999px;width:max-content;flex-wrap:wrap}
+.segmented button{padding:6px 13px;font-size:12px;border-radius:999px;background:transparent;color:var(--muted);border:none}
+.segmented button.active{background:var(--accent);color:#fff}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:7px 13px;font-size:13px;color:var(--muted);cursor:pointer}
+.chip input{accent-color:var(--accent);width:16px;height:16px}
+.chip strong{color:var(--text);font-weight:600}
+.hint{font-size:12px;color:var(--muted);line-height:1.8;background:rgba(255,255,255,.04);padding:8px 10px;border-radius:10px}
+details.contract,details.pro{background:#15161a;border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:12px}
+details.pro summary,details.contract summary{cursor:pointer;font-weight:700;font-size:13px}
+details.contract pre{direction:ltr;text-align:left;font-size:11px;line-height:1.7;overflow:auto;background:#111113;border:1px solid var(--border);border-radius:8px;padding:10px;margin-top:8px;color:var(--accent2)}
+input[type=color]{width:34px;height:34px;border:2px solid var(--border);border-radius:50%;padding:0;background:none;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="banner">⚠️ پروتوتایپ پشته موج (v2 — دورانداختنی): یک drawStack واحد برای پیش‌نمایش و مینی‌ها (فرکانس مکانی نرمال‌شده با W)؛ حساسیت/سرعت/شدت/نرمی/گلو/ذرات بازمقیاس شدند. بدون ذخیره‌سازی.</div>
+
+<div class="modal-box">
+  <!-- LAYOUT: ① sticky preview header → ② starters → ③ stack (pro) → ④ globals → ⑤ JSON -->
+  <header class="sticky-preview" aria-label="پیش‌نمایش چسبان">
+    <div class="pref-head"><h4>🔴 پیش‌نمایش زنده (چسبان)</h4>
+      <div class="row">
+        <button id="btn-mic" class="btn-mic mic-on">⏹ توقف میکروفون</button>
+        <button id="btn-rec" class="btn-ghost">⏺ مصنوعی: روشن</button>
+      </div>
+    </div>
+    <div id="preview-wrap"><canvas id="cv-big" width="648" height="82"></canvas></div>
+    <div class="row" style="justify-content:space-between">
+      <label class="mini-sens">حساسیت <input type="range" id="sens-mini" min="0" max="100" value="50" aria-label="حساسیت چسبان"><b id="sens-mini-val">50٪</b></label>
+      <span class="pref-sub" id="stack-count">1 موج</span>
+    </div>
+    <div class="pref-sub" id="pv-name" style="text-align:center">استارتر «حضور گرم» — 1 موج — 🎙️ زنده</div>
+    <div class="hint" id="mic-hint">🎙️ زنده با صدای تو — پیش‌نمایش چسبان و همه مینی‌ها همین حالا واکنش می‌دهند.</div>
+    <div id="status-chip" role="status" class="">🎙️ میکروفون وصل — سکوت</div>
+  </header>
+
+  <section class="pref-section" aria-label="استارترها">
+    <div class="pref-head"><h4>✨ استارترها — یک کلیک، پر کردن پشته</h4><span class="pref-sub">۱۰ طرح پالایش‌شده؛ هرکدام ۱ تا ۳ موج آماده می‌چیند</span></div>
+    <div class="style-grid" id="style-grid"><button class="style-card" data-id="classic-fade"><canvas width="302" height="56"></canvas><b>1 — محو کلاسیک</b><span>سینوس + محو؛ مبنای مقایسه.</span></button><button class="style-card active" data-id="warm-presence"><canvas width="302" height="56"></canvas><b>2 — حضور گرم</b><span>تک‌موج گرم پرذره.</span></button><button class="style-card" data-id="perc-pop"><canvas width="302" height="56"></canvas><b>3 — ضربه‌ای</b><span>اتک تند؛ باند high.</span></button><button class="style-card" data-id="edge-whisper"><canvas width="302" height="56"></canvas><b>4 — زمزمه لبه</b><span>داش کم‌رنگ + سینوس.</span></button><button class="style-card" data-id="mirror-lake"><canvas width="302" height="56"></canvas><b>5 — دریاچه آینه‌ای</b><span>mirror-sine تکی (مفهوم آینه این‌جاست).</span></button><button class="style-card" data-id="aurora-wash"><canvas width="302" height="56"></canvas><b>6 — شفق زمینه</b><span>خط تخت درخشان + aurora روشن.</span></button><button class="style-card" data-id="dash-ticker"><canvas width="302" height="56"></canvas><b>7 — خط‌چین جاری</b><span>داش پررنگ + شبح سینوسی.</span></button><button class="style-card" data-id="quantum-steps"><canvas width="302" height="56"></canvas><b>8 — پله‌های کوانتومی</b><span>پله + شبح.</span></button><button class="style-card" data-id="ice-glow"><canvas width="302" height="56"></canvas><b>9 — درخشش یخی</b><span>گرادیان عمودی + گلو قوی.</span></button><button class="style-card" data-id="heartbeat"><canvas width="302" height="56"></canvas><b>10 — نبض قلب</b><span>سینوس + ریبون رنگین‌کمانی.</span></button></div>
+  </section>
+
+  <details class="pro" id="pro-sec" open="">
+    <summary>🌊 پشته موج (تا ۵ لایه — هر موج: نوع، رنگ، شفافیت، درخشش، ضخامت، قله، باند، بی‌صدا)</summary>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+      <div id="wave-list" style="display:flex;flex-direction:column;gap:8px"><div class="wave-row"><details open=""><summary><span class="dot" style="background: rgb(246, 177, 122);"></span><span>موج 1 — سینوسی · تک‌رنگ</span><span class="wave-tools"><button title="بالا" disabled="">↑</button><button title="پایین" disabled="">↓</button><button title="حذف" disabled="">✕</button></span></summary><div class="wave-body"><div><div class="ctrl-label">نوع موج</div><div class="segmented"><button class="active">سینوسی</button><button class="">آینه‌ای</button><button class="">خط‌چین</button><button class="">پله‌ای</button><button class="">نواری</button><button class="">خط تخت درخشان</button></div></div><div><div class="ctrl-label">حالت رنگ (گرادیان عمودی ۲ توقف / رنگین‌کمان جاری)</div><div class="segmented"><button class="active">تک‌رنگ</button><button class="">گرادیان عمودی</button><button class="">رنگین‌کمان جاری</button></div></div><div class="row">رنگ ۱<input type="color" title="رنگ ۱" aria-label="رنگ ۱"><label class="chip"><input type="checkbox"><strong>فعال</strong></label></div><div><div class="row" style="justify-content: space-between;"><span class="ctrl-label">شفافیت</span><b style="font-size: 13px;">100%</b></div><input type="range" min="0" max="100" step="1" aria-label="شفافیت موج 1"></div><div><div class="row" style="justify-content: space-between;"><span class="ctrl-label">درخشش</span><b style="font-size: 13px;">70%</b></div><input type="range" min="0" max="100" step="1" aria-label="درخشش موج 1"></div><div><div class="row" style="justify-content: space-between;"><span class="ctrl-label">ضخامت</span><b style="font-size: 13px;">2</b></div><input type="range" min="1" max="6" step="0.5" aria-label="ضخامت موج 1"></div><div><div class="ctrl-label">تراکم قله‌ها</div><div class="segmented"><button class="">کم</button><button class="">متوسط</button><button class="active">زیاد</button></div></div><div><div class="ctrl-label">محرک باند (کدام بخش صدا این موج را می‌راند)</div><div class="segmented"><button class="">بم</button><button class="active">میانی</button><button class="">زیر</button><button class="">کل</button></div></div></div></details></div></div>
+      <div class="row" style="justify-content:space-between">
+        <button id="btn-add" class="btn-ghost" style="padding:6px 14px;font-size:12px">➕ افزودن موج</button>
+        <span class="pref-sub">سقف ۵ — ترتیب رسم: بالا = جلو</span>
+      </div>
+      <div class="hint">مفهوم «آینه سراسری» مرده است: به‌جای waves/mirror سراسری، هر لایه نوع خودش را دارد (mirror-sine یک نوع موج است). همه تغییرات بی‌درنگ روی پیش‌نمایش چسبان بالا اعمال می‌شود — لازم نیست اسکرول کنی.</div>
+    </div>
+  </details>
+
+  <section class="pref-section" aria-label="سراسری پشته">
+    <div class="pref-head"><h4>🎛 سراسری پشته</h4><button id="btn-reset" class="btn-ghost" style="padding:6px 12px;font-size:12px">بازنشانی پشته</button></div>
+    <div>
+      <div class="row" style="justify-content:space-between"><span class="ctrl-label">حساسیت (سراسری — با لغزنده چسبان همگام)</span><b id="sens-val" style="font-size:13px">50٪ (متوسط)</b></div>
+      <input type="range" id="sens" min="0" max="100" value="50" aria-label="حساسیت">
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between"><span class="ctrl-label">سرعت (تپش ایستاده + جریان رنگ)</span><b id="spd-val" style="font-size:13px">50٪</b></div>
+      <input type="range" id="spd" min="0" max="100" value="50" aria-label="سرعت">
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between"><span class="ctrl-label">شدت (دهانه نوسان)</span><b id="int-val" style="font-size:13px">50٪</b></div>
+      <input type="range" id="int" min="0" max="100" value="50" aria-label="شدت">
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between"><span class="ctrl-label">نرمی (حمله/رهایی)</span><b id="sm-val" style="font-size:13px">50٪</b></div>
+      <input type="range" id="sm" min="0" max="100" value="50" aria-label="نرمی">
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between"><span class="ctrl-label">ذرات</span><b id="parts-val" style="font-size:13px">12</b></div>
+      <input type="range" id="parts" min="0" max="24" value="12" aria-label="ذرات">
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <label class="chip"><input type="checkbox" id="t-aurora" checked=""> <strong>شست‌وشوی زمینه (aurora)</strong></label>
+      <label class="mini-sens">ته‌رنگ <input type="range" id="aurora-hue" min="0" max="360" value="220" aria-label="ته رنگ زمینه"><b id="aurora-hue-val">220</b></label>
+    </div>
+  </section>
+
+  <details class="contract">
+    <summary>📦 قرارداد Storage (پشته v2)</summary>
+    <pre id="json-pre">{
+  "wave": {
+    "version": 2,
+    "starterId": "warm-presence",
+    "sensitivity": 50,
+    "speed": 50,
+    "intensity": 50,
+    "smooth": 50,
+    "particles": 12,
+    "aurora": {
+      "on": true,
+      "hue": 220
+    },
+    "waves": [
+      {
+        "type": "sine",
+        "colorMode": "solid",
+        "c1": "#f6b17a",
+        "opacity": 100,
+        "glow": 70,
+        "thick": 2,
+        "peaks": "high",
+        "band": "mid",
+        "mute": false
+      }
+    ]
+  }
+}</pre>
+    <div class="hint" style="margin-top:8px">کلید: <code dir="ltr">hamnegar.wave.v2</code> — ‏<code dir="ltr">waves[≤5]: {type, colorMode, c1, c2, opacity, glow, thick, peaks, band, mute}</code>؛ سراسری: ‏<code dir="ltr">sensitivity/speed/intensity/smooth/particles/aurora{on,hue}</code>. قفل ایستاده: PH0 ثابت، dash استاتیک، rainbow فقط hue-flow.</div>
+  </details>
+</div>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
+const q=new URLSearchParams(location.search);
+const PEAK_CYC={low:1.5,mid:3,high:5.5};
+const TYPES=["sine","mirror-sine","dash","steps","ribbon","flat-glow-line"];
+const TYPE_FA={sine:"سینوسی", "mirror-sine":"آینه‌ای", dash:"خط‌چین", steps:"پله‌ای", ribbon:"نواری", "flat-glow-line":"خط تخت درخشان"};
+const CMODES=["solid","gradient","rainbow"];
+const CMODE_FA={solid:"تک‌رنگ",gradient:"گرادیان عمودی",rainbow:"رنگین‌کمان جاری"};
+const BANDS=["low","mid","high","rms"];
+let _wid=0; const nid=()=>"w"+(++_wid)+Date.now().toString(36).slice(-3);
+function W(o){return Object.assign({id:nid(),type:"sine",colorMode:"solid",c1:"#8ab4f8",c2:"#c4b5fd",opacity:100,glow:70,thick:2,peaks:"mid",band:"rms",mute:false},o||{});}
+// 10 refined presets → starters (each populates the stack with 1–3 fully-custom waves)
+const STARTERS=[
+{id:"classic-fade",n:"محو کلاسیک",d:"سینوس + محو؛ مبنای مقایسه.",stack:()=>[W({type:"ribbon",c1:"#8ab4f8",opacity:90,glow:50,thick:2,peaks:"mid",band:"rms"})]},
+{id:"warm-presence",n:"حضور گرم",d:"تک‌موج گرم پرذره.",stack:()=>[W({type:"sine",c1:"#f6b17a",opacity:100,glow:70,thick:2,peaks:"high",band:"mid"})]},
+{id:"perc-pop",n:"ضربه‌ای",d:"اتک تند؛ باند high.",stack:()=>[W({type:"sine",c1:"#f9a8d4",opacity:100,glow:80,thick:2,peaks:"high",band:"high"})]},
+{id:"edge-whisper",n:"زمزمه لبه",d:"داش کم‌رنگ + سینوس.",stack:()=>[W({type:"sine",c1:"#8ab4f8",opacity:80,glow:50,thick:1.5,peaks:"mid",band:"rms"}),W({type:"dash",c1:"#e3ecfd",opacity:50,glow:30,thick:1.5,peaks:"mid",band:"high"})]},
+{id:"mirror-lake",n:"دریاچه آینه‌ای",d:"mirror-sine تکی (مفهوم آینه این‌جاست).",stack:()=>[W({type:"mirror-sine",c1:"#5eead4",opacity:90,glow:60,thick:2,peaks:"mid",band:"low"})]},
+{id:"aurora-wash",n:"شفق زمینه",d:"خط تخت درخشان + aurora روشن.",stack:()=>[W({type:"flat-glow-line",c1:"#c4b5fd",colorMode:"gradient",c2:"#5eead4",opacity:80,glow:90,thick:1.5,peaks:"low",band:"low"})],aurora:true},
+{id:"dash-ticker",n:"خط‌چین جاری",d:"داش پررنگ + شبح سینوسی.",stack:()=>[W({type:"dash",c1:"#8ab4f8",opacity:100,glow:70,thick:2,peaks:"mid",band:"mid"}),W({type:"sine",c1:"#8ab4f8",opacity:30,glow:20,thick:1,peaks:"mid",band:"rms"})]},
+{id:"quantum-steps",n:"پله‌های کوانتومی",d:"پله + شبح.",stack:()=>[W({type:"steps",c1:"#fde68a",opacity:100,glow:60,thick:2,peaks:"mid",band:"mid"}),W({type:"sine",c1:"#fde68a",opacity:25,glow:20,thick:1,peaks:"mid",band:"rms"})]},
+{id:"ice-glow",n:"درخشش یخی",d:"گرادیان عمودی + گلو قوی.",stack:()=>[W({type:"sine",colorMode:"gradient",c1:"#bfe3ff",c2:"#8ab4f8",opacity:100,glow:100,thick:2,peaks:"mid",band:"rms"})]},
+{id:"heartbeat",n:"نبض قلب",d:"سینوس + ریبون رنگین‌کمانی.",stack:()=>[W({type:"sine",c1:"#fca5a5",opacity:100,glow:60,thick:2,peaks:"high",band:"mid"}),W({type:"ribbon",colorMode:"rainbow",c1:"#fca5a5",opacity:45,glow:40,thick:2,peaks:"low",band:"low"})]},
+];
+const byStarter=id=>STARTERS.find(s=>s.id===id)||STARTERS[0];
+const DEF_G={sensitivity:50,speed:50,intensity:50,smooth:50,particles:12,auroraOn:true,auroraHue:220};
+const S={...DEF_G,starterId:q.get("style")||"classic-fade",waves:[]};
+function loadStarter(id,keepAurora){const st=byStarter(id);S.starterId=id;S.waves=st.stack();if(!keepAurora&&st.aurora!==undefined)S.auroraOn=st.aurora;}
+loadStarter(S.starterId);
+
+// --- engine soul (phrase/silence fake -> gate -> perc -> smooth env, 3 bands) ---
+const FAKE_FLOOR=0.06,FLOOR_MIN=0.03,LOUD_REF=0.7;
+function fakeRaw(t){const s=t/1000,CYC=4.7,SPEAK=3.2,EDGE=0.15,cyc=s%CYC;let g=1;
+ if(cyc>SPEAK){g=0;const e=Math.min(cyc-SPEAK,CYC-cyc);if(e<EDGE)g=0.5-0.5*Math.cos(Math.PI*e/EDGE);}
+ const b=0.5+0.5*Math.sin(2*Math.PI*0.22*s)*Math.sin(2*Math.PI*0.11*s+1.3);
+ const sy=0.55+0.45*Math.sin(2*Math.PI*2.7*s+Math.sin(2*Math.PI*0.9*s));
+ const burst=Math.pow(Math.max(0,Math.sin(2*Math.PI*1.7*s+0.5)*Math.sin(2*Math.PI*0.63*s)),2)*0.9;
+ const pluck=Math.pow(Math.max(0,Math.sin(2*Math.PI*3.1*s+1.1)),6)*0.7;
+ return Math.max(0,Math.min(1,(b*sy*1.35+burst+pluck)*0.72))*g;}
+function perc(x){x=Math.max(0,Math.min(1,x));return x<=0?0:Math.min(1,Math.pow(x,0.38)*(x<0.3?1.15:1.0));}
+function smoothMap(){const k=S.smooth/100;return{a:0.005+0.14*k,r:0.02+0.58*k};}
+function smoothE(e,tg,dt,a,r){const k=tg>e?a:r;return e+(tg-e)*(1-Math.exp(-dt/k));}
+const sm=v=>Math.min(1,Math.max(0,v));
+function sensMap(){const k=S.sensitivity/100;return{open:2.6-1.5*k,close:2.2-1.5*k,gain:0.5+1.3*k};}
+function ampScale(){return 0.15+1.85*(S.intensity/100);}
+function spdRate(){return 0.1+3.0*(S.speed/100);}
+let gateOpen=false,env=0,envFast=0,envSlow=0;
+let micOn=false,micStream=null,AC=null,analyser=null,micBuf=null,freqBuf=null,micErr="";
+async function micStart(){try{
+ if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error("no-gum");
+ micStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+ AC=AC||new (window.AudioContext||window.webkitAudioContext)();if(AC.state==="suspended")await AC.resume();
+ const src=AC.createMediaStreamSource(micStream);analyser=AC.createAnalyser();analyser.fftSize=1024;src.connect(analyser);
+ micBuf=new Float32Array(analyser.fftSize);freqBuf=new Uint8Array(analyser.frequencyBinCount);micOn=true;micErr="";micUI();
+}catch(err){micErr=String((err&&err.name)||err);micOn=false;micUI();
+ $("mic-hint").textContent="⛔ میکروفون باز نشد ("+micErr+") — همان سطح مصنوعی ادامه دارد.";}}
+function micStop(){micOn=false;if(micStream){micStream.getTracks().forEach(t=>t.stop());micStream=null;}analyser=null;micUI();}
+function micBands(){ // low/mid/high RMS split from spectrum; rms = mean
+ if(!analyser)return null;analyser.getByteFrequencyData(freqBuf);
+ const n=freqBuf.length,a=i=>freqBuf[i]/255;let l=0,m=0,h=0;const q1=Math.floor(n*0.15),q2=Math.floor(n*0.45);
+ for(let i=1;i<q1;i++)l+=a(i)*a(i);for(let i=q1;i<q2;i++)m+=a(i)*a(i);for(let i=q2;i<n;i++)h+=a(i)*a(i);
+ l=Math.sqrt(l/Math.max(1,q1-1));m=Math.sqrt(m/Math.max(1,q2-q1));h=Math.sqrt(h/Math.max(1,n-q2));
+ return{low:sm((l-0.02)/0.2),mid:sm((m-0.02)/0.2),high:sm((h-0.015)/0.18)};}
+function micUI(){const b=$("btn-mic");b.textContent=micOn?"⏹ توقف میکروفون":"🎤 تست با صدای من";b.classList.toggle("mic-on",micOn);
+ if(micOn)$("mic-hint").textContent="🎙️ زنده با صدای تو — پیش‌نمایش چسبان و همه مینی‌ها همین حالا واکنش می‌دهند.";}
+function stepLevel(t,dt,rec){let tg=0;
+ if(micOn&&analyser){const mm=sensMap();analyser.getFloatTimeDomainData(micBuf);
+  let sum=0;for(let i=0;i<micBuf.length;i++)sum+=micBuf[i]*micBuf[i];
+  const raw=Math.sqrt(sum/micBuf.length)/0.22*1.4*mm.gain;
+  const o=Math.max(FLOOR_MIN,FAKE_FLOOR*mm.open),c=Math.max(FLOOR_MIN,FAKE_FLOOR*mm.close);
+  gateOpen=gateOpen?(raw>=c):(raw>o);tg=gateOpen?perc(sm((raw-c)/Math.max(0.05,LOUD_REF-c))):0;}
+ else if(rec&&!reduced){const mm=sensMap(),raw=fakeRaw(t)*mm.gain;
+  const o=Math.max(FLOOR_MIN,FAKE_FLOOR*mm.open),c=Math.max(FLOOR_MIN,FAKE_FLOOR*mm.close);
+  gateOpen=gateOpen?(raw>=c):(raw>o);
+  tg=gateOpen?perc(sm((raw-c)/Math.max(0.05,LOUD_REF-c))):0;}
+ else gateOpen=false;
+ const sp=smoothMap();env=smoothE(env,tg,dt,sp.a,sp.r);
+ envFast=smoothE(envFast,tg,dt,Math.max(0.004,sp.a*0.5),Math.max(0.01,sp.r*0.6));
+ envSlow=smoothE(envSlow,tg,dt,sp.a*2,sp.r*2.4);return env;}
+function bandLevels(t){ // per-wave driver: mic spectrum SHAPE x gated env level; fake splits from env
+ if(micOn&&analyser){const b=micBands()||{low:envSlow,mid:env,high:envFast};
+  const g=sm(env/0.12); // gate: silence->0 (stillness), speech->1 (shape opens)
+  const L={low:b.low*g,mid:b.mid*g,high:b.high*g};return{...L,rms:sm(env)};}
+ const s=t/1000;
+ return{low:sm(envSlow),mid:sm(env),high:sm(envFast*(0.75+0.25*Math.sin(s*3.1))),rms:sm((env+envFast+envSlow)/3)};}
+function wob(e,t){const s=t/1000,r=spdRate();return e*(0.7+0.3*Math.sin(2*Math.PI*0.9*r*s+0.7)*Math.sin(2*Math.PI*1.3*r*s));}
+function ampOf(H,L){return H*0.015+H*0.52*sm(L/(1+0.12*L))*ampScale();}
+
+// --- draw (standing lock: PH0 fixed everywhere; dash static; rainbow = hue-flow color motion only) ---
+const PH0=0.6;let phA=0,phSpeed=0.2;
+function hx(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+function rgba(h,a){const c=hx(h);return`rgba(${c[0]},${c[1]},${c[2]},${a})`;}
+function sineY(x,W,H,A,cyc,ph){return H/2+A*Math.sin(2*Math.PI*cyc*x/W+ph)+A*0.18*Math.sin(4*Math.PI*cyc*x/W+ph*1.7);}
+function basePath(W,H,A,cyc){const p=new Path2D(),N=Math.max(64,Math.floor(W/2));
+ for(let i=0;i<=N;i++){const x=i/N*W,y=sineY(x,W,H,A,cyc,PH0);i?p.lineTo(x,y):p.moveTo(x,y);}return p;}
+function strokeFor(g,W,H,wv,t){ // solid | vertical-gradient 2 stops | rainbow-flow (x-gradient, hue drifts with time)
+ if(wv.colorMode==="gradient"){const gr=g.createLinearGradient(0,H/2-30,0,H/2+30);gr.addColorStop(0,wv.c1);gr.addColorStop(1,wv.c2);return gr;}
+ if(wv.colorMode==="rainbow"){const gr=g.createLinearGradient(0,0,W,0),flow=(t/1000)*40*spdRate();
+  for(let k=0;k<=6;k++)gr.addColorStop(k/6,`hsl(${((flow+k*60)%360).toFixed(0)} 90% 65%)`);return gr;}
+ return wv.c1;}
+function haloStroke(g,p,w,colorCss,alpha){if(alpha<=0)return;g.save();
+ g.globalCompositeOperation="lighter";g.lineWidth=w;g.strokeStyle=colorCss;g.globalAlpha=sm(alpha);g.lineCap="round";g.stroke(p);g.restore();}
+function drawWave(g,W,H,t,L,wv){
+ if(wv.mute||wv.opacity<=0)return;
+ const cyc=PEAK_CYC[wv.peaks]||3,baseA=ampOf(H,L),op=wv.opacity/100,gl=wv.glow/100;
+ const col=strokeFor(g,W,H,wv,t),colSolid=wv.colorMode==="rainbow"?"#9adcff":wv.c1;
+ const lwBase=+wv.thick||2;
+ if(wv.type==="ribbon"){const p=basePath(W,H,baseA,cyc);
+  const gr=g.createLinearGradient(0,H/2-baseA,0,H/2+baseA+14);
+  gr.addColorStop(0,wv.colorMode==="gradient"?wv.c2:rgba(colSolid,0.35));gr.addColorStop(1,"rgba(0,0,0,0)");
+  const f2=new Path2D(p);f2.lineTo(W,H);f2.lineTo(0,H);f2.closePath();
+  g.save();g.globalAlpha=op;g.fillStyle=wv.colorMode==="rainbow"?strokeFor(g,W,H,wv,t):gr;g.globalAlpha=op*0.8;g.fill(f2);g.restore();}
+ const A=wv.type==="flat-glow-line"?Math.max(baseA*0.15,1.5):baseA;
+ let p;
+ if(wv.type==="steps"){p=new Path2D();const N=Math.max(64,Math.floor(W/2)),st=A/4+0.5;
+  for(let i=0;i<=N;i++){const x=i/N*W;let y=sineY(x,W,H,A,cyc,PH0);y=H/2+Math.round((y-H/2)/st)*st;i?p.lineTo(x,y):p.moveTo(x,y);}}
+ else p=basePath(W,H,A,cyc);
+ g.save();g.globalAlpha=op;
+ if(gl>0){haloStroke(g,p,lwBase+4+gl*14,col,0.35*gl);haloStroke(g,p,lwBase+2+gl*6,col,0.22*gl);}
+ if(wv.type==="dash"){g.save();g.setLineDash([8,7]);g.lineDashOffset=0;g.lineWidth=lwBase;g.strokeStyle=col;g.lineCap="round";g.stroke(p);g.restore();}
+ else{g.lineWidth=lwBase;g.strokeStyle=col;g.lineCap="round";g.lineJoin=wv.type==="steps"?"miter":"round";g.stroke(p);}
+ if(wv.type==="mirror-sine"){g.save();g.globalAlpha=op*0.3;g.lineWidth=Math.max(1,lwBase-0.5);g.strokeStyle=col;g.stroke(basePath(W,H,A*0.3,cyc));g.restore();}
+ g.restore();}
+const PARTS=Array.from({length:24},(_,i)=>({u:(i+0.5)/24,sz:1+(i%2),al:0.22+0.28*((i*53%10)/10),j:(i*7919%100)/100*6.283}));
+function parts(g,W,H,t,A,col,n){if(S.particles<=0||!n)return;const m=Math.min(n,Math.round(S.particles)),r=spdRate();
+ for(let i=0;i<m;i++){const qq=PARTS[i],x=qq.u*W,y=sineY(x,W,H,A,3,PH0)+Math.sin(t/700*r+qq.j)*(0.6+A*0.12);
+  g.fillStyle=rgba(col,+qq.al.toFixed(2));g.beginPath();g.arc(x,y,qq.sz,0,7);g.fill();}}
+function aurora(g,W,H,t){if(!S.auroraOn)return;const Ls=wob(envSlow,t),a=0.05+0.14*sm(Ls);
+ const gr=g.createLinearGradient(0,0,0,H);
+ gr.addColorStop(0,`hsla(${S.auroraHue} 80% 60% / ${a.toFixed(3)})`);gr.addColorStop(1,"hsla(280 60% 70% / "+a.toFixed(3)+")");
+ g.fillStyle=gr;g.fillRect(0,0,W,H);}
+// ONE single draw path for big preview AND every mini: drawStack(ctx,stack,env,t,W,H)
+function drawStack(ctx,stack,env,t,W,H){aurora(ctx,W,H,t);
+ const bl=env;
+ stack.filter(w=>!w.mute).forEach(wv=>{const L=bl[wv.band]??bl.rms;drawWave(ctx,W,H,t,wob(L,t),wv);});
+ if(stack.length){const top=stack.find(w=>!w.mute);if(top)parts(ctx,W,H,t,ampOf(H,bl[top.band]??bl.rms),top.colorMode==="rainbow"?"#9adcff":top.c1,S.particles);}}
+
+// --- canvases ---
+const big=$("cv-big"),bx=big.getContext("2d");let BW=0,BH=0;const minis=[];
+function fitOne(cv,g){const d=Math.min(devicePixelRatio||1,2),r=cv.getBoundingClientRect();
+ cv.width=Math.max(2,Math.round(r.width*d));cv.height=Math.max(2,Math.round(r.height*d));g.setTransform(d,0,0,d,0,0);return[r.width,r.height];}
+function fit(){[BW,BH]=fitOne(big,bx);minis.forEach(m=>{const[w,h]=fitOne(m.cv,m.g);m.w=w;m.h=h;});}
+addEventListener("resize",fit);
+
+// --- starters grid (one-click stack fill; minis render the starter's own stack) ---
+const grid=$("style-grid");
+STARTERS.forEach((s,i)=>{const b=document.createElement("button");b.className="style-card";b.dataset.id=s.id;
+ b.innerHTML=`<canvas></canvas><b>${i+1} — ${s.n}</b><span>${s.d}</span>`;
+ b.addEventListener("click",()=>{loadStarter(s.id,true);buildWaveList();sync();
+  const u=new URL(location.href);u.searchParams.set("style",s.id);history.replaceState(null,"",u);});
+ grid.appendChild(b);minis.push({cv:b.querySelector("canvas"),g:b.querySelector("canvas").getContext("2d"),w:0,h:0,off:i*457,id:s.id});});
+
+// --- wave list (per-wave collapsible rows) ---
+function segBtns(el,vals,cur,fa,cb){el.innerHTML="";vals.forEach(v=>{const b=document.createElement("button");
+ b.textContent=fa?fa[v]:v;b.className=v===cur?"active":"";b.addEventListener("click",()=>cb(v));el.appendChild(b);});}
+function buildWaveList(){const list=$("wave-list");list.innerHTML="";
+ S.waves.forEach((wv,idx)=>{
+  const row=document.createElement("div");row.className="wave-row"+(wv.mute?" muted":"");
+  const det=document.createElement("details");if(idx===0)det.open=true;
+  const sum=document.createElement("summary");
+  const dot=document.createElement("span");dot.className="dot";dot.style.background=wv.colorMode==="rainbow"?"conic-gradient(red,orange,yellow,green,blue,violet,red)":wv.c1;
+  const title=document.createElement("span");title.textContent=`موج ${idx+1} — ${TYPE_FA[wv.type]} · ${CMODE_FA[wv.colorMode]}${wv.mute?" · بی‌صدا":""}`;
+  const tools=document.createElement("span");tools.className="wave-tools";
+  const up=document.createElement("button");up.textContent="↑";up.title="بالا";up.disabled=idx===0;
+  up.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();[S.waves[idx-1],S.waves[idx]]=[S.waves[idx],S.waves[idx-1]];buildWaveList();sync();});
+  const dn=document.createElement("button");dn.textContent="↓";dn.title="پایین";dn.disabled=idx===S.waves.length-1;
+  dn.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();[S.waves[idx+1],S.waves[idx]]=[S.waves[idx],S.waves[idx+1]];buildWaveList();sync();});
+  const del=document.createElement("button");del.textContent="✕";del.title="حذف";del.disabled=S.waves.length<=1;
+  del.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();S.waves.splice(idx,1);buildWaveList();sync();});
+  tools.append(up,dn,del);sum.append(dot,title,tools);det.appendChild(sum);
+  const body=document.createElement("div");body.className="wave-body";
+  const rType=document.createElement("div");rType.innerHTML=`<div class="ctrl-label">نوع موج</div>`;const segT=document.createElement("div");segT.className="segmented";
+  segBtns(segT,TYPES,wv.type,TYPE_FA,v=>{wv.type=v;buildWaveList();sync();});rType.appendChild(segT);body.appendChild(rType);
+  const rCm=document.createElement("div");rCm.innerHTML=`<div class="ctrl-label">حالت رنگ (گرادیان عمودی ۲ توقف / رنگین‌کمان جاری)</div>`;const segC=document.createElement("div");segC.className="segmented";
+  segBtns(segC,CMODES,wv.colorMode,CMODE_FA,v=>{wv.colorMode=v;buildWaveList();sync();});rCm.appendChild(segC);body.appendChild(rCm);
+  const rCol=document.createElement("div");rCol.className="row";
+  const c1=document.createElement("input");c1.type="color";c1.value=wv.c1;c1.title="رنگ ۱";c1.setAttribute("aria-label","رنگ ۱");
+  c1.addEventListener("input",()=>{wv.c1=c1.value;sync();dot.style.background=wv.colorMode==="rainbow"?"conic-gradient(red,orange,yellow,green,blue,violet,red)":wv.c1;});
+  rCol.append("رنگ ۱",c1);
+  if(wv.colorMode==="gradient"){const c2=document.createElement("input");c2.type="color";c2.value=wv.c2;c2.title="رنگ ۲";c2.setAttribute("aria-label","رنگ ۲");
+   c2.addEventListener("input",()=>{wv.c2=c2.value;sync();});rCol.append("رنگ ۲",c2);}
+  const mute=document.createElement("label");mute.className="chip";const mi=document.createElement("input");mi.type="checkbox";mi.checked=!wv.mute;
+  mi.addEventListener("change",()=>{wv.mute=!mi.checked;buildWaveList();sync();});
+  const ms=document.createElement("strong");ms.textContent="فعال";mute.append(mi,ms);rCol.appendChild(mute);body.appendChild(rCol);
+  [["opacity","شفافیت",0,100,"%"],["glow","درخشش",0,100,"%"],["thick","ضخامت",1,6,""]].forEach(([k,fa,mn,mx,u])=>{
+   const wrap=document.createElement("div");const lab=document.createElement("div");lab.className="row";lab.style.justifyContent="space-between";
+   const sp=document.createElement("span");sp.className="ctrl-label";sp.textContent=fa;const bb=document.createElement("b");bb.style.fontSize="13px";bb.textContent=wv[k]+u;
+   lab.append(sp,bb);const rg=document.createElement("input");rg.type="range";rg.min=mn;rg.max=mx;rg.step=k==="thick"?"0.5":"1";rg.value=wv[k];
+   rg.setAttribute("aria-label",fa+` موج ${idx+1}`);rg.addEventListener("input",()=>{wv[k]=+rg.value;bb.textContent=wv[k]+u;sync();});
+   wrap.append(lab,rg);body.appendChild(wrap);});
+  const rPk=document.createElement("div");rPk.innerHTML=`<div class="ctrl-label">تراکم قله‌ها</div>`;const segP=document.createElement("div");segP.className="segmented";
+  segBtns(segP,["low","mid","high"],wv.peaks,{low:"کم",mid:"متوسط",high:"زیاد"},v=>{wv.peaks=v;buildWaveList();sync();});rPk.appendChild(segP);body.appendChild(rPk);
+  const rBd=document.createElement("div");rBd.innerHTML=`<div class="ctrl-label">محرک باند (کدام بخش صدا این موج را می‌راند)</div>`;const segB=document.createElement("div");segB.className="segmented";
+  segBtns(segB,BANDS,wv.band,{low:"بم",mid:"میانی",high:"زیر",rms:"کل"},v=>{wv.band=v;buildWaveList();sync();});rBd.appendChild(segB);body.appendChild(rBd);
+  det.appendChild(body);row.appendChild(det);list.appendChild(row);});
+ $("btn-add").disabled=S.waves.length>=5;}
+$("btn-add").addEventListener("click",()=>{if(S.waves.length>=5)return;
+ S.waves.push(W({c1:["#8ab4f8","#5eead4","#c4b5fd","#f6b17a","#f9a8d4"][S.waves.length%5]}));buildWaveList();sync();});
+
+// --- globals ---
+let rec=true;
+$("btn-rec").addEventListener("click",()=>{rec=!rec;const b=$("btn-rec");
+ b.textContent=rec?"⏺ مصنوعی: روشن":"⏺ مصنوعی: خاموش";});
+$("btn-mic").addEventListener("click",()=>{micOn?micStop():micStart();});
+function bindRange(id,key,fmt){$(id).addEventListener("input",e=>{S[key]=+e.target.value;sync();});}
+bindRange("sens","sensitivity");bindRange("sens-mini","sensitivity");bindRange("spd","speed");
+bindRange("int","intensity");bindRange("sm","smooth");bindRange("parts","particles");
+$("aurora-hue").addEventListener("input",e=>{S.auroraHue=+e.target.value;sync();});
+$("t-aurora").addEventListener("change",e=>{S.auroraOn=e.target.checked;sync();});
+$("btn-reset").addEventListener("click",()=>{const id=S.starterId;Object.assign(S,DEF_G);loadStarter(id);buildWaveList();sync();});
+addEventListener("keydown",e=>{if(e.target.matches("input,textarea,[contenteditable]"))return;
+ const i=STARTERS.findIndex(s=>s.id===S.starterId);
+ if(e.key==="ArrowLeft"){$("style-grid").children[(i+1)%STARTERS.length].click();}
+ else if(e.key==="ArrowRight"){$("style-grid").children[(i-1+STARTERS.length)%STARTERS.length].click();}});
+
+function stateShape(){return{version:2,starterId:S.starterId,sensitivity:S.sensitivity,speed:S.speed,intensity:S.intensity,
+ smooth:S.smooth,particles:S.particles,aurora:{on:S.auroraOn,hue:S.auroraHue},
+ waves:S.waves.map(w=>({type:w.type,colorMode:w.colorMode,c1:w.c1,c2:w.colorMode==="gradient"?w.c2:undefined,
+  opacity:w.opacity,glow:w.glow,thick:+w.thick,peaks:w.peaks,band:w.band,mute:!!w.mute}))};}
+function sync(){
+ document.querySelectorAll(".style-card").forEach(c=>c.classList.toggle("active",c.dataset.id===S.starterId));
+ $("sens").value=S.sensitivity;$("sens-mini").value=S.sensitivity;
+ $("spd").value=S.speed;$("int").value=S.intensity;$("sm").value=S.smooth;$("parts").value=S.particles;
+ $("aurora-hue").value=S.auroraHue;$("t-aurora").checked=S.auroraOn;
+ const k=S.sensitivity<34?"کم":S.sensitivity<67?"متوسط":"زیاد";
+ $("sens-val").textContent=S.sensitivity+"٪ ("+k+")";$("sens-mini-val").textContent=S.sensitivity+"٪";
+ $("spd-val").textContent=S.speed+"٪";$("int-val").textContent=S.intensity+"٪";$("sm-val").textContent=S.smooth+"٪";
+ $("parts-val").textContent=S.particles;$("aurora-hue-val").textContent=S.auroraHue;
+ $("stack-count").textContent=S.waves.length+" موج"+(S.waves.length>=5?" (سقف)":"");
+ $("btn-add").disabled=S.waves.length>=5;
+ $("pv-name").textContent="استارتر «"+byStarter(S.starterId).n+"» — "+S.waves.length+" موج"+(micOn?" — 🎙️ زنده":"");
+ const chip=$("status-chip");
+ const label=micOn?(env>0.06?"🎙️ میکروفون وصل — صدا می‌آید":"🎙️ میکروفون وصل — سکوت"):(rec?(env>0.06?"🔊 صدای مصنوعی":"🔊 صدای مصنوعی — سکوت"):"🔇 سکوت");
+ chip.textContent=label;chip.classList.toggle("live",micOn&&env>0.06);
+ $("json-pre").textContent=JSON.stringify({wave:stateShape()},null,2);}
+buildWaveList();sync();fit();
+
+// --- loop (standing lock: PH0 fixed; speed scales pulsation + rainbow hue-flow only) ---
+let last=performance.now();const t0=last;
+function frame(now){requestAnimationFrame(frame);
+ const dt=Math.min(0.05,(now-last)/1000);last=now;const t=reduced?0:now-t0;
+ stepLevel(t,dt,rec);const bl=bandLevels(t);
+ const spdT=(0.2+2.2*Math.min(1,env*1.2))*spdRate();phSpeed+=(spdT-phSpeed)*(1-Math.exp(-dt/0.15));phA+=reduced?0:dt*phSpeed;
+ bx.clearRect(0,0,BW,BH);drawStack(bx,S.waves,bl,t,BW,BH);
+ minis.forEach(m=>{if(m.w<2)return;m.g.clearRect(0,0,m.w,m.h);
+  const st=STARTERS.find(x=>x.id===m.id);
+  drawStack(m.g,st.stack(),bl,t,m.w,m.h);});
+ if((frame.n=(frame.n||0)+1)%20===0)sync();}
+requestAnimationFrame(frame);
+</script>
+
+
+</body></html>

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HamNegar — Alternative B: Dual-Pane Builder (Prototype)</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="css/app.css" rel="stylesheet">
+<style>
+.dual-pane{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.pane{background:var(--surface2);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;min-height:360px;overflow:hidden}
+.pane-head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
+.pane-head h5{font-size:13px;font-weight:700}
+.pane-toolbar{padding:8px 10px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--border)}
+.pane-toolbar input[type="search"]{background:#111113;border:1px solid var(--border);color:#fff;padding:8px 12px;border-radius:999px;font-size:13px;outline:none;width:100%}
+.pane-toolbar input[type="search"]:focus{border-color:var(--accent)}
+.pane-body{flex:1;overflow:auto;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:180px}
+.provider-group summary{font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;padding:6px 4px;display:flex;align-items:center;gap:6px;list-style:none}
+.provider-group summary::-webkit-details-marker{display:none}
+.provider-group[open] summary{color:var(--text)}
+.avail-card{display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 10px;transition:.15s}
+.avail-card.is-in-chain{opacity:.5;border-style:dashed}
+.avail-card b{font-size:13px;display:block}
+.avail-card small{font-size:11px;color:var(--muted)}
+.avail-card .add-btn{padding:6px 10px;font-size:12px;border-radius:999px;background:var(--accent);color:#fff;border:none;cursor:pointer}
+.avail-card .add-btn:disabled{background:var(--surface2);color:var(--muted);cursor:not-allowed;border:1px solid var(--border)}
+.pane--active.drag-over{border-color:var(--accent);box-shadow:0 0 0 2px rgba(26,115,232,.15)}
+.pane-drop-hint{margin:0 8px 8px;border:1px dashed var(--border);border-radius:10px;padding:10px;text-align:center;color:var(--muted);font-size:12px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);clip-path:inset(50%)}
+@media(max-width:768px){.dual-pane{grid-template-columns:1fr} .pane--available{order:2} .pane--active{order:1}}
+</style>
+</head>
+<body>
+<div class="header"><div class="brand"><div class="brand-icon">✨</div><div><h1>هم‌نگار — Alternative B</h1><p>Dual-Pane Builder — پروتوتایپ تعاملی (بدون بک‌اند)</p></div></div>
+  <div style="display:flex;gap:8px"><span class="chip">پیش‌نمایش</span><a href="docs/spec-alternative-b-dual-pane.md" target="_blank" class="btn-ghost btn-sm">مشاهده Spec</a></div>
+</div>
+
+<div style="padding:12px 14px;display:flex;flex-direction:column;gap:12px;max-width:1100px;margin:0 auto;width:100%">
+
+  <section class="pref-section" aria-labelledby="polish-title">
+    <div class="pref-head">
+      <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی (Groq/OpenRouter)</h4>
+      <label class="chip chip-toggle"><input type="checkbox" id="toggle-polish" checked> پالیش نهایی روشن</label>
+    </div>
+
+    <div class="dual-pane" dir="rtl">
+      <!-- Available -->
+      <div class="pane pane--available" role="region" aria-labelledby="avail-title">
+        <div class="pane-head">
+          <h5 id="avail-title">مدل‌های موجود</h5>
+          <span class="hint-inline" id="avail-count">—</span>
+        </div>
+        <div class="pane-toolbar">
+          <input id="avail-search" type="search" placeholder="🔍 جستجو مدل…" aria-label="جستجو در مدل‌های موجود">
+          <div class="segmented" role="group" aria-label="فیلتر ارائه‌دهنده">
+            <button class="active" data-filter="all">همه</button>
+            <button data-filter="groq">Groq</button>
+            <button data-filter="openrouter">OpenRouter</button>
+            <button data-filter="gemini">Gemini</button>
+          </div>
+        </div>
+        <div id="avail-list" class="pane-body" role="list" aria-label="مدل‌های موجود"></div>
+      </div>
+
+      <!-- Active -->
+      <div class="pane pane--active" id="pane-active" role="region" aria-labelledby="active-title">
+        <div class="pane-head">
+          <h5 id="active-title">زنجیرهٔ فعال</h5>
+          <div style="display:flex;gap:6px">
+            <button class="btn-ghost btn-sm" id="btn-all-on">همه روشن</button>
+            <button class="btn-ghost btn-sm" id="btn-all-off">همه خاموش</button>
+          </div>
+        </div>
+        <div id="active-list" class="chain-list pane-body" role="list" aria-label="زنجیره پالیش"></div>
+        <div class="pane-drop-hint" id="drop-hint">مدل‌ها را اینجا رها کن یا روی ＋ بزن</div>
+        <div class="chain-foot" style="padding:8px 10px">
+          <span class="hint-inline">ترتیب از بالا به پایین = اولویت فالبک</span>
+          <button class="btn-ghost btn-sm" id="btn-reset">بازنشانی</button>
+        </div>
+      </div>
+    </div>
+    <div id="chain-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div class="hint" style="margin-top:8px">نکته: این پروتوتایپ فقط UI است — ذخیره روی localStorage واقعی با کلید <code>POLISH_CHAIN</code> هم‌خوان است.</div>
+  </section>
+
+  <section class="pref-section" aria-labelledby="stt-title2">
+    <div class="pref-head"><h4 id="stt-title2">🎙️ زنجیرهٔ STT (نمونهٔ ۴تایی)</h4><span class="pref-sub">همان کامپوننت — بدون سوییچ per-item</span></div>
+    <div class="dual-pane" dir="rtl">
+      <div class="pane pane--available" role="region" aria-label="STT موجود"><div class="pane-head"><h5>مدل‌های STT موجود</h5></div><div class="pane-body" id="stt-avail"></div></div>
+      <div class="pane pane--active" role="region" aria-label="STT فعال"><div class="pane-head"><h5>زنجیرهٔ STT فعال</h5></div><div class="pane-body chain-list" id="stt-active"></div></div>
+    </div>
+  </section>
+</div>
+
+<div id="toast"></div>
+<script type="module">
+const AVAILABLE = [
+  {id:'qwen/qwen3.6-27b', provider:'groq', label:'qwen/qwen3.6-27b', sub:'Groq • 1K RPD'},
+  {id:'qwen/qwen3.8-27b', provider:'groq', label:'qwen/qwen3.8-27b', sub:'Groq • 1K RPD'},
+  {id:'openai/gpt-oss-20b', provider:'groq', label:'openai/gpt-oss-20b', sub:'Groq • 1K RPD'},
+  {id:'openai/gpt-oss-120b', provider:'groq', label:'openai/gpt-oss-120b', sub:'Groq • 1K RPD'},
+  {id:'allam-2-7b', provider:'groq', label:'allam-2-7b', sub:'Groq • 7K RPD'},
+  {id:'qwen/qwen3-32b:free', provider:'openrouter', label:'qwen/qwen3-32b', sub:'OpenRouter • رایگان'},
+  {id:'openai/gpt-oss-20b:free', provider:'openrouter', label:'openai/gpt-oss-20b', sub:'OpenRouter • رایگان'},
+  {id:'gemini-flash-lite-latest', provider:'gemini', label:'gemini-flash-lite-latest', sub:'سهم بیشتر ✓'},
+  {id:'gemini-2.5-flash', provider:'gemini', label:'gemini-2.5-flash', sub:'قدیمی'},
+];
+let active = [
+  {id:'qwen/qwen3.6-27b', provider:'groq', enabled:true},
+  {id:'qwen/qwen3.8-27b', provider:'groq', enabled:true},
+  {id:'openai/gpt-oss-20b', provider:'groq', enabled:false},
+];
+const sttAvail = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite','gemini-2.5-flash'];
+let sttActive = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
+
+const $ = s=>document.getElementById(s);
+const availList = $('avail-list'), activeList = $('active-list'), live = $('chain-live'), toastEl = $('toast');
+
+function toast(m){ toastEl.textContent=m; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'),2200); }
+function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function renderAvailable(){
+  const q = ($('avail-search').value||'').toLowerCase();
+  const filter = document.querySelector('.segmented [data-filter].active')?.dataset.filter || 'all';
+  availList.innerHTML='';
+  const groups = {};
+  AVAILABLE.forEach(a=>{ if(filter!=='all' && a.provider!==filter) return; if(q && !a.id.toLowerCase().includes(q) && !a.label.toLowerCase().includes(q)) return; (groups[a.provider] ||= []).push(a); });
+  const order = ['groq','openrouter','gemini'];
+  let count=0;
+  order.forEach(prov=>{
+    const items = groups[prov]; if(!items?.length) return;
+    const det = document.createElement('details'); det.open=true; det.className='provider-group'; det.dataset.provider=prov;
+    const hasKey = prov==='groq' ? true : prov==='openrouter' ? false : true;
+    det.innerHTML = `<summary>${prov} <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span> <span class="hint-inline">${items.length} مدل</span></summary>`;
+    items.forEach(a=>{
+      const inChain = active.some(x=> x.id===a.id && x.provider===a.provider);
+      const card = document.createElement('div');
+      card.className='avail-card'+(inChain?' is-in-chain':'');
+      card.draggable = !inChain;
+      card.dataset.id=a.id; card.dataset.provider=a.provider;
+      card.setAttribute('role','listitem');
+      card.innerHTML = `<div style="min-width:0"><b>${esc(a.label)}</b><small>${esc(a.sub)}</small></div>${inChain?'<span class="chain-badge">✓ در زنجیره</span>':`<button class="add-btn" aria-label="افزودن ${esc(a.label)} (${prov}) به زنجیره">＋ افزودن</button>`}`;
+      if(!inChain){
+        card.querySelector('button').addEventListener('click', ()=> addToActive(a));
+        card.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', JSON.stringify(a)); e.dataTransfer.effectAllowed='copy'; });
+      }
+      det.appendChild(card); count++;
+    });
+    availList.appendChild(det);
+  });
+  $('avail-count').textContent = `${count} مدل`;
+  if(count===0) availList.innerHTML = '<div class="hint" style="margin:8px">چیزی یافت نشد — فیلتر را پاک کن</div>';
+}
+
+function renderActive(){
+  activeList.innerHTML='';
+  if(active.length===0){
+    activeList.innerHTML = '<div class="hint" style="border:1px dashed var(--border);border-radius:10px;padding:14px;text-align:center">زنجیره خالی است — از «مدل‌های موجود» یک مدل اضافه کن</div>';
+    $('drop-hint').style.display='block';
+  } else {
+    $('drop-hint').style.display='none';
+  }
+  active.forEach((entry, idx)=>{
+    const item = document.createElement('div');
+    item.className='chain-item'+(entry.enabled===false?' polish-off':'');
+    item.draggable=true; item.dataset.index=idx; item.setAttribute('role','listitem');
+    item.setAttribute('aria-label', `جایگاه ${idx+1} از ${active.length}: ${entry.id} (${entry.provider}) ${entry.enabled===false?'خاموش':'روشن'}`);
+    item.setAttribute('aria-posinset', idx+1); item.setAttribute('aria-setsize', active.length);
+    const badge = `<span class="chain-badge ${entry.provider==='groq'?'ok':''}">${esc(entry.provider)}</span>`;
+    item.innerHTML = `
+      <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
+      <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px"><span class="chain-label">${esc(entry.id)}</span><span style="font-size:11px;color:var(--muted)">${esc(entry.provider)}</span></div>
+      ${badge}
+      <label class="chip" style="padding:4px 8px;gap:4px"><input type="checkbox" role="switch" ${entry.enabled!==false?'checked':''} aria-label="روشن/خاموش ${esc(entry.id)}"><span style="font-size:11px">${entry.enabled!==false?'روشن':'خاموش'}</span></label>
+      <div class="chain-actions">
+        <button class="chain-btn" data-up ${idx===0?'disabled':''} aria-label="بالا">▲</button>
+        <button class="chain-btn" data-down ${idx===active.length-1?'disabled':''} aria-label="پایین">▼</button>
+        <button class="chain-btn" data-remove aria-label="حذف ${esc(entry.id)}">✕</button>
+      </div>`;
+    item.querySelector('[data-up]')?.addEventListener('click', ()=> move(idx,-1));
+    item.querySelector('[data-down]')?.addEventListener('click', ()=> move(idx,1));
+    item.querySelector('[data-remove]')?.addEventListener('click', ()=> removeAt(idx));
+    item.querySelector('input[type="checkbox"]')?.addEventListener('change', e=>{
+      active[idx].enabled = e.target.checked;
+      renderActive(); renderAvailable();
+      live.textContent = `${entry.id} ${e.target.checked?'روشن':'خاموش'} شد`;
+    });
+    item.addEventListener('dragstart', e=>{ item.classList.add('dragging'); e.dataTransfer.setData('text/plain', 'reorder:'+idx); e.dataTransfer.effectAllowed='move'; });
+    item.addEventListener('dragend', ()=> item.classList.remove('dragging'));
+    activeList.appendChild(item);
+  });
+  // dragover for reorder + copy from available
+  activeList.ondragover = e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; };
+  activeList.ondrop = e=>{
+    e.preventDefault();
+    const raw = e.dataTransfer.getData('text/plain');
+    if(raw.startsWith('reorder:')){
+      const from = parseInt(raw.split(':')[1],10);
+      const target = e.target.closest('.chain-item');
+      const to = target ? parseInt(target.dataset.index,10) : active.length-1;
+      if(from===to) return;
+      const [m]=active.splice(from,1); active.splice(to,0,m);
+      renderActive(); live.textContent=`${m.id} به جایگاه ${to+1} رفت`; toast(`جابه‌جا شد: ${m.id}`);
+    } else {
+      try{ const a = JSON.parse(raw); addToActive(a); }catch{}
+    }
+  };
+  const pane = $('pane-active');
+  pane.ondragover = e=>{ e.preventDefault(); pane.classList.add('drag-over'); };
+  pane.ondragleave = ()=> pane.classList.remove('drag-over');
+  pane.ondrop = e=>{
+    e.preventDefault(); pane.classList.remove('drag-over');
+    const raw = e.dataTransfer.getData('text/plain');
+    try{ const a = JSON.parse(raw); if(a.id) addToActive(a); }catch{}
+  };
+}
+
+function addToActive(a){
+  if(active.some(x=> x.id===a.id && x.provider===a.provider)){ toast('قبلاً در زنجیره است'); return; }
+  active.push({id:a.id, provider:a.provider, enabled:true});
+  renderActive(); renderAvailable();
+  live.textContent = `${a.id} به زنجیره اضافه شد`;
+  toast(`افزوده شد: ${a.id} (${a.provider})`);
+}
+function removeAt(idx){
+  const [m]=active.splice(idx,1);
+  renderActive(); renderAvailable();
+  live.textContent = `${m.id} از زنجیره حذف شد`;
+  toast(`حذف شد: ${m.id}`);
+}
+function move(idx, dir){
+  const n = idx+dir; if(n<0||n>=active.length) return;
+  [active[idx], active[n]] = [active[n], active[idx]];
+  renderActive(); live.textContent = `${active[n].id} جابه‌جا شد`;
+}
+
+// STT demo (reuse same pattern)
+function renderSTT(){
+  const av = $('stt-avail'), ac=$('stt-active');
+  av.innerHTML=''; ac.innerHTML='';
+  sttAvail.forEach(id=>{
+    const inChain = sttActive.includes(id);
+    const d=document.createElement('div'); d.className='avail-card'+(inChain?' is-in-chain':'');
+    d.innerHTML=`<div><b>${esc(id)}</b></div>${inChain?'<span class="chain-badge">✓ در زنجیره</span>':'<button class="add-btn">＋</button>'}`;
+    if(!inChain) d.querySelector('button').addEventListener('click', ()=>{ sttActive.push(id); renderSTT(); toast('STT: '+id+' افزوده شد'); });
+    av.appendChild(d);
+  });
+  sttActive.forEach((id, idx)=>{
+    const it=document.createElement('div'); it.className='chain-item'; it.draggable=true; it.dataset.index=idx;
+    it.innerHTML=`<span class="drag-handle">⋮⋮</span><span class="rank ${idx>0?'fallback':''}">${idx+1}</span><span class="chain-label" style="flex:1">${esc(id)}</span><button class="chain-btn" ${idx===0?'disabled':''} data-up>▲</button><button class="chain-btn" ${idx===sttActive.length-1?'disabled':''} data-down>▼</button><button class="chain-btn" data-remove>✕</button>`;
+    it.querySelector('[data-up]')?.addEventListener('click', ()=>{ [sttActive[idx], sttActive[idx-1]]=[sttActive[idx-1], sttActive[idx]]; renderSTT(); });
+    it.querySelector('[data-down]')?.addEventListener('click', ()=>{ [sttActive[idx], sttActive[idx+1]]=[sttActive[idx+1], sttActive[idx]]; renderSTT(); });
+    it.querySelector('[data-remove]')?.addEventListener('click', ()=>{ sttActive.splice(idx,1); renderSTT(); });
+    ac.appendChild(it);
+  });
+}
+
+$('avail-search').addEventListener('input', renderAvailable);
+document.querySelectorAll('.segmented [data-filter]').forEach(b=> b.addEventListener('click', ()=>{
+  document.querySelectorAll('.segmented [data-filter]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); renderAvailable();
+}));
+$('btn-all-on').addEventListener('click', ()=>{ active.forEach(e=>e.enabled=true); renderActive(); toast('همه روشن'); live.textContent='همه روشن شد'; });
+$('btn-all-off').addEventListener('click', ()=>{ active.forEach(e=>e.enabled=false); renderActive(); toast('همه خاموش'); live.textContent='همه خاموش شد'; });
+$('btn-reset').addEventListener('click', ()=>{ active=[{id:'qwen/qwen3.6-27b',provider:'groq',enabled:true},{id:'qwen/qwen3.8-27b',provider:'groq',enabled:true},{id:'openai/gpt-oss-20b',provider:'groq',enabled:true}]; renderActive(); renderAvailable(); toast('بازنشانی شد'); });
+
+renderAvailable(); renderActive(); renderSTT();
+</script>
+</body>
+</html>
