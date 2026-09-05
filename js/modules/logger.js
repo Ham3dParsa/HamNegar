@@ -1,7 +1,12 @@
 // Module: logger
-// Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) + setProgress/dismissProgress — small surface, hides DOM/progress behind calls.
-// Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock behind 5 calls.
+// Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) + setProgress/dismissProgress + groupRun(label)/clearRun — small surface, hides DOM/progress behind calls.
+// Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock, per-run grouping behind calls.
 let logBody, statusText, statusDot, toastEl;
+
+// Per-run groups (ticket/16): groupRun(label) opens run #n with a clickable separator;
+// every later log line is tagged data-run=n until the next groupRun/clearRun.
+let runSeq = 0;
+let currentRun = 0;
 
 let progressEl = null;
 let progressBar = null;
@@ -30,11 +35,40 @@ export const Logger = {
       if (detail.length > 900) detail = detail.slice(0, 900) + ' …';
     }
     line.innerHTML = `<span class="log-time">${time}</span> [${esc(level).toUpperCase()}] ${esc(msg)}${detail ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted)">جزئیات</summary><pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;margin-top:4px">${esc(detail)}</pre></details>` : ''}`;
+    if (currentRun) line.dataset.run = String(currentRun);
     logBody.appendChild(line);
     if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
     logBody.scrollTop = logBody.scrollHeight;
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     fn(`[${level}] ${msg}`, data ?? '');
+  },
+  // Open a per-run group: prints a clickable separator (app.js isolates the run on click)
+  // and tags all following lines with data-run=n. Labels are code constants — never keys.
+  groupRun(label) {
+    runSeq += 1;
+    currentRun = runSeq;
+    const safe = esc(String(label ?? '').slice(0, 80));
+    if (logBody) {
+      const time = new Date().toLocaleTimeString('fa-IR');
+      const sep = document.createElement('div');
+      sep.className = 'log-line log-sep';
+      sep.dataset.level = 'info';
+      sep.dataset.run = String(currentRun);
+      sep.tabIndex = 0;
+      sep.setAttribute('role', 'button');
+      sep.setAttribute('aria-pressed', 'false');
+      sep.setAttribute('aria-label', `ایزوله کردن اجرای ${currentRun}`);
+      sep.innerHTML = `<span class="log-time">${time}</span> <b>${safe} #${currentRun}</b> <span class="run-hint">(کلیک: فقط همین اجرا)</span>`;
+      logBody.appendChild(sep);
+      if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
+      logBody.scrollTop = logBody.scrollHeight;
+    }
+    console.log(`[run #${currentRun}] ${label}`);
+    return currentRun;
+  },
+  // End the current run: following lines stay untagged until the next groupRun.
+  clearRun() {
+    currentRun = 0;
   },
   setStatus(text, type = 'info') {
     if (statusText) statusText.textContent = text;
