@@ -553,3 +553,10 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 :focus-visible{outline:2px solid var(--accent2) !important;outline-offset:2px !important}
 /* respect reduced motion */
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}}
+/* ===== ticket/floating-actionbar-droplet — glass floating island (append-only; no HTML/JS changes) ===== */
+.actionbar{margin:0 auto 16px;width:calc(100% - 32px);max-width:540px;border-radius:999px;background:var(--glass-bg);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--glass-border);box-shadow:var(--glass-shadow);padding:10px 18px}
+/* hero mic: fixed capsule sizing (no layout jump between states), pulse ring kept inside the island */
+#btn-mic.hero{flex:0 0 auto}
+#btn-mic.hero .pulse-ring{inset:-2px}
+/* 390px guard: tighter island so timer + cancel + undo/redo fit with zero x-scroll */
+@media (max-width:420px){.actionbar{padding:8px 12px;gap:8px}.demo-actionbar .rec-timer{font-size:13px;padding:3px 8px}}
