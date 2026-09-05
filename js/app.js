@@ -1921,7 +1921,7 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
-    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.clearRun(); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const undo = stagePushRaw(scope);
     stageApply(scope, out.text);
     undo.newEnd = scope.start + out.text.length;
@@ -1929,10 +1929,12 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     Logger.log('info', `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${out.model} (${out.providerId})`);
     Logger.setStatus('✅ ' + faLabel + ' نشست', 'info');
     Logger.toast(faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'));
+    Logger.clearRun();
   } catch (e) {
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ' + faLabel + ': ' + safe, 'error');
     Logger.toast('❌ ' + faLabel + ': ' + safe.slice(0, 60));
+    Logger.clearRun();
   } finally { setStageBusy(false); }
 }
 async function runTranslate(code){
@@ -1948,7 +1950,7 @@ async function runTranslate(code){
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
-    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.clearRun(); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const out = res.text;
     const undo = stagePushRaw(scope);
     stageApply(scope, out);
@@ -1957,10 +1959,12 @@ async function runTranslate(code){
     Logger.log('info', `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${res.model} (${res.providerId})`);
     Logger.setStatus('✅ ترجمه نشست', 'info');
     Logger.toast('ترجمه → ' + code + ' ✓');
+    Logger.clearRun();
   } catch (e) {
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ترجمه: ' + safe, 'error');
     Logger.toast('❌ ترجمه: ' + safe.slice(0, 60));
+    Logger.clearRun();
   } finally { setStageBusy(false); }
 }
 $('stage-simple')?.addEventListener('click', () => runStage('simple', 'پالایش ساده', SYS_SIMPLE, '✨ پالایش ساده'));
