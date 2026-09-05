@@ -89,25 +89,59 @@
   <div class="modal-box modal-wide">
     <h3>⚙️ تنظیمات</h3>
     <div class="settings-tabs" role="tablist" aria-label="بخش‌های تنظیمات">
-      <button type="button" class="settings-tab active" id="tab-models" role="tab" aria-selected="true" aria-controls="panel-models">مدل‌ها</button>
-      <button type="button" class="settings-tab" id="tab-chains" role="tab" aria-selected="false" aria-controls="panel-chains">زنجیره‌ها</button>
+      <button type="button" class="settings-tab active" id="tab-pipeline" role="tab" aria-selected="true" aria-controls="panel-pipeline">پایپ‌لاین هوشمند</button>
       <button type="button" class="settings-tab" id="tab-wave" role="tab" aria-selected="false" aria-controls="panel-wave">موج صدا</button>
     </div>
 
-    <!-- Models tab: ONE flow card — rail (single truth) → inline key card → search+chips → flat list -->
-    <section id="panel-models" role="tabpanel" aria-labelledby="tab-models">
-      <div class="flow-card" id="models-flow">
-        <div class="rail" id="prov-rail" role="listbox" aria-label="ارائه‌دهنده‌ها">
-          <button type="button" role="option" aria-selected="false" data-prov="groq">Groq</button>
-          <button type="button" role="option" aria-selected="false" data-prov="gemini">Google AI Studio</button>
-          <button type="button" role="option" aria-selected="false" data-prov="openrouter">OpenRouter</button>
-          <button type="button" role="option" aria-selected="false" data-prov="zenspark">OpenCode_Zen</button>
-          <button type="button" role="option" aria-selected="false" data-prov="custom">＋ سفارشی</button>
-          <button type="button" role="option" aria-selected="true" data-prov="all" class="active">همه</button>
+    <!-- Pipeline tab: providers hub + active chains (ticket/pipeline-html-skeleton; wiring in ticket 3 — old IDs kept so current JS loads clean) -->
+    <section id="panel-pipeline" role="tabpanel" aria-labelledby="tab-pipeline">
+      <div class="prov-hub" id="providers-hub" role="group" aria-label="هاب ارائه‌دهندگان" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <span class="prov-item" style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="chip" data-prov="groq" aria-label="انتخاب Groq"><span class="dot" id="dot-groq"></span><strong>Groq</strong></button><button type="button" class="btn-ghost btn-sm" data-edit-prov="groq" aria-label="ویرایش کلید Groq">⚙</button></span>
+        <span class="prov-item" style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="chip" data-prov="gemini" aria-label="انتخاب Google AI Studio"><span class="dot" id="dot-gemini"></span><strong>Google AI Studio</strong></button><button type="button" class="btn-ghost btn-sm" data-edit-prov="gemini" aria-label="ویرایش کلید Google AI Studio">⚙</button></span>
+        <span class="prov-item" style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="chip" data-prov="openrouter" aria-label="انتخاب OpenRouter"><span class="dot" id="dot-openrouter"></span><strong>OpenRouter</strong></button><button type="button" class="btn-ghost btn-sm" data-edit-prov="openrouter" aria-label="ویرایش کلید OpenRouter">⚙</button></span>
+        <span class="prov-item" style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="chip" data-prov="zenspark" aria-label="انتخاب OpenCode Zen"><span class="dot" id="dot-zenspark"></span><strong>OpenCode Zen</strong></button><button type="button" class="btn-ghost btn-sm" data-edit-prov="zenspark" aria-label="ویرایش کلید OpenCode Zen">⚙</button></span>
+        <span class="prov-item" style="display:inline-flex;gap:4px;align-items:center"><button type="button" class="chip" data-prov="custom" aria-label="افزودن ارائه‌دهنده سفارشی"><span aria-hidden="true">＋</span><strong>سفارشی</strong></button></span>
+      </div>
+      <div class="pref-divider"></div>
+      <section class="pref-section" aria-labelledby="stt-title">
+        <div class="pref-head">
+          <h4 id="stt-title">🎙️ زنجیرهٔ ترجیح STT</h4>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn-ghost btn-sm" id="btn-stt-all-on" aria-label="روشن کردن همه مدل‌های STT">همه روشن</button>
+            <button type="button" class="btn-ghost btn-sm" id="btn-stt-all-off" aria-label="خاموش کردن همه مدل‌های STT">همه خاموش</button>
+          </div>
         </div>
-        <div id="models-keys-slot">
+        <p class="pref-sub" style="font-size:11px;color:var(--muted);margin:4px 0">اولویت از بالا به پایین — ▲▼ یا بکش ⋮⋮ برای جابجایی، سوییچ برای خاموش/روشن، ✕ برای حذف. وضعیت کلید فقط نمایشی است (✓/⚠).</p>
+        <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
+        <div class="chain-foot">
+          <button type="button" class="btn-ghost btn-sm" id="btn-add-stt" style="border-radius:999px" aria-label="افزودن مدل صوتی به زنجیره STT">＋ افزودن مدل صوتی</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt" aria-label="بازنشانی زنجیره STT">بازنشانی STT</button>
+        </div>
+      </section>
+
+      <section class="pref-section" aria-labelledby="polish-title">
+        <div class="pref-head">
+          <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی</h4>
+          <label class="chip chip-toggle"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی روشن</strong></label>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-on" aria-label="روشن کردن همه ویرایشگرهای پالیش">همه روشن</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-off" aria-label="خاموش کردن همه ویرایشگرهای پالیش">همه خاموش</button>
+          <span class="hint-inline">سوییچ هر ردیف را خاموش/روشن یا ✕ حذف — ترتیب با ⋮⋮/▲▼</span>
+        </div>
+        <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
+        <div class="chain-foot">
+          <button type="button" class="btn-ghost btn-sm" id="btn-add-polish" style="border-radius:999px" aria-label="افزودن ویرایشگر به زنجیره پالیش">＋ افزودن ویرایشگر</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish" aria-label="بازنشانی زنجیره پالیش">بازنشانی پالیش</button>
+        </div>
+        <div class="hint" id="polish-disabled-hint" style="display:none">پالیش خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
+      </section>
+
+      <details class="provider-card" id="provider-drawer">
+        <summary class="provider-head"><span aria-hidden="true">🔑</span><b>کلیدها و مدل‌ها (پیشرفته)</b></summary>
+        <div class="provider-body">
         <details class="provider-card" id="provider-card-groq" open>
-          <summary class="provider-head"><span class="dot" id="dot-groq"></span><b>Groq</b><span class="chain-badge" id="pill-groq">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست Groq</button></summary>
+          <summary class="provider-head"><b>Groq</b><span class="chain-badge" id="pill-groq">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست Groq</button></summary>
           <div class="provider-body">
             <label for="key-groq">Groq API Key:</label>
             <div class="key-row"><input type="password" id="key-groq" placeholder="gsk_..."><button type="button" class="btn-ghost btn-sm" id="btn-groq-models">لیست مدل‌ها</button></div>
@@ -131,7 +165,7 @@
         </details>
 
         <details class="provider-card" id="provider-card-gemini">
-          <summary class="provider-head"><span class="dot" id="dot-gemini"></span><b>Google AI Studio</b><span class="chain-badge" id="pill-gemini">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-gemini">تست Google</button></summary>
+          <summary class="provider-head"><b>Google AI Studio</b><span class="chain-badge" id="pill-gemini">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-gemini">تست Google</button></summary>
           <div class="provider-body">
             <label for="key-gemini">Google AI Studio API Key (Auth):</label>
             <div class="key-row"><input type="password" id="key-gemini" placeholder="AQ...."><button type="button" class="btn-ghost btn-sm" id="btn-gemini-models">لیست مدل‌ها</button></div>
@@ -142,7 +176,7 @@
         </details>
 
         <details class="provider-card" id="provider-card-openrouter">
-          <summary class="provider-head"><span class="dot" id="dot-openrouter"></span><b>OpenRouter</b><span class="chain-badge" id="pill-openrouter">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-polish">تست پالیش</button></summary>
+          <summary class="provider-head"><b>OpenRouter</b><span class="chain-badge" id="pill-openrouter">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-polish">تست پالیش</button></summary>
           <div class="provider-body">
             <label for="key-openrouter">OpenRouter API Key:</label>
             <div class="key-row"><input type="password" id="key-openrouter" placeholder="sk-or-v1-..."><button type="button" class="btn-ghost btn-sm" id="btn-or-models">لیست مدل‌ها</button></div>
@@ -157,7 +191,7 @@
         </details>
 
         <details class="provider-card" id="provider-card-zenspark">
-          <summary class="provider-head"><span class="dot" id="dot-zenspark"></span><b>OpenCode_Zen</b><span class="chain-badge" id="pill-zenspark">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-zen">تست OpenCode_Zen</button></summary>
+          <summary class="provider-head"><b>OpenCode_Zen</b><span class="chain-badge" id="pill-zenspark">—</span><span style="flex:1"></span><button type="button" class="btn-ghost btn-sm" id="btn-test-zen">تست OpenCode_Zen</button></summary>
           <div class="provider-body">
             <label for="key-zen">OpenCode Zen API Key:</label>
             <div class="key-row"><input type="password" id="key-zen" placeholder="کلید Zen..."><button type="button" class="btn-ghost btn-sm" id="btn-zen-models">لیست مدل‌ها</button></div>
@@ -185,7 +219,6 @@
             </div>
           </div>
         </details>
-        </div>
         <div class="state-card state-warn" id="m-nokey" hidden>⚠ کلید این ارائه‌دهنده ثبت نشده — فهرست ممکن است ناقص باشد. <a href="#" id="m-nokey-link">وارد کردن کلید</a></div>
         <div class="fetch-bar">
           <label for="m-q" class="hint-inline">جست‌وجوی کلیدواژه در مدل‌ها:</label>
@@ -196,58 +229,23 @@
             <button type="button" class="fchip" data-cap="t2t" aria-pressed="false">✍️ متنی T2T</button>
             <button type="button" class="fchip" data-cap="free" aria-pressed="false">🆓 رایگان Free</button>
           </div>
-          <fieldset class="easy-target" style="border:none;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:0;margin:0">
-            <legend class="hint-inline">مقصد:</legend>
-            <label class="chip"><input type="radio" name="easy-target" id="easy-target-stt" value="stt" checked> <strong>STT</strong></label>
-            <label class="chip"><input type="radio" name="easy-target" id="easy-target-polish" value="polish"> <strong>پالیش</strong></label>
-          </fieldset>
           <div class="count hint-inline" id="m-count" aria-live="polite"></div>
           <div class="hint" id="easy-models-hint">مدل‌ها از حافظه (listModels) می‌آیند؛ با «لیست مدل‌ها»ی هر ارائه‌دهنده به‌روز می‌شوند.</div>
         </div>
         <div id="models-list"></div>
-        <div class="state-card state-err" id="m-err" hidden>✕ دریافت مدل‌ها ناموفق بود. <button type="button" class="btn-ghost btn-sm" id="m-retry" disabled>تلاش مجدد</button></div>
+        <div class="state-card state-err" id="m-err" hidden>✕ دریافت مدل‌ها ناموفق بود. <button type="button" class="btn-ghost btn-sm" id="m-retry" disabled aria-label="تلاش مجدد برای دریافت مدل‌ها">تلاش مجدد</button></div>
         <div class="state-card state-empty" id="m-empty" hidden>نتیجه‌ای با این پالایه‌ها نیست — جست‌وجو یا چیپ‌ها را عوض کن.
           <span id="m-manual-wrap" hidden> <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" aria-label="شناسه دستی Gemini"> <button type="button" class="btn-ghost btn-sm" id="btn-easy-add">افزودن دستی Gemini</button></span>
         </div>
+        </div>
+      </details>
+
+      <!-- Model picker sheet: skeleton only — filled + wired by JS in ticket 3 -->
+      <div id="model-picker-sheet" hidden role="dialog" aria-label="انتخاب مدل">
+        <label for="model-picker-search" class="hint-inline">جست‌وجوی مدل:</label>
+        <input type="search" id="model-picker-search" placeholder="جست‌وجوی مدل… (مثل whisper)" aria-label="جست‌وجوی مدل">
+        <div id="model-picker-list" role="listbox" aria-label="فهرست مدل‌ها"></div>
       </div>
-    </section>
-
-    <!-- Chains tab: read-only key badges only -->
-    <section id="panel-chains" role="tabpanel" aria-labelledby="tab-chains" hidden>
-      <div class="pref-divider"></div>
-      <section class="pref-section" aria-labelledby="stt-title">
-        <div class="pref-head">
-          <h4 id="stt-title">🎙️ زنجیرهٔ ترجیح STT</h4>
-          <div style="display:flex;gap:6px">
-            <button type="button" class="btn-ghost btn-sm" id="btn-stt-all-on">همه روشن</button>
-            <button type="button" class="btn-ghost btn-sm" id="btn-stt-all-off">همه خاموش</button>
-          </div>
-        </div>
-        <p class="pref-sub" style="font-size:11px;color:var(--muted);margin:4px 0">اولویت از بالا به پایین — ▲▼ یا بکش ⋮⋮ برای جابجایی، سوییچ برای خاموش/روشن، ✕ برای حذف. وضعیت کلید فقط نمایشی است (✓/⚠).</p>
-        <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
-        <div class="chain-foot">
-          <span class="hint-inline">افزودن مدل فقط از زبانه «مدل‌ها»</span>
-          <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی STT</button>
-        </div>
-      </section>
-
-      <section class="pref-section" aria-labelledby="polish-title">
-        <div class="pref-head">
-          <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی</h4>
-          <label class="chip chip-toggle"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی روشن</strong></label>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-on">همه روشن</button>
-          <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-off">همه خاموش</button>
-          <span class="hint-inline">سوییچ هر ردیف را خاموش/روشن یا ✕ حذف — ترتیب با ⋮⋮/▲▼</span>
-        </div>
-        <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
-        <div class="chain-foot">
-          <span class="hint-inline">نمونه: «رابطه کاربری» → «رابط کاربری» اصلاح می‌شود</span>
-          <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پالیش</button>
-        </div>
-        <div class="hint" id="polish-disabled-hint" style="display:none">پالیش خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
-      </section>
     </section>
 
     <!-- Wave tab: live preview + starters + stack + globals (ticket/50) -->
