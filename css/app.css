@@ -1,4 +1,4 @@
-:root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--success:#34a853;--danger:#ea4335;--warning:#fbbc04;--text:#e8eaed;--muted:#9aa0a6}
+:root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--success:#34a853;--danger:#ea4335;--warning:#fbbc04;--text:#e8eaed;--muted:#9aa0a6;--glass-bg:rgba(30,31,34,.75);--glass-surface:rgba(42,43,46,.65);--glass-border:rgba(255,255,255,.1);--glass-border-focus:rgba(138,180,248,.5);--glass-shadow:0 16px 36px rgba(0,0,0,.45);--spring-ease:cubic-bezier(.32,.72,0,1);--text-muted:#b8bcc2}
 *{box-sizing:border-box;margin:0;padding:0;font-family:"Vazirmatn","Segoe UI",system-ui,sans-serif}
 body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden;font-size:15px}
 .header{display:flex;align-items:center;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap}
@@ -167,8 +167,8 @@ button:active{transform:scale(.97)}
 .log-line.hidden{display:none}
 .log-line mark{background:rgba(26,115,232,.35);color:inherit;border-radius:3px;padding:0 2px}
 .log-time{color:var(--muted);font-size:11px;margin-left:6px}
-#settings-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);z-index:1000;justify-content:center;align-items:center;padding:16px}
-.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:20px;width:100%;max-width:500px;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
+#settings-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:1000;justify-content:center;align-items:center;padding:16px}
+.modal-box{background:var(--glass-bg);backdrop-filter:blur(24px) saturate(180%);-webkit-backdrop-filter:blur(24px) saturate(180%);border:1px solid var(--glass-border);border-radius:24px;box-shadow:var(--glass-shadow);padding:20px;width:100%;max-width:500px;display:flex;flex-direction:column;gap:12px;max-height:90vh;overflow:auto}
 .modal-box h3{font-size:16px}
 .modal-box label{font-size:13px;color:var(--muted);margin-top:4px}
 .modal-box input,.modal-box select{background:#111113;border:1px solid var(--border);color:#fff;padding:10px 12px;border-radius:10px;font-size:14px;outline:none;width:100%}
@@ -538,3 +538,18 @@ select.model{background:#111113;border:1px solid var(--border);color:var(--text)
 #stagebar .scope{display:none}
 .quota-grid{grid-template-columns:minmax(0,1fr)}
 }
+/* ===== ticket/droplet-glass-tokens — Apple Droplet + Glass Tokens (append-only; no HTML/JS changes) ===== */
+/* droplet capsule radii for pills/chips/tabs */
+button,.btn-ghost,.btn-icon,.chip,.sbtn,.segmented button,.wave-seg button,.settings-tab,
+.options-drawer .drawer-handle,#m-chips .fchip,#models-flow .rail button,
+.chain-step,.log-filter,.wave-mute,.wave-tag{border-radius:999px}
+/* droplet surface radii for inputs/cards */
+.modal-box input,.modal-box select,.tcard,.quota-strip,.status-bar,.quota-card,.overall-card,
+.fun-card,.rec-strip,#stt-progress,.report-overall,.chain-item,.wave-card,.wave-item,
+.provider-card,#models-flow,.pref-section,.wave-sticky{border-radius:14px}
+/* Apple-standard press feedback */
+button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transform 140ms var(--spring-ease)}
+/* clear keyboard focus */
+:focus-visible{outline:2px solid var(--accent2) !important;outline-offset:2px !important}
+/* respect reduced motion */
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}}
