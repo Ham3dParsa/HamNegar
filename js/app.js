@@ -441,7 +441,7 @@ function loadSettings(){
   flowInit();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ openModal(); Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   try{
@@ -1295,7 +1295,7 @@ function waveMicStop(){
 function wavePrevStart(){ try { waveRenderer?.start(); } catch {} }
 function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
 
-let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on fresh profiles (no keys)
+let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
 loadSettings();
 // --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
 function modalFocusables(){
