@@ -193,7 +193,10 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
   const rawChain = (polishChain && polishChain.length) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
   const chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
   if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
-    chain.unshift({ id: prefer.id, providerId: prefer.providerId, enabled: true });
+    // explicit dropdown picks carry no enabled flag — resolve it from the chain itself
+    const rawMatch = rawChain.find(e => e && polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId);
+    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: prefer.providerId, enabled: true });
+    else Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
   }
   if(chain.length===0) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
   let lastErr=null;

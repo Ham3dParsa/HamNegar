@@ -1908,10 +1908,10 @@ function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stag
 async function runStage(kind, faLabel, sysPrompt, logTitle){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای پالایش نیست'); return; }
+  const vlen = els.output.value.length;
   Logger.groupRun(logTitle);
   Logger.setStatus('✨ ' + faLabel + '…', 'warn');
   setStageBusy(true);
-  const vlen = els.output.value.length;
   try {
     // Explicit stage-model choice (dropdown) goes first, rest of the enabled chain
     // stays as fallback; default (head option) follows chain order. Layer 'polish'
@@ -1921,7 +1921,7 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
-    if(els.output.value.length !== vlen){ Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const undo = stagePushRaw(scope);
     stageApply(scope, out.text);
     undo.newEnd = scope.start + out.text.length;
@@ -1938,13 +1938,17 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
 async function runTranslate(code){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
+  const vlen = els.output.value.length;
   Logger.groupRun('🌐 ترجمه → ' + code);
   Logger.setStatus('🌐 ترجمه → ' + code + '…', 'warn');
   setStageBusy(true);
-  const vlen = els.output.value.length;
   try {
-    const res = await Transcription.translate(scope.text, code);
-    if(els.output.value.length !== vlen){ Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    const pick = stageModelPick();
+    const explicit = $('stage-model')?.value ? pick : null;
+    const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
+    if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
+    const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
+    if(els.output.value.length !== vlen){ Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const out = res.text;
     const undo = stagePushRaw(scope);
     stageApply(scope, out);
