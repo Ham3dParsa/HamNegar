@@ -594,3 +594,5 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
     min-height: 36px;
   }
 }
+/* ===== ticket/log-splitter-bottom — splitter belongs BELOW #log-panel (order:4), not atop the column ===== */
+#log-splitter{order:5;position:sticky;bottom:0;z-index:5}
