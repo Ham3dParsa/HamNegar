@@ -2,6 +2,27 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.0] - 2026-09-06
+### Added
+- **پایپ‌لاین هوشمند (#38، #39):** دو زبانه (پایپ‌لاین + موج صدا)، هاب ارائه‌دهندگان، زنجیره‌های STT/پالیش زیر هاب، کشوی بسته کلیدها و شیت انتخاب مدل با جست‌وجو.
+- **شیت تأیید افزودن + هاب سفارشی (#58):** کلیک چیپ سفارشی کشو و فرم را باز و نام را فوکوس می‌کند.
+- **گزارش استفاده تک‌زبانه (#66) + بازیابی آمار (#71):** دو/سه هیرو (درخواست، دقیقه/کلمه، سرعت)، اسپارک‌لاین بدون عدد، کارت هر مدل با خط فارسی، کپشن ذخیره.
+- **کارت‌های مدل خلوت (#61):** فقط نام + توانایی + رایگان، دکمه سبز/قرمز عضویت، بلاک راهنما، idهای بلند wrap.
+- **لیست‌ها با اسکرول داخلی + خطای نام‌دار (#62):** سقف ~۵/~۸ ردیف، `✕ <ارائه‌دهنده>:`، راهنمای دستی Zen.
+- **meta viewport `viewport-fit=cover` (#42):** اینست‌های safe-area روی iOS واقعی شدند.
+- **شواهد تصویری (#65 به بعد):** هر تیکت شات قبل/بعد زیر `docs/evidence/<issue>/` دارد.
+### Changed
+- **توکن‌های شیشه‌ای (#37):** متریال Liquid Glass، مدال شیشه‌ای، دکمه‌های کپسولی، فوکوس و reduced-motion.
+- **جزیره شناور اکشن‌بار (#40) + گارد ناچ (#41):** شناور ۵۴۰px با blur، حاشیه safe-area، شیشه stagebar.
+- **فوتر چسبان مدال + گرید زنجیره (#43):** ذخیره همیشه دیده، ردیف دومرحله‌ای تا ۴۸۰px، کنتراست سراسری.
+- **حذف هاب (#63) و هدر (#65):** کشو-اول با auto-expand بی‌کلید؛ چرخ‌دنده در اکشن‌بار، رفتار+پالیش در مدال، موتور در scope.
+- **شفافیت نوار ابزار (#67):** لیبل‌های صادقانه، پانوشت session-only، اسکرول ۳۹۰.
+- **چیپ‌های رفتار فشرده (#70):** سوییچ استاندارد هم‌زبان chain-item.
+- **اسلitter لاگ (#59):** پین زیر پنل با sticky.
+### Fixed
+- **میوت موج (#60):** resolve شیء زنده با id — رفت‌وبرگشت بی‌صدا/باصدا.
+- **تاچ ۳۶px و wrap شناسه‌ها (#61، #43).**
+
 ## [0.5.0] - 2026-09-03
 ### Added
 - **Wave personalization (ticket/50):** new 4th settings tab «موج صدا» — sticky live preview (mic test + fake + sensitivity), 10 starter cards (one-click stack fill), wave stack ≤5 with per-wave rows (title toggle + rename + quick controls + collapsed advanced: band/profile/overrides/c2), globals (sensitivity/attack/speed/intensity/smooth/particles/aurora), 🎲 random stack + reset. Persisted as stack JSON v3 under `hamnegar.wave.v3` (`Storage.getWave/saveWave`).
