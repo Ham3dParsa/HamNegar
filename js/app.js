@@ -355,7 +355,7 @@ function renderChain(container, chain, type){
     menu?.addEventListener('keydown', (e)=>{
       const items = [...menu.querySelectorAll('button:not([disabled])')];
       const at = items.indexOf(document.activeElement);
-      if(e.key === 'Escape'){ e.preventDefault(); closeChainMenus(null, menuBtn); }
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeChainMenus(null, menuBtn); } // consume: open menu owns Esc (ticket/2x)
       else if(e.key === 'ArrowDown'){ e.preventDefault(); (items[at + 1] || items[0])?.focus?.(); }
       else if(e.key === 'ArrowUp'){ e.preventDefault(); (items[at - 1] || items[items.length - 1])?.focus?.(); }
       else if(e.key === 'Home'){ e.preventDefault(); items[0]?.focus?.(); }
@@ -369,6 +369,8 @@ function renderChain(container, chain, type){
       document.addEventListener('keydown', (e)=>{
         if(e.key === 'Escape' && !e.defaultPrevented){
           const open = document.querySelector('.chain-menu-wrap.open .chain-menubtn');
+          if(!open) return;
+          e.preventDefault(); e.stopPropagation(); // consumed — later document layers (recording-cancel) must see defaultPrevented (ticket/2x)
           closeChainMenus(null, open);
         }
       });
@@ -376,7 +378,9 @@ function renderChain(container, chain, type){
     // up/down
     item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
     item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
-    // keyboard reorder: Ctrl+ArrowUp/Down on focused row (bubbles from inner controls too)
+    // keyboard reorder: Ctrl+ArrowUp/Down on focused row (bubbles from inner controls too).
+    // NOTE (ticket/2x): bubbling is intentional and left as-is — there is no global
+    // Ctrl+Arrow binding, so the row owns it wherever focus sits inside the row.
     item.addEventListener('keydown', (e)=>{
       if(e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
         e.preventDefault();
@@ -1152,7 +1156,7 @@ function waveRenderList(){
       };
       inp.addEventListener('click', ev => ev.stopPropagation());
       inp.addEventListener('pointerdown', ev => ev.stopPropagation());
-      inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter') commit(true); else if (ev.key === 'Escape') commit(false); });
+      inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter'){ ev.preventDefault(); commit(true); } else if (ev.key === 'Escape'){ ev.preventDefault(); commit(false); } }); // consume: rename owns Enter/Esc (ticket/2x)
       inp.addEventListener('blur', () => commit(true));
     };
     title.addEventListener('click', startRename);
@@ -1497,7 +1501,8 @@ function closeModal(){
 }
 els.modal.addEventListener('keydown', (e)=>{
   if(els.modal.style.display !== 'flex') return;
-  if(e.key === 'Escape'){ e.preventDefault(); const openPanel = ['stt','polish'].find(t => chainPanelOpen(t)); if(openPanel){ setChainPanel(openPanel, false); chainPanelEls(openPanel).btn?.focus?.(); return; } closeModal(); return; } // Esc: open inline add-panel first, else close WITHOUT saving
+  if(e.defaultPrevented) return; // inner layer (chain ⋮ menu, wave rename) already consumed it (ticket/2x)
+  if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); const openPanel = ['stt','polish'].find(t => chainPanelOpen(t)); if(openPanel){ setChainPanel(openPanel, false); chainPanelEls(openPanel).btn?.focus?.(); return; } closeModal(); return; } // Esc: open inline add-panel first, else close WITHOUT saving; consumed so recording-cancel never fires
   if(e.key !== 'Tab') return;
   const f = modalFocusables();
   if(!f.length) return;
@@ -1592,13 +1597,21 @@ function applyHistoryValue(v){ editorHistory.pushing=true; els.output.value=v; s
 els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); if(!editorHistory.pushing) editorHistory.push(els.output.value); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
 document.getElementById('btn-undo')?.addEventListener('click', ()=>{ const v=editorHistory.undo(); if(v!==null) applyHistoryValue(v); });
 document.getElementById('btn-redo')?.addEventListener('click', ()=>{ const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); });
+// Undo scope (ticket/2x): the custom editorHistory runs ONLY while #output itself
+// is focused — every other input keeps native undo (this listener lives on
+// #output, so there is nothing global to leak).
 els.output.addEventListener('keydown', (e)=>{
   if(e.target!==els.output) return;
-  if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z'){
+  if(!(e.ctrlKey||e.metaKey)) return;
+  // Persian-layout guard: the physical key still undoes/redoes when the active
+  // layout yields ز/ذ — match e.code (layout-independent) as well as e.key.
+  const k=(e.key||'').toLowerCase(), c=e.code||'';
+  const isZ = k==='z' || c==='KeyZ', isY = k==='y' || c==='KeyY';
+  if(isZ){
     e.preventDefault();
     if(e.shiftKey){ const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); }
     else { const v=editorHistory.undo(); if(v!==null) applyHistoryValue(v); }
-  } else if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='y'){ e.preventDefault(); const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); }
+  } else if(isY){ e.preventDefault(); const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); }
 });
 (() => {
   const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('info','پیش‌نویس بارگذاری شد',{chars:d.length}); }
@@ -1849,8 +1862,18 @@ function cancelTranscription(){
   // UI handled in handleTranscription catch — keep abort signal until finally
 }
 els.btnCancel?.addEventListener('click', cancelTranscription);
+// Recording-cancel is the LAST Esc resort (ticket/2x layering: tr-panel → diff
+// sheet (#83) → settings modal → cancel). Element-level layers consume via
+// stopPropagation; same-node document listeners cannot be stopped that way, so
+// this handler yields explicitly: it respects e.defaultPrevented AND skips while
+// the diff sheet / modal / tr-panel own Esc.
 document.addEventListener('keydown', (e)=>{
-  if (e.key === 'Escape' && (isRecording || (isTranscribing && transcribingAbort))) cancelTranscription();
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (diffPending && diffEls().back && !diffEls().back.hidden) return; // #83 owns Esc (registered later on document)
+  const trp = $('tr-panel');
+  if (trp && !trp.hidden){ e.preventDefault(); trp.hidden = true; return; } // panel fallback: close, never cancel
+  if (els.modal && els.modal.style.display === 'flex') return; // modal owns Esc (element handler consumes)
+  if (isRecording || (isTranscribing && transcribingAbort)){ e.preventDefault(); e.stopPropagation(); cancelTranscription(); }
 });
 function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
@@ -1908,6 +1931,7 @@ async function handleTranscription(blob, snap){
       const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.substring(0,ps)+text+o.substring(pe); els.output.setSelectionRange(ps+text.length,ps+text.length);
     }
     els.output.focus(); saveCursor();
+    editorHistory.push(els.output.value); // no-loss (ticket/2x): explicit push so the pre-insert state stays reachable via Ctrl+Z/redo (the dispatched `input` below then dedups)
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
@@ -2408,7 +2432,7 @@ $('stage-lang-search')?.addEventListener('keydown', (e) => {
   if (e.key === 'ArrowDown') { e.preventDefault(); langHi = Math.min(langView.length - 1, langHi + 1); paintLangHi(); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); langHi = Math.max(0, langHi - 1); paintLangHi(); }
   else if (e.key === 'Enter' && langView[langHi]) { const p = $('tr-panel'); if (p) p.hidden = true; runTranslate(langView[langHi][1]); }
-  else if (e.key === 'Escape') { const p = $('tr-panel'); if (p) p.hidden = true; }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const p = $('tr-panel'); if (p) p.hidden = true; } // consume: topmost layer owns Esc — must never reach recording-cancel (ticket/2x)
 });
 document.addEventListener('click', (e) => {
   const panel = $('tr-panel');
