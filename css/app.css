@@ -1,4 +1,4 @@
-:root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--success:#34a853;--danger:#ea4335;--warning:#fbbc04;--text:#e8eaed;--muted:#9aa0a6;--glass-bg:rgba(30,31,34,.75);--glass-surface:rgba(42,43,46,.65);--glass-border:rgba(255,255,255,.1);--glass-border-focus:rgba(138,180,248,.5);--glass-shadow:0 16px 36px rgba(0,0,0,.45);--spring-ease:cubic-bezier(.32,.72,0,1);--text-muted:#b8bcc2}
+:root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--success:#34a853;--danger:#ea4335;--warning:#fbbc04;--text:#e8eaed;--muted:#9aa0a6;--glass-bg:rgba(30,31,34,.75);--glass-surface:rgba(42,43,46,.65);--glass-border:rgba(255,255,255,.1);--glass-border-focus:rgba(138,180,248,.5);--glass-shadow:0 16px 36px rgba(0,0,0,.45);--spring-ease:cubic-bezier(.32,.72,0,1);--text-muted:#b8bcc2;--diff-ins:#7db4f8;--diff-chg:#f5c518}
 *{box-sizing:border-box;margin:0;padding:0;font-family:"Vazirmatn","Segoe UI",system-ui,sans-serif}
 body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden;font-size:15px}
 button{border:none;border-radius:10px;padding:11px 18px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
@@ -653,7 +653,8 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 #diff-orig,#diff-result{font-size:14px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
 .dd-eq{color:var(--text)}
 .dd-del{color:var(--danger);text-decoration:line-through;text-decoration-thickness:2px;font-weight:600}
-.dd-ins{color:var(--success);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
+.dd-ins{color:var(--diff-ins);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
+.dd-chg{color:var(--diff-chg);background:rgba(245,197,24,.13);border-radius:4px;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
 .diff-note{font-size:12px;color:var(--muted);margin:0}
 .diff-note[hidden]{display:none}
 .diff-foot{position:sticky;bottom:0;display:flex;gap:8px;align-items:center;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--surface2);border-top:1px solid var(--border);flex:none}
