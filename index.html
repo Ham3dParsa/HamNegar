@@ -8,19 +8,6 @@
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<div class="header topbar">
-  <div class="brand-mini"><div class="brand-icon">⌨️</div><span>هم‌نگار</span><span id="app-version" class="ver">v0.5.0</span></div>
-  <span class="chip" id="engine-badge">موتور: Groq</span>
-  <details id="options-drawer" class="options-drawer">
-    <summary class="drawer-handle">≡ گزینه‌ها</summary>
-    <div class="drawer-body">
-      <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
-      <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
-      <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
-    </div>
-  </details>
-  <button id="btn-settings" class="btn-icon" title="تنظیمات">⚙️</button>
-</div>
 <div id="file-warning">⚠️ با <code>file://</code> باز شده — روی <code>localhost</code> اجرا کن: <code>python -m http.server</code></div>
 <div class="rec-strip" id="rec-strip"><canvas id="wave"></canvas></div>
 <div class="main">
@@ -84,6 +71,7 @@
   <button id="btn-cancel-stt" class="cbtn sat cancel" data-act="cancel" title="لغو ضبط (دور ریختن)" aria-label="لغو ضبط" hidden><svg class="cancel-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <button id="btn-undo" class="cbtn sat" data-act="undo" title="واگرد" aria-label="واگرد" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
   <button id="btn-redo" class="cbtn sat" data-act="redo" title="ازنو" aria-label="ازنو" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
+  <button id="btn-settings" class="cbtn sat" data-act="settings" title="تنظیمات" aria-label="تنظیمات">⚙️</button>
 </footer>
 <div id="settings-modal" role="dialog" aria-modal="true" aria-label="تنظیمات">
   <div class="modal-box modal-wide">
@@ -94,6 +82,18 @@
     </div>
 
     <section id="panel-pipeline" role="tabpanel" aria-labelledby="tab-pipeline">
+      <section class="pref-section" aria-labelledby="behavior-title">
+        <div class="pref-head">
+          <h4 id="behavior-title">🎚️ رفتار</h4>
+        </div>
+        <div class="behavior-chips">
+          <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
+          <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
+          <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+          <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
+        </div>
+      </section>
+
       <section class="pref-section" aria-labelledby="stt-title">
         <div class="pref-head">
           <h4 id="stt-title">🎙️ زنجیرهٔ ترجیح STT</h4>
@@ -113,7 +113,6 @@
       <section class="pref-section" aria-labelledby="polish-title">
         <div class="pref-head">
           <h4 id="polish-title">✨ زنجیرهٔ پالیش فارسی</h4>
-          <label class="chip chip-toggle"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی روشن</strong></label>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-on" aria-label="روشن کردن همه ویرایشگرهای پالیش">همه روشن</button>
@@ -298,7 +297,7 @@
     </section>
 
     <div class="hint">ترتیب را ذخیره کن — هر ماژول یک وظیفه دارد.</div>
-    <div class="modal-actions"><button type="button" id="btn-close-modal" class="btn-ghost">انصراف</button><button type="button" id="btn-save-modal" style="background:var(--accent);color:#fff">ذخیره</button></div>
+    <div class="modal-actions"><span class="hint-inline modal-version" id="settings-version" dir="ltr">v…</span><button type="button" id="btn-close-modal" class="btn-ghost">انصراف</button><button type="button" id="btn-save-modal" style="background:var(--accent);color:#fff">ذخیره</button></div>
   </div>
 </div>
 <div id="chain-live" class="sr-only" role="status" aria-live="polite"></div>
