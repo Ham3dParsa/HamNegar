@@ -26,9 +26,10 @@ const els = {
   btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'), btnZenModels: $('btn-zen-models'),
   keyZen: $('key-zen'),
   tabPipeline: $('tab-pipeline'), panelPipeline: $('panel-pipeline'),
-  btnAddStt: $('btn-add-stt'), btnAddPolish: $('btn-add-polish'),
+  btnExpandStt: $('btn-expand-stt'), btnExpandPolish: $('btn-expand-polish'),
   providerDrawer: $('provider-drawer'),
-  modelPickerSheet: $('model-picker-sheet'), modelPickerSearch: $('model-picker-search'), modelPickerList: $('model-picker-list'),
+  sttAddPanel: $('stt-add-panel'), sttAddSearch: $('stt-add-search'), sttAddList: $('stt-add-list'),
+  polishAddPanel: $('polish-add-panel'), polishAddSearch: $('polish-add-search'), polishAddList: $('polish-add-list'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   easyModelInput: $('easy-model-input'),
@@ -595,7 +596,6 @@ function showFetchError(providerId, e){
     if (zen) zen.hidden = providerId !== 'zenspark';
   }
 }
-let activePickerTarget = 'stt'; // single add-target source (easy-target radios removed in ticket 2)
 function capsFor(id, pid){
   const s = String(id || '');
   const low = s.toLowerCase();
@@ -610,6 +610,10 @@ function capsFor(id, pid){
 }
 // Single source of truth for STT-eligibility: every add path + row disabled state must use this.
 function isSttEligible(id, pid){ return capsFor(id, pid).caps.includes('stt'); }
+// Per-row add target without global state (ticket/76): STT-eligible models belong to
+// STT, t2t-only models to polish. Inline panels pass their own chain; the shared
+// models-tab list derives it per row so no stale-target muting can recur.
+function targetForModel(id, pid){ return isSttEligible(id, pid) ? 'stt' : 'polish'; }
 function allFlowModels(){
   const out = [], seen = new Set();
   const push = (id, pid) => {
@@ -715,11 +719,10 @@ function renderFlowList(){
     btn.className = 'btn-ghost btn-sm ' + (loc ? 'btn-remove' : 'btn-add');
     btn.textContent = loc ? 'حذف' : 'افزودن';
     btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
-    // Same capsFor source as add paths: t2t-only rows are not addable when target=STT (remove stays enabled).
-    const targetNow = activePickerTarget;
-    const sttBlocked = !loc && targetNow === 'stt' && !isSttEligible(d.id, d.providerId);
-    if (sttBlocked) { btn.title = 'این مدل متنی است — برای STT مناسب نیست (مقصد را پالیش کن)'; btn.disabled = true; }
-    else { btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'); btn.disabled = !hasKey && !loc; }
+    // Per-row target (ticket/76): each model knows its chain, so no row is ever
+    // muted for "wrong chain" — only needs-key disables (remove stays enabled).
+    const targetNow = targetForModel(d.id, d.providerId);
+    btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'); btn.disabled = !hasKey && !loc;
     btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
     card.append(main, btn);
     box.appendChild(card);
@@ -773,7 +776,7 @@ function toggleFlowModel(modelId, providerId){
     showUndoToast(mid);
     return;
   }
-  const target = activePickerTarget;
+  const target = targetForModel(mid, pid);
   if (pid === 'gemini' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   if (target === 'stt') {
     if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
@@ -1007,7 +1010,7 @@ $('btn-easy-add')?.addEventListener('click', ()=>{
     }
   }
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
-  const target = activePickerTarget;
+  const target = targetForModel(mid, pid);
   if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target === 'stt'){
     if(!isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
@@ -1383,34 +1386,34 @@ function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
 
 let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
 loadSettings();
-// --- pipeline tab (ticket/pipeline-js-wiring): model picker sheet ---
-let pickerOpener = null;
-function openModelPicker(target, opener){
-  activePickerTarget = target === 'polish' ? 'polish' : 'stt';
-  pickerOpener = opener || null;
-  if(els.modelPickerSearch) els.modelPickerSearch.value = '';
-  if(els.modelPickerSheet) els.modelPickerSheet.hidden = false;
-  renderModelPickerList();
-  if(els.modelPickerSearch) els.modelPickerSearch.focus();
+// --- per-chain inline add panels (ticket/76-inline-chain-add): expander + panel under each .chain-foot ---
+const CHAIN_EXPAND_LABEL = { stt: '＋ افزودن مدل صوتی', polish: '＋ افزودن ویرایشگر' };
+function chainPanelEls(target){
+  return target === 'stt'
+    ? { btn: els.btnExpandStt, panel: els.sttAddPanel, search: els.sttAddSearch, list: els.sttAddList }
+    : { btn: els.btnExpandPolish, panel: els.polishAddPanel, search: els.polishAddSearch, list: els.polishAddList };
 }
-function closeModelPicker(restoreFocus){
-  if(els.modelPickerSheet) els.modelPickerSheet.hidden = true;
-  if(restoreFocus && pickerOpener && pickerOpener.focus) pickerOpener.focus();
-  pickerOpener = null;
+function chainPanelOpen(target){
+  const { panel } = chainPanelEls(target);
+  return !!panel && !panel.hidden;
 }
-function renderModelPickerList(){
-  const box = els.modelPickerList;
-  if(!box) return;
-  const q = (els.modelPickerSearch?.value || '').trim().toLowerCase();
-  box.innerHTML = '';
+function renderChainPanel(target){
+  const { list, search } = chainPanelEls(target);
+  if(!list) return;
+  const q = (search?.value || '').trim().toLowerCase();
+  list.innerHTML = '';
+  // Pre-scoped per chain from the same sources as the models tab: the STT panel
+  // hides t2t-only models outright (no muted rows, no stale-target class); polish shows all.
   const rows = allFlowModels()
+    .filter(d => target === 'stt' ? isSttEligible(d.id, d.providerId) : true)
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
-  if(!rows.length){ box.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن.'; return; }
+  if(!rows.length){ list.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن.'; return; }
+  const chainFa = target === 'stt' ? 'STT' : 'پالیش';
   for(const d of rows){
     let hasKey = false;
     try{ hasKey = Storage.hasKeyForProvider(d.providerId); }catch{ hasKey = false; }
     const loc = chainLoc(d.id, d.providerId);
-    const inTarget = !!loc && loc.type === activePickerTarget;
+    const inTarget = !!loc && loc.type === target;
     const card = document.createElement('div');
     card.className = 'mrow';
     card.dataset.p = d.providerId;
@@ -1430,17 +1433,40 @@ function renderModelPickerList(){
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-ghost btn-sm';
-    btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'));
-    if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; }
-    else if(activePickerTarget === 'stt' && !isSttEligible(d.id, d.providerId)){ btn.textContent = 'افزودن'; btn.title = 'این مدل متنی است — برای STT مناسب نیست'; btn.disabled = true; }
-    else{ btn.textContent = 'افزودن'; btn.classList.add('btn-add'); btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(true); }); }
+    if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; btn.setAttribute('aria-label', d.id + ' در زنجیره ' + chainFa + ' است'); }
+    else{
+      btn.textContent = 'افزودن';
+      btn.classList.add('btn-add');
+      btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + chainFa);
+      btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + chainFa;
+      btn.disabled = !hasKey;
+      btn.addEventListener('click', ()=>{
+        addModelToChain(d.id, d.providerId, target); // same target-scoped helper as the models tab
+        renderFlowList();
+        renderChainPanel(target); // stays open so more models can follow without scrolling
+        chainPanelEls(target).search?.focus?.();
+      });
+    }
     card.append(main, btn);
-    box.appendChild(card);
+    list.appendChild(card);
   }
 }
-els.btnAddStt?.addEventListener('click', (e)=> openModelPicker('stt', e.currentTarget));
-els.btnAddPolish?.addEventListener('click', (e)=> openModelPicker('polish', e.currentTarget));
-els.modelPickerSearch?.addEventListener('input', renderModelPickerList);
+function setChainPanel(target, open, focusSearch){
+  const { btn, panel, search } = chainPanelEls(target);
+  if(!btn || !panel) return;
+  panel.hidden = !open;
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? '－ بستن' : CHAIN_EXPAND_LABEL[target];
+  if(open){
+    renderChainPanel(target);
+    if(focusSearch) search?.focus?.();
+  }
+}
+function toggleChainPanel(target){ setChainPanel(target, !chainPanelOpen(target), true); }
+els.btnExpandStt?.addEventListener('click', ()=> toggleChainPanel('stt'));
+els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));
+els.sttAddSearch?.addEventListener('input', ()=> renderChainPanel('stt'));
+els.polishAddSearch?.addEventListener('input', ()=> renderChainPanel('polish'));
 // --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
 function modalFocusables(){
   const box = els.modal.querySelector('.modal-box');
@@ -1471,7 +1497,7 @@ function closeModal(){
 }
 els.modal.addEventListener('keydown', (e)=>{
   if(els.modal.style.display !== 'flex') return;
-  if(e.key === 'Escape'){ e.preventDefault(); if(els.modelPickerSheet && !els.modelPickerSheet.hidden){ closeModelPicker(true); return; } closeModal(); return; } // Esc: sheet first, else close WITHOUT saving
+  if(e.key === 'Escape'){ e.preventDefault(); const openPanel = ['stt','polish'].find(t => chainPanelOpen(t)); if(openPanel){ setChainPanel(openPanel, false); chainPanelEls(openPanel).btn?.focus?.(); return; } closeModal(); return; } // Esc: open inline add-panel first, else close WITHOUT saving
   if(e.key !== 'Tab') return;
   const f = modalFocusables();
   if(!f.length) return;
