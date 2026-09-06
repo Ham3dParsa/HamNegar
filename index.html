@@ -308,6 +308,32 @@
     <div class="modal-actions"><span class="hint-inline modal-version" id="settings-version" dir="ltr">v…</span><button type="button" id="btn-close-modal" class="btn-ghost">انصراف</button><button type="button" id="btn-save-modal" style="background:var(--accent);color:#fff">ذخیره</button></div>
   </div>
 </div>
+<div id="diff-backdrop" hidden>
+  <section id="diff-sheet" role="dialog" aria-modal="true" aria-labelledby="diff-title" aria-describedby="diff-count">
+    <div class="diff-handle" aria-hidden="true"></div>
+    <header class="diff-head">
+      <b id="diff-title">بازبینی نتیجه</b>
+      <span class="scope" id="diff-scope">دامنه: کل متن</span>
+      <span id="diff-count" aria-live="polite"></span>
+    </header>
+    <p class="diff-mode" id="diff-mode"></p>
+    <div class="diff-body" id="diff-body">
+      <details class="diff-block" id="diff-orig-wrap" open>
+        <summary>متن اصلی</summary>
+        <p id="diff-orig" dir="auto"></p>
+      </details>
+      <div class="diff-block" id="diff-res-wrap">
+        <h4 class="diff-h">نتیجه</h4>
+        <p id="diff-result" dir="auto"></p>
+      </div>
+      <p class="diff-note" id="diff-note" hidden></p>
+    </div>
+    <footer class="diff-foot">
+      <button type="button" id="diff-apply" class="diff-apply">اعمال</button>
+      <button type="button" id="diff-discard" class="btn-ghost">دور ریختن</button>
+    </footer>
+  </section>
+</div>
 <div id="chain-live" class="sr-only" role="status" aria-live="polite"></div>
 <div id="toast"></div>
 <script type="module" src="js/app.js"></script>
