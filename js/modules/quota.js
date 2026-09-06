@@ -8,6 +8,9 @@ export { LIMITS };
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
+// view-only Persian-digit formatting for the single meta line (no stats-math change)
+function fa(v){ return String(v).replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d]); }
+
 // keep expanded state per container so period switch doesn't collapse unexpectedly
 const expandedMap = new WeakMap();
 
@@ -32,7 +35,8 @@ export const Quota = {
     }
     expandedMap.set(container, expanded);
     const summary = Stats.getSummary(period);
-    let byModel = summary.byModel;
+    // view-side desc sort (Stats already sorts; defensive copy, no math change)
+    let byModel = [...summary.byModel].sort((a,b)=> b.count-a.count);
 
     // fallback when no history yet: show chain first item with 0
     if (byModel.length===0){
@@ -55,10 +59,14 @@ export const Quota = {
       else if (m.color==='warn-orange') barCls='warn-orange';
       else if (m.color==='danger') barCls='danger';
       const cardCls = (m.color==='danger' ? 'quota-card danger pulse' : 'quota-card') + ' quota-card--minimal' + (m.isFavorite?' is-fav':'');
-      const favRibbon = m.isFavorite ? '<span class="ribbon">محبوب</span>' : '';
+      // rank 1 only: inline muted outline chip, no absolute positioning
+      const topChip = m.isFavorite ? '<span class="fav-chip">پراستفاده</span>' : '';
       const warnIcon = m.isNearLimit ? ' ⚠' : '';
-      const badge = typeof lim.rpd==='number' ? lim.rpd+' /روز' : 'نامحدود';
-      container.innerHTML += `<div class="${cardCls}" data-model="${esc(m.model)}">${favRibbon}<h4>${esc(m.label)} <span class="badge">${esc(badge)}</span></h4><div class="bar"><i class="${barCls}" style="width:${pct}%"></i></div><div class="meta"><span>امروز: <b>${m.count}</b> (${pct}٪)${warnIcon}</span><span></span></div></div>`;
+      const badge = typeof lim.rpd==='number' ? 'سقف '+lim.rpd+'/روز' : 'نامحدود';
+      const meta = typeof lim.rpd==='number'
+        ? `${fa(m.count)} از ${fa(lim.rpd)} (${fa(pct)}٪)`
+        : `${fa(m.count)} درخواست`;
+      container.innerHTML += `<div class="${cardCls}" data-model="${esc(m.model)}"><h4><span class="model-name">${esc(m.label)}</span>${topChip}<span class="badge">${esc(badge)}</span></h4><div class="bar"><i class="${barCls}" style="width:${pct}%"></i></div><div class="meta"><span>${meta}${warnIcon}</span></div></div>`;
     });
 
     if (!expanded && byModel.length>3){
