@@ -421,9 +421,7 @@ function renderProvidersStatus(){
   let providers = [];
   try{ providers = Storage.getProviders(); }catch{ return; }
   for(const p of providers){
-    const dot = document.getElementById('dot-' + p.id);
     const pill = document.getElementById('pill-' + p.id);
-    if(dot) dot.className = 'dot ' + (p.hasKey ? 'ok' : 'missing');
     if(pill){
       pill.className = 'chain-badge ' + (p.hasKey ? 'ok' : 'missing');
       pill.textContent = p.hasKey ? '✓ کلید' : '⚠ بی‌کلید';
@@ -1325,24 +1323,7 @@ function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
 
 let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
 loadSettings();
-// --- pipeline tab (ticket/pipeline-js-wiring): providers hub + model picker sheet ---
-const PROV_CARD_ID = { groq: 'provider-card-groq', gemini: 'provider-card-gemini', openrouter: 'provider-card-openrouter', zenspark: 'provider-card-zenspark' };
-const PROV_KEY_ID = { groq: 'key-groq', gemini: 'key-gemini', openrouter: 'key-openrouter', zenspark: 'key-zen' };
-document.querySelectorAll('[data-edit-prov]').forEach(b => b.addEventListener('click', ()=>{
-  const pid = b.getAttribute('data-edit-prov');
-  if(els.providerDrawer) els.providerDrawer.open = true;
-  const card = $(PROV_CARD_ID[pid]);
-  if(card && card.tagName === 'DETAILS') card.open = true;
-  const inp = $(PROV_KEY_ID[pid]);
-  if(inp) inp.focus();
-}));
-document.querySelectorAll('[data-prov="custom"]').forEach(b => b.addEventListener('click', ()=>{
-  if(els.providerDrawer) els.providerDrawer.open = true;
-  const card = $('custom-add-card');
-  if(card && card.tagName === 'DETAILS') card.open = true;
-  const inp = $('custom-name');
-  if(inp) inp.focus();
-}));
+// --- pipeline tab (ticket/pipeline-js-wiring): model picker sheet ---
 let pickerOpener = null;
 function openModelPicker(target, opener){
   activePickerTarget = target === 'polish' ? 'polish' : 'stt';
@@ -1410,6 +1391,7 @@ function modalFocusables(){
 function openModal(){
   lastModalFocus = document.activeElement;
   els.modal.style.display = 'flex';
+  try{ if(Storage.getProviders().every(p => !p.hasKey) && els.providerDrawer) els.providerDrawer.open = true; }catch{}
   if(els.panelWave && !els.panelWave.hidden){ waveEnsure(); wavePrevStart(); }
   const box = els.modal.querySelector('.modal-box');
   if(box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
