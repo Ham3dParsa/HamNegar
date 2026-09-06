@@ -581,5 +581,12 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 #model-picker-list::-webkit-scrollbar-thumb,#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
 /* ===== ticket/header-polish-drawer — header removed: gear in actionbar, behavior group in modal, version in modal footer ===== */
 #btn-settings.cbtn.sat{font-size:22px}
-.behavior-chips{display:flex;gap:8px;flex-wrap:wrap}
+/* ===== ticket/behavior-chips-restyle — compact standard switch rows reusing chain-item language (append-only; CSS-only, no HTML/JS changes) ===== */
+.behavior-chips{display:flex;flex-direction:column;gap:6px;flex-wrap:nowrap}
+.behavior-chips .chip{display:flex;align-items:center;gap:8px;width:100%;max-width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:8px 10px;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;cursor:pointer}
+.behavior-chips .chip input{width:22px;height:22px;flex-shrink:0;margin:0;accent-color:var(--accent)}
+.behavior-chips .chip strong{color:var(--text);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.behavior-chips .chip span{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.behavior-chips .chip:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.behavior-chips .chip input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .modal-version{margin-inline-end:auto;align-self:center}
