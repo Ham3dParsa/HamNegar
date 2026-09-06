@@ -232,14 +232,14 @@ button:active{transform:scale(.97)}
 #m-chips .fchip{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer}
 #m-chips .fchip.active{background:var(--accent);border-color:var(--accent);color:#fff}
 #models-list{display:flex;flex-direction:column;gap:0;min-width:0}
-#models-list .mrow{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;padding:4px 10px;margin:4px 0;min-height:47px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-align:start}
-#models-list .mrow .mmain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
-#models-list .mrow .mtitle{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:nowrap;overflow:hidden}
-#models-list .mrow .mtitle b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-#models-list .mrow .mbadges{display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:hidden;flex:0 1 auto;min-width:0}
-#models-list .mrow .badge{flex-shrink:0;font-size:10px;background:#111113;border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);white-space:nowrap}
-#models-list .mrow .badge.free{color:var(--success);border-color:rgba(52,168,83,.3)}
-#models-list .mrow>button[data-add],#models-list .mrow>.btn-ghost{flex:0 0 auto;white-space:nowrap}
+#models-list .mrow,#model-picker-list .mrow{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;padding:4px 10px;margin:4px 0;min-height:47px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-align:start}
+#models-list .mrow .mmain,#model-picker-list .mrow .mmain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+#models-list .mrow .mtitle,#model-picker-list .mrow .mtitle{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:nowrap;overflow:hidden}
+#models-list .mrow .mtitle b,#model-picker-list .mrow .mtitle b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+#models-list .mrow .mbadges,#model-picker-list .mrow .mbadges{display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:hidden;flex:0 1 auto;min-width:0}
+#models-list .mrow .badge,#model-picker-list .mrow .badge{flex-shrink:0;font-size:10px;background:#111113;border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);white-space:nowrap}
+#models-list .mrow .badge.free,#model-picker-list .mrow .badge.free{color:var(--success);border-color:rgba(52,168,83,.3)}
+#models-list .mrow>button[data-add],#models-list .mrow>.btn-ghost,#model-picker-list .mrow>.btn-ghost{flex:0 0 auto;white-space:nowrap}
 /* ticket/44-card-cleanup: color-coded chain membership — same outline language as #btn-copy green / #btn-clear red; :not(:disabled) keeps keyless/STT-blocked/in-chain muted */
 #models-list .mrow .btn-add:not(:disabled),#model-picker-list .mrow .btn-add:not(:disabled){border:2px solid var(--success);color:var(--success);background:rgba(52,168,83,.12)}
 #models-list .mrow .btn-remove:not(:disabled),#model-picker-list .mrow .btn-remove:not(:disabled){border:2px solid var(--danger);color:var(--danger);background:var(--surface2)}
@@ -602,3 +602,12 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 }
 /* ===== ticket/log-splitter-bottom — splitter belongs BELOW #log-panel (order:4), not atop the column ===== */
 #log-splitter{order:5;position:sticky;bottom:0;z-index:5}
+/* ===== ticket/45-list-behavior — fixed-count internal scroll lists + sheet chrome (append-only; CSS-only caps, no JS measuring, no virtualization) ===== */
+#model-picker-sheet{border:1px solid var(--border);border-radius:12px;background:#15161a;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+#model-picker-sheet[hidden]{display:none}
+#model-picker-search{position:sticky;top:0;z-index:2}
+#model-picker-list{max-height:calc(5 * 52px + 4 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
+#models-list{max-height:calc(8 * 52px + 7 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
+#model-picker-list::-webkit-scrollbar,#models-list::-webkit-scrollbar{width:8px;height:8px}
+#model-picker-list::-webkit-scrollbar-track,#models-list::-webkit-scrollbar-track{background:transparent}
+#model-picker-list::-webkit-scrollbar-thumb,#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}

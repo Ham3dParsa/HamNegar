@@ -244,9 +244,9 @@
           </ul>
         </details>
         <div id="models-list"></div>
-        <div class="state-card state-err" id="m-err" hidden>✕ دریافت مدل‌ها ناموفق بود. <button type="button" class="btn-ghost btn-sm" id="m-retry" disabled aria-label="تلاش مجدد برای دریافت مدل‌ها">تلاش مجدد</button></div>
+        <div class="state-card state-err" id="m-err" hidden><span id="m-err-text">✕ دریافت مدل‌ها ناموفق بود. </span><span id="m-err-zen" class="hint-inline" hidden>مرورگر جلوی دریافت مستقیم از Zen را می‌گیرد — شناسه <code dir="ltr">muse-spark-*</code> را با «افزودن دستی» وارد کن. </span><button type="button" class="btn-ghost btn-sm" id="m-retry" disabled aria-label="تلاش مجدد برای دریافت مدل‌ها">تلاش مجدد</button></div>
         <div class="state-card state-empty" id="m-empty" hidden>نتیجه‌ای با این پالایه‌ها نیست — جست‌وجو یا چیپ‌ها را عوض کن.
-          <span id="m-manual-wrap" hidden> <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" aria-label="شناسه دستی Gemini"> <button type="button" class="btn-ghost btn-sm" id="btn-easy-add">افزودن دستی Gemini</button></span>
+          <span id="m-manual-wrap" hidden> <span class="hint-inline" id="m-manual-hint" hidden></span> <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" aria-label="شناسه دستی Gemini"> <button type="button" class="btn-ghost btn-sm" id="btn-easy-add">افزودن دستی Gemini</button></span>
         </div>
         </div>
       </details>
