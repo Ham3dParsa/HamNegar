@@ -18,3 +18,8 @@ Thumbs.db
 
 # local demo/prototype scratch (never commit)
 temp/
+
+# graphify code-graph output (local index, never commit)
+graphify-out/
+.graphify/
+.graphify_analysis.json
