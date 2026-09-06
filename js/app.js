@@ -2080,14 +2080,202 @@ function stageQuotaSplit(model, words, chars){
     Dashboard.renderOverall();
   } catch {}
 }
-function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } }
+// --- apply-diff-confirm (issue #49): result-apply gate — Persian word diff + thin bottom sheet ---
+// Pure Persian word diff (DOM-free; verified under node by slicing __DIFF_PURE_START__..__DIFF_PURE_END__).
+// __DIFF_PURE_START__
+function faNormalizeDiff(s){
+  return String(s ?? '')
+    .replace(/ي/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/ة/g, 'ه')
+    .replace(/[\u064B-\u0652\u0670\u0640]/g, ''); // Arabic diacritics + superscript-alef + tatweel
+}
+function faTokenizeDiff(s){
+  return String(s ?? '').split(/\s+/).filter(Boolean); // ZWNJ (U+200C) is not whitespace → stays inside tokens
+}
+function diffFaTokens(a, b){
+  const n = a.length, m = b.length;
+  if (!n && !m) return { ops: [], changed: 0, total: 0, empty: true, fallback: false };
+  if (n * m > 40000) return { ops: null, changed: n + m, total: Math.max(n, m), empty: false, fallback: true };
+  const W = m + 1;
+  const dp = new Uint32Array((n + 1) * W);
+  const at = (i, j) => dp[i * W + j];
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i * W + j] = a[i] === b[j] ? at(i + 1, j + 1) + 1 : Math.max(at(i + 1, j), at(i, j + 1));
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < n && j < m){
+    if (a[i] === b[j]) { ops.push({ t: 'eq', a: i, b: j }); i++; j++; }
+    else if (at(i + 1, j) >= at(i, j + 1)) { ops.push({ t: 'del', a: i }); i++; }
+    else { ops.push({ t: 'ins', b: j }); j++; }
+  }
+  while (i < n) { ops.push({ t: 'del', a: i }); i++; }
+  while (j < m) { ops.push({ t: 'ins', b: j }); j++; }
+  let changed = 0;
+  for (const o of ops) if (o.t !== 'eq') changed++;
+  const total = Math.max(n, m);
+  if (total > 0 && changed / total > 0.6) return { ops: null, changed, total, empty: false, fallback: true };
+  return { ops, changed, total, empty: changed === 0, fallback: false };
+}
+function diffFaSummary(before, after){
+  return diffFaTokens(faTokenizeDiff(faNormalizeDiff(before)), faTokenizeDiff(faNormalizeDiff(after)));
+}
+function diffFaSegments(ops){
+  let n = 0, inSeg = false;
+  for (const o of ops || []){
+    if (o.t === 'eq') inSeg = false;
+    else if (!inSeg) { inSeg = true; n++; }
+  }
+  return n;
+}
+// __DIFF_PURE_END__
+let diffPending = null; // {seq, scope, text, model, faLabel, logTitle, okStatus, okToast, okLog, invoker, state}
+let diffRunSeq = 0; // run token: stale resolves (discarded/superseded) are dropped in fillDiffSheet
+function diffEls(){
+  return {
+    back: $('diff-backdrop'), sheet: $('diff-sheet'), title: $('diff-title'), scope: $('diff-scope'), count: $('diff-count'),
+    mode: $('diff-mode'), body: $('diff-body'), origWrap: $('diff-orig-wrap'), orig: $('diff-orig'),
+    res: $('diff-result'), note: $('diff-note'), apply: $('diff-apply'), discard: $('diff-discard'),
+  };
+}
+function diffFaDigits(n){ return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]); }
+function diffScopeLabel(scope){ return scope.kind === 'selection' ? 'دامنه: انتخاب' : 'دامنه: کل متن'; }
+function diffRenderSide(el, verbTokens, ops, side){
+  el.textContent = '';
+  const frag = document.createDocumentFragment();
+  let first = true;
+  const push = (text, cls) => {
+    if (!first) frag.appendChild(document.createTextNode(' '));
+    first = false;
+    const s = document.createElement('span');
+    s.className = cls;
+    s.textContent = text;
+    frag.appendChild(s);
+  };
+  for (const o of ops){
+    if (o.t === 'eq') push(verbTokens[side === 'a' ? o.a : o.b], 'dd-eq');
+    else if (o.t === 'del' && side === 'a') push(verbTokens[o.a], 'dd-del');
+    else if (o.t === 'ins' && side === 'b') push(verbTokens[o.b], 'dd-ins');
+  }
+  if (!first) el.appendChild(frag);
+}
+function openDiffRunning(faLabel, scope, invoker){
+  const d = diffEls();
+  if (!d.back) return;
+  diffPending = { seq: ++diffRunSeq, scope, text: '', model: '', faLabel, logTitle: '', okStatus: '', okToast: '', okLog: '', invoker: invoker || null, state: 'running' };
+  d.title.textContent = faLabel;
+  d.scope.textContent = diffScopeLabel(scope);
+  d.mode.textContent = 'منبع: ' + faLabel + ' — بدون اجرای دوباره';
+  d.count.textContent = 'در حال پردازش…';
+  d.note.hidden = true;
+  d.body.classList.add('diff-loading');
+  d.orig.textContent = '';
+  d.res.textContent = '';
+  for (let k = 0; k < 3; k++){ const sk = document.createElement('span'); sk.className = 'diff-skel'; d.res.appendChild(sk); }
+  d.apply.disabled = true;
+  d.back.hidden = false;
+}
+function fillDiffSheet(p, seq){
+  const d = diffEls();
+  if (!d.back) return;
+  if (!diffPending || diffPending.seq !== seq) return; // stale resolve (discarded or superseded) — drop silently
+  const before = p.scope.text, after = p.text;
+  const r = diffFaSummary(before, after);
+  diffPending = { ...p, invoker: p.invoker || null, state: r.fallback ? 'ready-fallback' : (r.empty ? 'empty' : 'ready') };
+  d.title.textContent = p.faLabel;
+  d.scope.textContent = diffScopeLabel(p.scope);
+  d.mode.textContent = 'منبع: ' + p.faLabel + ' — بدون اجرای دوباره';
+  d.body.classList.remove('diff-loading');
+  try { d.origWrap.open = !window.matchMedia('(max-width: 640px)').matches; } catch {}
+  if (r.fallback){
+    d.orig.textContent = before;
+    d.res.textContent = after;
+    d.note.hidden = false;
+    d.note.textContent = 'بازبینی کلی — تغییر زیاد است؛ مقایسه کلمه‌به‌کلمه نمایش داده نشد.';
+    d.count.textContent = 'بازبینی کلی';
+    d.apply.disabled = false;
+  } else if (r.empty){
+    d.orig.textContent = before;
+    d.res.textContent = after;
+    d.note.hidden = false;
+    d.note.textContent = 'تغییری نیست';
+    d.count.textContent = 'تغییری نیست';
+    d.apply.disabled = true;
+  } else {
+    diffRenderSide(d.orig, faTokenizeDiff(before), r.ops, 'a');
+    diffRenderSide(d.res, faTokenizeDiff(after), r.ops, 'b');
+    d.note.hidden = true;
+    d.count.textContent = diffFaDigits(diffFaSegments(r.ops)) + ' تغییر';
+    d.apply.disabled = false;
+  }
+  d.back.hidden = false;
+  (d.apply.disabled ? d.discard : d.apply).focus?.();
+}
+function closeDiffSheet(){
+  const d = diffEls();
+  const inv = diffPending?.invoker;
+  diffPending = null;
+  if (d.back) d.back.hidden = true;
+  if (inv?.focus) { try { inv.focus(); } catch {} }
+}
+function diffApply(){
+  const p = diffPending;
+  if (!p || (p.state !== 'ready' && p.state !== 'ready-fallback') || !p.text) return;
+  const undo = stagePushRaw(p.scope);
+  stageApply(p.scope, p.text);
+  undo.newEnd = p.scope.start + p.text.length;
+  stageQuotaSplit(p.model, p.scope.text.split(/\s+/).length, p.scope.text.length);
+  Logger.log('info', p.okLog);
+  Logger.setStatus(p.okStatus, 'info');
+  Logger.toast(p.okToast);
+  Logger.clearRun();
+  closeDiffSheet();
+}
+function diffDiscard(){
+  const p = diffPending;
+  if (!p) return;
+  const had = p.state === 'ready' || p.state === 'ready-fallback';
+  closeDiffSheet();
+  Logger.clearRun();
+  Logger.setStatus('آماده', 'info');
+  if (had) Logger.toast('نتیجه دور ریخته شد');
+}
+$('diff-apply')?.addEventListener('click', diffApply);
+$('diff-discard')?.addEventListener('click', diffDiscard);
+$('diff-backdrop')?.addEventListener('click', (e) => { if (e.target?.id === 'diff-backdrop') diffDiscard(); });
+document.addEventListener('keydown', (e) => {
+  if (!diffPending || diffEls().back?.hidden) return;
+  if (e.defaultPrevented) return;
+  const ae = document.activeElement;
+  const inModal = els.modal && els.modal.style.display === 'flex' && els.modal.contains(ae);
+  if (inModal) return; // modal owns Esc while it has focus
+  if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); diffDiscard(); }
+  else if (e.key === 'Enter' && !diffEls().apply?.disabled){
+    const tag = ae && ae.tagName;
+    if (ae === diffEls().discard || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return; // let focused controls keep native Enter
+    e.preventDefault(); e.stopPropagation(); diffApply();
+  }
+  else if (e.key === 'Tab'){
+    const d = diffEls();
+    const items = [...(d.sheet?.querySelectorAll('button:not([disabled]), summary, [href], input, [tabindex]:not([tabindex="-1"])') || [])].filter(el => el.getClientRects().length > 0);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  }
+});
+function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } if(!b){ const raw = $('stage-raw'); if(raw) raw.disabled = !stageRawStack.length; } }
 async function runStage(kind, faLabel, sysPrompt, logTitle){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای پالایش نیست'); return; }
+  const invoker = document.activeElement;
+  if (diffPending && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
   const vlen = els.output.value.length;
   Logger.groupRun(logTitle);
   Logger.setStatus('✨ ' + faLabel + '…', 'warn');
   setStageBusy(true);
+  openDiffRunning(faLabel, scope, invoker);
+  const mySeq = diffPending ? diffPending.seq : -1;
   try {
     // Explicit stage-model choice (dropdown) goes first, rest of the enabled chain
     // stays as fallback; default (head option) follows chain order. Layer 'polish'
@@ -2097,16 +2285,17 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
-    if(els.output.value.length !== vlen){ Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
-    const undo = stagePushRaw(scope);
-    stageApply(scope, out.text);
-    undo.newEnd = scope.start + out.text.length;
-    stageQuotaSplit(out.model, scope.text.split(/\s+/).length, scope.text.length);
-    Logger.log('info', `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${out.model} (${out.providerId})`);
-    Logger.setStatus('✅ ' + faLabel + ' نشست', 'info');
-    Logger.toast(faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'));
-    Logger.clearRun();
+    if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    // apply-diff-confirm (#49): gate the result behind the bottom sheet instead of
+    // direct-apply — Apply replays stagePushRaw+stageApply verbatim; quota fires there.
+    fillDiffSheet({ kind: 'polish', scope, text: out.text, model: out.model, faLabel, logTitle,
+      okStatus: '✅ ' + faLabel + ' نشست',
+      okToast: faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'),
+      okLog: `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${out.model} (${out.providerId})`,
+      invoker }, mySeq);
+    return;
   } catch (e) {
+    closeDiffSheet();
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ' + faLabel + ': ' + safe, 'error');
     Logger.toast('❌ ' + faLabel + ': ' + safe.slice(0, 60));
@@ -2116,27 +2305,32 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
 async function runTranslate(code){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
+  const invoker = document.activeElement;
+  if (diffPending && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
   const vlen = els.output.value.length;
   Logger.groupRun('🌐 ترجمه → ' + code);
   Logger.setStatus('🌐 ترجمه → ' + code + '…', 'warn');
   setStageBusy(true);
+  openDiffRunning('ترجمه → ' + code, scope, invoker);
+  const mySeq = diffPending ? diffPending.seq : -1;
   try {
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
-    if(els.output.value.length !== vlen){ Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
+    if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const out = res.text;
-    const undo = stagePushRaw(scope);
-    stageApply(scope, out);
-    undo.newEnd = scope.start + out.length;
-    stageQuotaSplit(res.model, scope.text.split(/\s+/).length, scope.text.length);
-    Logger.log('info', `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${res.model} (${res.providerId})`);
-    Logger.setStatus('✅ ترجمه نشست', 'info');
-    Logger.toast('ترجمه → ' + code + ' ✓');
-    Logger.clearRun();
+    // apply-diff-confirm (#49): gate the result behind the bottom sheet instead of
+    // direct-apply — Apply replays stagePushRaw+stageApply verbatim; quota fires there.
+    fillDiffSheet({ kind: 'translate', scope, text: out, model: res.model, faLabel: 'ترجمه → ' + code, logTitle: '🌐 ترجمه → ' + code,
+      okStatus: '✅ ترجمه نشست',
+      okToast: 'ترجمه → ' + code + ' ✓',
+      okLog: `🌐 ترجمه → ${code} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${res.model} (${res.providerId})`,
+      invoker }, mySeq);
+    return;
   } catch (e) {
+    closeDiffSheet();
     const safe = sanitizeMsg(e.message || e);
     Logger.setStatus('❌ ترجمه: ' + safe, 'error');
     Logger.toast('❌ ترجمه: ' + safe.slice(0, 60));
