@@ -1,11 +1,14 @@
 // Module: dashboard (deep)
 // Interface: Dashboard.ensureReportUI(), Dashboard.renderOverall()
-// Depth: hides Tehran period state, segmented UI, two hero cards, 7/30-day series strip.
+// Depth: hides Tehran period state, segmented UI, three hero cards, 7/30-day series strip.
 import { Quota } from './quota.js';
 
 let activePeriod = 'today';
 
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+// view-only Persian-digit formatting (no stats-math change; mirrors quota.js)
+function fa(v){ return String(v).replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d]); }
 
 export const Dashboard = {
   getPeriod(){ return activePeriod; },
@@ -30,7 +33,7 @@ export const Dashboard = {
       </div>
     </div>
     <div class="overall-grid" id="overall-grid"></div>
-    <p class="wpm-note">≈120 wpm</p>
+    <p class="saved-note" id="saved-note"></p>
     <div class="series-strip" id="series-strip"></div>
   `;
     // single toggle lives outside: #quota-toggle ↔ #quota-detail (wired in app.js).
@@ -53,11 +56,15 @@ export const Dashboard = {
     const seriesStrip=document.getElementById('series-strip');
     if(!grid) return;
     const s=Quota.getSummary(activePeriod);
-    const fmtMin=v=> v<1 ? Math.round(v*60)+' ثانیه' : v.toFixed(1)+' دقیقه';
+    const fmtMin=v=> fa(v<1 ? Math.round(v*60)+' ثانیه' : v.toFixed(1)+' دقیقه');
+    const hasSpeed = s.avgWpm>0;
     grid.innerHTML=`
-    <div class="overall-card"><span>درخواست</span><b>${s.totals.count}</b><small>${esc(s.rangeLabel)}</small></div>
-    <div class="overall-card"><span>دقایق رونویسی</span><b>${fmtMin(s.totals.minutes)}</b><small>${s.totals.words} کلمه</small></div>
+    <div class="overall-card"><span>درخواست</span><b>${fa(s.totals.count)}</b><small>${esc(s.rangeLabel)}</small></div>
+    <div class="overall-card"><span>دقایق رونویسی</span><b>${fmtMin(s.totals.minutes)}</b><small>${fa(s.totals.words)} کلمه</small></div>
+    <div class="overall-card"><span>میانگین سرعت</span><b>${hasSpeed ? fa(s.avgWpm)+' wpm' : '—'}</b><small>${hasSpeed ? fa(s.speedBoost)+' سریع‌تر' : '—'}</small></div>
   `;
+    const savedNote=document.getElementById('saved-note');
+    if(savedNote) savedNote.textContent=`≈${fa(s.savedMinutes)} دقیقه ذخیره‌شده نسبت به تایپ`;
     if(seriesStrip){
       const daysForStrip = activePeriod==='month' ? 30 : activePeriod==='all' ? 30 : 7;
       const series=Quota.getSeries(daysForStrip);
