@@ -18,7 +18,7 @@ const els = {
   toggleRealtime: $('toggle-realtime'), toggleVad: $('toggle-vad'), toggleAutocopy: $('toggle-autocopy'),
   togglePolish: $('toggle-polish'),
   sttChain: $('stt-chain'), polishChain: $('polish-chain'),
-  engineBadge: $('engine-badge'), wave: $('wave'), fileWarn: $('file-warning'),
+  wave: $('wave'), fileWarn: $('file-warning'),
   logBody: $('log-body'), livePreview: $('live-preview'), liveFinal: $('live-final'), liveInterim: $('live-interim'), liveBadge: $('live-badge'),
   quotaGrid: $('quota-grid'), charCount: $('char-count'), wordCount: $('word-count'),
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
@@ -33,6 +33,8 @@ const els = {
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   easyModelInput: $('easy-model-input'),
 };
+// hoisted above loadSettings(): updateBadge→updateStageScope→stageScope reads these during initial load
+let selStart=0, selEnd=0;
 
 Logger.init({ logBodyEl: els.logBody, statusTextEl: els.statusText, statusDotEl: els.statusDot, toastEl: $('toast') });
 
@@ -379,14 +381,19 @@ function persistChains(){
 }
 
 // --- settings wiring ---
-function updateBadge(){
+// Header removed (ticket header-polish-drawer): engine readout lives in the
+// #stage-scope pill. engineInfo() is the single chain-head reader; updateBadge()
+// just refreshes the pill via updateStageScope() (hoisted, defined below).
+function engineInfo(){
   const s=Storage.getSettings();
   const raw = s.sttChain?.[0] || s.primary || 'groq';
   const firstId = typeof raw==='object' ? raw.id : raw;
   const label = firstId==='groq' ? 'Groq' : firstId;
   const pol = s.polishEnabled ? ' • پالیش روشن' : ' • پالیش خاموش';
-  els.engineBadge.textContent = `موتور: ${label}${pol}`;
-  els.engineBadge.style.opacity = hasKeyFor(raw) ? '1' : '0.6';
+  return { text: `موتور: ${label}${pol}`, hasKey: hasKeyFor(raw) };
+}
+function updateBadge(){
+  updateStageScope();
 }
 function validate(){
   const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(), or=els.keyOpenrouter?.value.trim()||'';
@@ -441,7 +448,7 @@ function loadSettings(){
   flowInit();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ نوار پایین را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   try{
@@ -1487,7 +1494,7 @@ if(els.quotaGrid) new MutationObserver(()=> refreshQuotaStrip()).observe(els.quo
 refreshQuotaStrip();
 
 // output draft + counters + heights
-let selStart=0, selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart; selEnd=els.output.selectionEnd; };
+selStart=0; selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart; selEnd=els.output.selectionEnd; };
 els.output.addEventListener('click',saveCursor); els.output.addEventListener('keyup',saveCursor); els.output.addEventListener('select',saveCursor);
 const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; autogrowOutput(); };
 // transcript autogrow (ticket/51): grow with content, cap ~60vh, then internal scroll; native resize:vertical kept for manual override
@@ -1712,7 +1719,7 @@ async function startRecording(){
   discardRecording = false; // defensive: a missed onStop must never discard a later recording
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
-  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ را بزن','error'); openModal(); return; }
+  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ نوار پایین را بزن','error'); openModal(); return; }
   let snap=null;
   try{
     snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
@@ -1919,9 +1926,12 @@ function updateStageScope(){
   const badge = $('stage-scope');
   if (!badge) return;
   const g = stageScope();
-  badge.textContent = g.kind === 'selection'
+  const base = g.kind === 'selection'
     ? 'دامنه: انتخاب («' + g.sel.slice(0, 24) + (g.sel.length > 24 ? '…' : '') + '»)'
     : 'دامنه: کل متن';
+  const eng = engineInfo();
+  badge.textContent = `${base} • ${eng.text}`;
+  badge.style.opacity = eng.hasKey ? '1' : '0.6';
 }
 ['select', 'keyup', 'mouseup'].forEach(ev => els.output.addEventListener(ev, updateStageScope));
 els.output.addEventListener('focus', updateStageScope);
@@ -2137,7 +2147,7 @@ stageBarApplyVisibility();
 renderStageModelOptions();
 updateStageScope();
 mainWaveInit();
-const verEl = document.getElementById('app-version'); if (verEl) verEl.textContent = `v${VERSION}`;
+const verEl = document.getElementById('settings-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
 Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
 Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });

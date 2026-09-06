@@ -1,11 +1,6 @@
 :root{--bg:#0f0f10;--surface:#1e1f22;--surface2:#2a2b2e;--border:#333439;--accent:#1a73e8;--accent2:#8ab4f8;--success:#34a853;--danger:#ea4335;--warning:#fbbc04;--text:#e8eaed;--muted:#9aa0a6;--glass-bg:rgba(30,31,34,.75);--glass-surface:rgba(42,43,46,.65);--glass-border:rgba(255,255,255,.1);--glass-border-focus:rgba(138,180,248,.5);--glass-shadow:0 16px 36px rgba(0,0,0,.45);--spring-ease:cubic-bezier(.32,.72,0,1);--text-muted:#b8bcc2}
 *{box-sizing:border-box;margin:0;padding:0;font-family:"Vazirmatn","Segoe UI",system-ui,sans-serif}
 body{background:var(--bg);color:var(--text);display:flex;flex-direction:column;height:100vh;overflow:hidden;font-size:15px}
-.header{display:flex;align-items:center;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);gap:8px;flex-wrap:wrap}
-.header.topbar{position:sticky;top:0;z-index:50}
-.brand-mini{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
-.brand-icon{width:30px;height:30px;background:linear-gradient(135deg,#1a73e8,#8ab4f8);border-radius:9px;display:grid;place-items:center;font-size:15px;flex-shrink:0}
-.ver{font-size:10px;background:var(--surface2);border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);font-weight:400}
 button{border:none;border-radius:10px;padding:11px 18px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
 button:active{transform:scale(.97)}
 .actionbar{position:sticky;bottom:0;z-index:50;display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 14px calc(12px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);flex-shrink:0}
@@ -67,7 +62,6 @@ button:active{transform:scale(.97)}
 .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:7px 13px;font-size:13px;color:var(--muted)}
 .chip input{accent-color:var(--accent);width:16px;height:16px}
 .chip strong{color:var(--text);font-weight:600}
-#engine-badge{background:var(--accent);color:#fff;border:none;font-weight:700}
 .main{flex:1;display:flex;flex-direction:column;gap:8px;padding:0 14px 12px;overflow:auto;min-height:0}
 @media(prefers-reduced-motion:reduce){#btn-mic.recording .mic-svg,.stop-sq,.pulse-ring,.copy-tick,.cancel-svg path{animation:none !important;transition:none !important}}
 .status-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;min-height:40px}
@@ -83,12 +77,6 @@ button:active{transform:scale(.97)}
 .tfoot{display:flex;align-items:center;gap:6px;padding:7px 10px;border-top:1px solid var(--border);background:rgba(255,255,255,.02);font-size:11px;color:var(--muted)}
 .grip{margin-inline-start:auto;cursor:ns-resize;border:1px dashed var(--border);padding:1px 10px;border-radius:999px;user-select:none}
 .counts{color:var(--muted);font-size:12px;white-space:nowrap;flex-shrink:0}
-.options-drawer{margin-inline-start:auto;position:relative}
-.options-drawer .drawer-handle{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:999px;padding:7px 13px;font-size:13px;color:var(--muted)}
-.options-drawer[open] .drawer-handle{background:var(--surface);border-color:var(--accent)}
-.options-drawer .drawer-body{position:absolute;top:100%;inset-inline-end:0;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);min-width:280px;max-height:50vh;overflow:auto;z-index:20}
-.options-drawer .drawer-handle::-webkit-details-marker{display:none}
-@media(max-width:640px){.options-drawer .drawer-body{position:fixed;left:8px;right:8px;inset-inline:8px;top:auto;bottom:72px;min-width:auto;max-height:60vh;overflow:auto}}
 #output:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,.15)}
 .output-meta{display:flex;justify-content:flex-end;font-size:12px;color:var(--muted);padding:0 4px}
 .output-meta-actions{display:flex;gap:6px;align-items:center}
@@ -343,26 +331,26 @@ button:active{transform:scale(.97)}
 .wave-ov-head button:disabled{opacity:.35}
 .wave-ctrl-label{font-size:13px;color:var(--muted)}
 @media(prefers-reduced-motion:reduce){.wave-card,.wave-item{transition:none !important;animation:none !important}}
-@media(max-width:640px){.header{padding:8px 10px}#output{font-size:16px}button{padding:10px 14px;font-size:14px}.actionbar{gap:10px;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}#toast{bottom:calc(124px + env(safe-area-inset-bottom))}.rec-strip{margin:6px 10px 0}.main{padding:0 10px 10px}.qs-head{flex-wrap:wrap}}
+@media(max-width:640px){#output{font-size:16px}button{padding:10px 14px;font-size:14px}.actionbar{gap:10px;padding:10px 10px calc(10px + env(safe-area-inset-bottom))}#toast{bottom:calc(124px + env(safe-area-inset-bottom))}.rec-strip{margin:6px 10px 0}.main{padding:0 10px 10px}.qs-head{flex-wrap:wrap}}
 /* ===== ticket 09 — GLOBAL fluid-layout + modern scrollbars (append-only; ticket-08 internals untouched) =====
    Port of the demo GLOBAL fluid block, adapted to the REAL repo selectors. No HTML/JS changes. */
 html,body{max-width:100%}
 body{overflow-x:clip}
-.header.topbar,.main,.tcard,.quota-strip,#log-panel,.rec-strip,#file-warning,#log-splitter,
+.main,.tcard,.quota-strip,#log-panel,.rec-strip,#file-warning,#log-splitter,
 #settings-modal .modal-box,.pref-section,.wave-sticky,.wave-item,.chain-list,
 #panel-models,#models-flow,#panel-chains,#panel-wave{max-width:100%}
-.header.topbar,.main,.tcard,.quota-strip,#log-panel,.rec-strip,.pref-section,.wave-sticky,
+.main,.tcard,.quota-strip,#log-panel,.rec-strip,.pref-section,.wave-sticky,
 .provider-card,.quota-card,.chain-list,#panel-models,#models-flow,#models-list,#m-chips,
 .wave-item,.wave-body,.status-bar,.tfoot,.output-meta{min-width:0}
 /* --- scrollbars: thin modern (<=8px, transparent track, neutral thumb; Firefox thin) --- */
-.main,#log-body,#settings-modal .modal-box,.options-drawer .drawer-body,#output{scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
+.main,#log-body,#settings-modal .modal-box,#output{scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
 .main::-webkit-scrollbar,#log-body::-webkit-scrollbar,#settings-modal .modal-box::-webkit-scrollbar,
-.options-drawer .drawer-body::-webkit-scrollbar,#output::-webkit-scrollbar{width:8px;height:8px}
+#output::-webkit-scrollbar{width:8px;height:8px}
 .main::-webkit-scrollbar-track,#log-body::-webkit-scrollbar-track,
 #settings-modal .modal-box::-webkit-scrollbar-track,
-.options-drawer .drawer-body::-webkit-scrollbar-track,#output::-webkit-scrollbar-track{background:transparent}
+#output::-webkit-scrollbar-track{background:transparent}
 .main::-webkit-scrollbar-thumb,#log-body::-webkit-scrollbar-thumb,
-#settings-modal .modal-box::-webkit-scrollbar-thumb,.options-drawer .drawer-body::-webkit-scrollbar-thumb,
+#settings-modal .modal-box::-webkit-scrollbar-thumb,
 #output::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
 /* --- rails: scroll-x with HIDDEN scrollbar at all widths (stage-row compat + real rails) --- */
 #models-flow .rail,.stt-progress__steps,#m-chips,.settings-tabs,.wave-seg{scrollbar-width:none;-ms-overflow-style:none}
@@ -371,15 +359,7 @@ body{overflow-x:clip}
 #models-flow .rail{flex-wrap:nowrap;overflow-x:auto;max-width:100%}
 .stt-progress__steps,#m-chips{max-width:100%}
 .wave-seg{overflow-x:auto}
-/* --- topbar --- */
-.header.topbar{gap:clamp(6px,1.5vw,12px);overflow:visible}
-.brand-mini{min-width:0;flex:0 1 auto}
-.brand-mini>span:not(.ver){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.brand-mini .ver{flex:0 0 auto}
-#engine-badge{flex:0 0 auto;min-width:0;max-width:min(46vw,240px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chip{min-width:0;max-width:100%}
-.options-drawer{margin-inline-start:auto;min-width:0;flex:0 1 auto}
-.options-drawer .drawer-body{min-width:min(280px,calc(100vw - 48px));max-width:calc(100vw - 24px);overflow:auto}
 #btn-settings{flex:0 0 auto}
 /* --- file:// banner --- */
 #file-warning{min-width:0;overflow-wrap:anywhere;word-break:break-word}
@@ -485,10 +465,8 @@ body{overflow-x:clip}
 /* --- narrow breakpoints --- */
 @media(max-width:768px){
 .status-bar{font-size:12px}
-#engine-badge{max-width:38vw}
 }
 @media(max-width:640px){
-.header{padding:8px clamp(8px,2.5vw,10px)}
 #log-search{flex:1 1 100%;max-width:none}
 #log-header>div[style]{flex:1 1 100%}
 .wave-cards{grid-template-columns:minmax(0,1fr)}
@@ -531,8 +509,6 @@ select.model{background:#111113;border:1px solid var(--border);color:var(--text)
 .log-sep:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:640px){.sbtn{padding:7px 11px;font-size:12px}.sbtn small{display:none}select.model{max-width:110px}}
 @media(max-width:390px){
-#engine-badge{max-width:32vw;font-size:11px;padding:6px 9px}
-.options-drawer .drawer-handle{font-size:12px;padding:6px 10px}
 .status-bar{padding:7px 9px}
 .counts{font-size:11px}
 /* ticket 15: worst case (timer+cancel+undo/redo all visible) overflows 390 — tighten only here */
@@ -546,7 +522,7 @@ select.model{background:#111113;border:1px solid var(--border);color:var(--text)
 /* ===== ticket/droplet-glass-tokens — Apple Droplet + Glass Tokens (append-only; no HTML/JS changes) ===== */
 /* droplet capsule radii for pills/chips/tabs */
 button,.btn-ghost,.btn-icon,.chip,.sbtn,.segmented button,.wave-seg button,.settings-tab,
-.options-drawer .drawer-handle,#m-chips .fchip,#models-flow .rail button,
+#m-chips .fchip,#models-flow .rail button,
 .chain-step,.log-filter,.wave-mute,.wave-tag{border-radius:999px}
 /* droplet surface radii for inputs/cards */
 .modal-box input,.modal-box select,.tcard,.quota-strip,.status-bar,.quota-card,.overall-card,
@@ -611,3 +587,7 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 #model-picker-list::-webkit-scrollbar,#models-list::-webkit-scrollbar{width:8px;height:8px}
 #model-picker-list::-webkit-scrollbar-track,#models-list::-webkit-scrollbar-track{background:transparent}
 #model-picker-list::-webkit-scrollbar-thumb,#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
+/* ===== ticket/header-polish-drawer — header removed: gear in actionbar, behavior group in modal, version in modal footer ===== */
+#btn-settings.cbtn.sat{font-size:22px}
+.behavior-chips{display:flex;gap:8px;flex-wrap:wrap}
+.modal-version{margin-inline-end:auto;align-self:center}
