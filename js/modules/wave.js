@@ -112,7 +112,9 @@ export function createWaveRenderer(canvas) {
   const sensMap = () => { const k = cfg.sensitivity / 100; return { open: 2.6 - 1.5 * k, close: 2.2 - 1.5 * k, gain: 0.5 + 1.3 * k }; };
   const atkOf = v => { const k = (v == null ? cfg.attack : v) / 100; return 0.15 - 0.145 * k + 0.004; };
   const relOf = v => { const k = (v == null ? cfg.smooth : v) / 100; return 0.02 + 0.58 * k; };
-  const ampOf = (HH, L, wv) => HH * IDLE_FRAC + HH * 0.52 * sm(L / (1 + 0.12 * L)) * (0.15 + 1.85 * (eff(wv, 'intensity') / 100));
+  // T2/3 vertical fit (ticket/52): headroom 0.52→0.40 so crests + halo stay inside
+  // the taller preview at normal levels; extremes still soft-clip at the edge (reads as loud).
+  const ampOf = (HH, L, wv) => HH * IDLE_FRAC + HH * 0.40 * sm(L / (1 + 0.12 * L)) * (0.15 + 1.85 * (eff(wv, 'intensity') / 100));
 
   function fit() {
     const d = Math.min(devicePixelRatio || 1, 2);
