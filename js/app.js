@@ -1308,6 +1308,13 @@ document.querySelectorAll('[data-edit-prov]').forEach(b => b.addEventListener('c
   const inp = $(PROV_KEY_ID[pid]);
   if(inp) inp.focus();
 }));
+document.querySelectorAll('[data-prov="custom"]').forEach(b => b.addEventListener('click', ()=>{
+  if(els.providerDrawer) els.providerDrawer.open = true;
+  const card = $('custom-add-card');
+  if(card && card.tagName === 'DETAILS') card.open = true;
+  const inp = $('custom-name');
+  if(inp) inp.focus();
+}));
 let pickerOpener = null;
 function openModelPicker(target, opener){
   activePickerTarget = target === 'polish' ? 'polish' : 'stt';
