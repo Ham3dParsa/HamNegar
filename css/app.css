@@ -590,3 +590,7 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 .behavior-chips .chip:focus-within{outline:2px solid var(--accent);outline-offset:2px}
 .behavior-chips .chip input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .modal-version{margin-inline-end:auto;align-self:center}
+/* ===== ticket/depth-island-zorder (issue #77) — island above stagebar, content parks clear, menu scrolls internally (append-only; no HTML/JS; no position changes, no new stacking contexts) ===== */
+.actionbar{z-index:130}
+.main{scroll-padding-bottom:calc(130px + env(safe-area-inset-bottom,0px));padding-bottom:calc(130px + env(safe-area-inset-bottom,0px))}
+#stage-settings .menu{max-height:min(40vh,260px)}
