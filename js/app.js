@@ -2181,7 +2181,7 @@ function fillDiffSheet(p, seq){
   if (!diffPending || diffPending.seq !== seq) return; // stale resolve (discarded or superseded) — drop silently
   const before = p.scope.text, after = p.text;
   const r = diffFaSummary(before, after);
-  diffPending = { ...p, invoker: p.invoker || null, state: r.fallback ? 'ready-fallback' : (r.empty ? 'empty' : 'ready') };
+  diffPending = { ...p, seq, invoker: p.invoker || null, state: r.fallback ? 'ready-fallback' : (r.empty ? 'empty' : 'ready') };
   d.title.textContent = p.faLabel;
   d.scope.textContent = diffScopeLabel(p.scope);
   d.mode.textContent = 'منبع: ' + p.faLabel + ' — بدون اجرای دوباره';
@@ -2252,7 +2252,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); diffDiscard(); }
   else if (e.key === 'Enter' && !diffEls().apply?.disabled){
     const tag = ae && ae.tagName;
-    if (ae === diffEls().discard || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return; // let focused controls keep native Enter
+    if (ae === diffEls().discard || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'SUMMARY') return; // let focused controls keep native Enter
     e.preventDefault(); e.stopPropagation(); diffApply();
   }
   else if (e.key === 'Tab'){
