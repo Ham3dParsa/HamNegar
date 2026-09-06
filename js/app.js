@@ -505,7 +505,38 @@ let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capabilit
 let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-retry (disabled pre-fetch)
 let flowRenderT = null; // debounce: validate()/search fire per keystroke, list rebuild is ~30 nodes
 function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ renderFlowList(); }catch{} }, 150); }
-const M_ERR_LABEL = '✕ دریافت مدل‌ها ناموفق بود. ';
+function flowProviderLabel(pid){
+  if (pid === 'groq') return 'Groq';
+  if (pid === 'gemini') return 'Google AI Studio';
+  if (pid === 'openrouter') return 'OpenRouter';
+  if (pid === 'zenspark') return 'OpenCode Zen';
+  try {
+    const hit = (Storage.getSettings().customProviders || []).find(x => x && x.id === pid);
+    if (hit) return hit.name || pid;
+  } catch {}
+  return String(pid || 'نامشخص');
+}
+// Shared fetch-error path (ticket/45, folds zen-cors): attributed in-place `#m-err`
+// (`✕ <provider-label>: <safe>`), retry stays bound via `flowLastPid`;
+// `sanitizeMsg` is the single key-scrubbing gate.
+function showFetchError(providerId, e){
+  const raw = (e && e.message != null) ? String(e.message) : String(e ?? '');
+  let safe = sanitizeMsg(raw) || 'خطای ناشناخته';
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) safe = 'مرورگر جلوی دریافت مستقیم را گرفت (اتصال یا دسترسی مسدود است)';
+  const label = flowProviderLabel(providerId);
+  const msg = `✕ ${label}: ${safe}`;
+  Logger.toast(msg.slice(0, 80));
+  announce(`خطا در بارگذاری مدل‌ها (${label}): ${safe}`);
+  const errBox = $('m-err');
+  if (errBox) {
+    errBox.hidden = false;
+    errBox.dataset.failed = '1';
+    const t = $('m-err-text');
+    if (t) t.textContent = msg + ' ';
+    const zen = $('m-err-zen');
+    if (zen) zen.hidden = providerId !== 'zenspark';
+  }
+}
 let activePickerTarget = 'stt'; // single add-target source (easy-target radios removed in ticket 2)
 function capsFor(id, pid){
   const s = String(id || '');
@@ -639,9 +670,24 @@ function renderFlowList(){
   if (empty) {
     empty.hidden = rows.length !== 0;
     const mw = $('m-manual-wrap');
-    // Gate: show manual Gemini-id input on empty state whenever the resolved manual pid
-    // accepts a Gemini id (rail gemini → gemini; rail all → defaults to gemini; other rails → foreign pid, hidden).
-    if (mw) mw.hidden = !(rows.length === 0 && (flowProv === 'gemini' || flowProv === 'all'));
+    // Manual-id entry per rail (ticket/45, folds zen-cors): gemini/all → Gemini shape,
+    // zenspark → exact `muse-spark-*` shape; other rails → foreign pid, hidden.
+    const manualPid = (flowProv === 'gemini' || flowProv === 'all') ? 'gemini' : flowProv === 'zenspark' ? 'zenspark' : null;
+    if (mw) {
+      mw.hidden = !(rows.length === 0 && manualPid);
+      if (!mw.hidden) {
+        const inp = $('easy-model-input'), addB = $('btn-easy-add'), hint = $('m-manual-hint');
+        if (manualPid === 'zenspark') {
+          if (inp) { inp.placeholder = 'muse-spark-…'; inp.setAttribute('aria-label', 'شناسه دستی Zen'); }
+          if (addB) addB.textContent = 'افزودن دستی Zen';
+          if (hint) { hint.hidden = false; hint.textContent = 'شناسه‌های Zen شکل muse-spark-* دارند.'; }
+        } else {
+          if (inp) { inp.placeholder = 'gemini-…'; inp.setAttribute('aria-label', 'شناسه دستی Gemini'); }
+          if (addB) addB.textContent = 'افزودن دستی Gemini';
+          if (hint) hint.hidden = true;
+        }
+      }
+    }
   }
   if (err && !err.dataset.failed) err.hidden = true;
   const retry = $('m-retry');
@@ -709,7 +755,7 @@ async function fetchAndShowModels(providerId){
     renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); if(errBox){ errBox.hidden = false; errBox.dataset.failed = '1'; if(errBox.firstChild) errBox.firstChild.textContent = M_ERR_LABEL + safe + ' '; } }
+  }catch(e){ showFetchError(providerId, e); }
   finally{ if(btn) btn.textContent='لیست مدل‌ها'; syncCacheLines(); }
 }
 els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
@@ -879,7 +925,7 @@ $('btn-custom-models')?.addEventListener('click', async ()=>{
     renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل بارگذاری شد`);
-  }catch(e){ const safe = sanitizeMsg(e.message || e) || 'خطای ناشناخته'; Logger.toast(safe.slice(0,80)); announce(`خطا در بارگذاری مدل‌ها: ${safe}`); }
+  }catch(e){ flowLastPid = stored.id; showFetchError(stored.id, e); }
 });
 
 // --- manual Gemini id (empty-state action): rail provider + target radios → Add ---
