@@ -258,21 +258,14 @@
 
     </section>
 
-    <!-- Wave tab: live preview + starters + stack + globals (ticket/50) -->
+    <!-- Wave tab: live preview + starters + stack + globals (ticket/50; T2/3 preview+sliders redesign ticket/52) -->
     <section id="panel-wave" role="tabpanel" aria-labelledby="tab-wave" hidden>
       <div class="wave-sticky" aria-label="پیش‌نمایش زنده موج">
-        <div class="pref-head"><h4>🔴 پیش‌نمایش زنده</h4>
-          <div class="wave-row-btns">
-            <button type="button" id="wave-mic-test" class="btn-ghost btn-sm">🎤 تست با صدای من</button>
-            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-sm">⏺ مصنوعی: روشن</button>
-          </div>
-        </div>
         <div class="wave-preview-wrap"><canvas id="wave-preview"></canvas></div>
-        <div class="wave-row-btns" style="justify-content:space-between">
-          <label class="wave-mini-sens">حساسیت <input type="range" id="wave-sens-mini" min="0" max="100" value="50" aria-label="حساسیت پیش‌نمایش"><b id="wave-sens-mini-val">۵۰٪</b></label>
+        <div class="wave-sticky-meta">
           <span class="pref-sub" id="wave-count">۱ موج</span>
+          <span class="pref-sub" id="wave-name"></span>
         </div>
-        <div class="pref-sub" id="wave-name" style="text-align:center"></div>
       </div>
 
       <div class="pref-section" aria-label="استارترها">
@@ -290,18 +283,28 @@
         </div>
       </div>
 
-      <div class="pref-section" aria-label="سراسری پشته">
+      <div class="pref-section wave-globals" aria-label="سراسری پشته">
         <div class="pref-head"><h4>🎛 سراسری پشته</h4><button type="button" id="wave-reset" class="btn-ghost btn-sm">بازنشانی پشته</button></div>
-        <div><div class="wave-lab"><span>حساسیت (گیت + گین)</span><b id="wave-sens-val">۵۰٪</b></div><input type="range" id="wave-sens" min="0" max="100" value="50" aria-label="حساسیت"></div>
-        <div><div class="wave-lab"><span>سرعت پاسخ — اتک (خیزش؛ بیشتر = تندتر)</span><b id="wave-atk-val">۵۰٪</b></div><input type="range" id="wave-atk" min="0" max="100" value="50" aria-label="سرعت پاسخ"></div>
-        <div><div class="wave-lab"><span>سرعت (تپش ایستاده + جریان رنگ)</span><b id="wave-spd-val">۵۰٪</b></div><input type="range" id="wave-spd" min="0" max="100" value="50" aria-label="سرعت"></div>
-        <div><div class="wave-lab"><span>شدت (دهانه نوسان)</span><b id="wave-int-val">۵۰٪</b></div><input type="range" id="wave-int" min="0" max="100" value="50" aria-label="شدت"></div>
-        <div><div class="wave-lab"><span>نرمی — رهایی (بیشتر = کندتر محو می‌شود)</span><b id="wave-sm-val">۵۰٪</b></div><input type="range" id="wave-sm" min="0" max="100" value="50" aria-label="نرمی"></div>
-        <div><div class="wave-lab"><span>ذرات</span><b id="wave-parts-val">۱۲</b></div><input type="range" id="wave-parts" min="0" max="24" value="12" aria-label="ذرات"></div>
+        <p class="pref-sub wave-group-note">مبنای همه موج‌ها — هر موج می‌تواند در بخش «پیشرفته» مقدار خودش را جدا کند.</p>
+        <div class="wslider-mount" data-label="حساسیت (گیت + گین)" data-unit="٪" data-def="50"><input type="range" id="wave-sens" min="0" max="100" step="1" value="50" aria-label="حساسیت"></div>
+        <div class="wslider-mount" data-label="سرعت پاسخ — اتک (خیزش؛ بیشتر = تندتر)" data-unit="٪" data-def="50"><input type="range" id="wave-atk" min="0" max="100" step="1" value="50" aria-label="سرعت پاسخ"></div>
+        <div class="wslider-mount" data-label="سرعت (تپش ایستاده + جریان رنگ)" data-unit="٪" data-def="50"><input type="range" id="wave-spd" min="0" max="100" step="1" value="50" aria-label="سرعت"></div>
+        <div class="wslider-mount" data-label="شدت (دهانه نوسان)" data-unit="٪" data-def="50"><input type="range" id="wave-int" min="0" max="100" step="1" value="50" aria-label="شدت"></div>
+        <div class="wslider-mount" data-label="نرمی — رهایی (بیشتر = کندتر محو می‌شود)" data-unit="٪" data-def="50"><input type="range" id="wave-sm" min="0" max="100" step="1" value="50" aria-label="نرمی"></div>
+        <div class="wslider-mount" data-label="ذرات" data-unit="" data-def="12"><input type="range" id="wave-parts" min="0" max="24" step="1" value="12" aria-label="ذرات"></div>
         <div class="wave-row-btns" style="justify-content:space-between">
           <label class="chip"><input type="checkbox" id="wave-aurora"> <strong>شست‌وشوی زمینه (aurora)</strong></label>
-          <label class="wave-mini-sens">ته‌رنگ <input type="range" id="wave-aurora-hue" min="0" max="360" value="220" aria-label="ته رنگ زمینه"><b id="wave-aurora-hue-val">۲۲۰</b></label>
         </div>
+        <div class="wslider-mount" data-label="ته‌رنگ زمینه" data-unit="" data-def="220"><input type="range" id="wave-aurora-hue" min="0" max="360" step="1" value="220" aria-label="ته رنگ زمینه"></div>
+      </div>
+
+      <div class="pref-section" aria-label="منبع پیش‌نمایش">
+        <div class="pref-head"><h4>🎧 منبع پیش‌نمایش</h4></div>
+        <div class="wave-row-btns">
+          <button type="button" id="wave-mic-test" class="btn-ghost btn-sm">🎤 تست با صدای من</button>
+          <button type="button" id="wave-fake-toggle" class="btn-ghost btn-sm">⏺ مصنوعی: روشن</button>
+        </div>
+        <div class="wslider-mount" data-label="حساسیت پیش‌نمایش" data-unit="٪" data-def="50"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="50" aria-label="حساسیت پیش‌نمایش"></div>
       </div>
     </section>
 

@@ -1049,30 +1049,80 @@ function waveSeg(box, vals, cur, faMap, cb){
     box.appendChild(b);
   });
 }
-function waveOvRow(wv, key, label){
-  const wrap = document.createElement('div');
-  wrap.className = 'wave-ov';
+// --- wave sliders T2/3 (ticket/52): ONE builder for globals + per-wave.
+// Replaces the undiscoverable `min=-1` "follow global" dead-zone with an explicit
+// «همگام با سراسری» toggle chip + a real 0–100 track. Value bubble, tick marks,
+// double-click reset (def value; follow-sliders reset back to follow). Track fill
+// via --p; track stays LTR, labels/bubbles inherit page RTL. Native <input range>
+// keeps keyboard operation free; thumb transition off under reduced-motion (CSS).
+const waveGlobalPaints = [];
+let waveListPaints = [];
+function waveSlider(mount, o){
+  // o: {label, min, max, step, unit, def, scope:'global'|'local',
+  //     get:()=>number|null, set:(v:number|null)=>void,
+  //     follow?: {globalVal:()=>number}|null, onChange:()=>void}
+  mount.classList.add('wslider', o.scope === 'global' ? 'wslider-global' : 'wslider-local');
+  mount.innerHTML = '';
   const head = document.createElement('div');
-  head.className = 'wave-ov-head';
-  const sp = document.createElement('span'); sp.textContent = label;
-  const bb = document.createElement('b');
-  const rs = document.createElement('button'); rs.type = 'button'; rs.textContent = '↩ سراسری'; rs.title = 'بازگشت به سراسری';
-  const paint = () => {
-    const v = wv.ov[key], gv = waveCfg[key];
-    if (v == null) { bb.textContent = `همگام با سراسری (${gv}٪)`; rs.disabled = true; }
-    else { bb.textContent = `دستی ${v}٪ (سراسری ${gv}٪)`; rs.disabled = false; }
+  head.className = 'wslider-head';
+  const lab = document.createElement('span');
+  lab.className = 'wslider-label'; lab.textContent = o.label;
+  const bb = document.createElement('output');
+  bb.className = 'wslider-bubble';
+  head.append(lab, bb);
+  const track = document.createElement('div');
+  track.className = 'wslider-track';
+  let rg = o.reuseInput || document.createElement('input');
+  rg.type = 'range';
+  rg.min = String(o.min); rg.max = String(o.max); rg.step = String(o.step);
+  rg.dir = 'ltr';
+  rg.setAttribute('aria-label', o.label);
+  if (rg.id && (o.scope === 'global')) bb.id = rg.id + '-val'; // keep waveSync txt() targets working
+  const ticks = document.createElement('div');
+  ticks.className = 'wslider-ticks'; ticks.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 5; i++) ticks.appendChild(document.createElement('i'));
+  track.append(rg, ticks);
+  mount.append(head, track);
+  let chip = null;
+  if (o.follow) {
+    chip = document.createElement('button');
+    chip.type = 'button'; chip.className = 'wslider-follow';
+    chip.textContent = 'همگام با سراسری';
+    chip.setAttribute('aria-label', o.label + ' — همگام با سراسری');
+    chip.title = 'روشن = مقدار سراسری؛ خاموش = مقدار دستی این موج';
+    mount.appendChild(chip);
+  }
+  const shownVal = () => {
+    const v = o.get();
+    return (o.follow && v == null) ? o.follow.globalVal() : v;
   };
-  head.append(sp, bb, rs);
-  const rg = document.createElement('input');
-  rg.type = 'range'; rg.min = '-1'; rg.max = '100'; rg.step = '1';
-  rg.value = wv.ov[key] == null ? -1 : wv.ov[key];
-  rg.setAttribute('aria-label', label);
-  rg.title = '-۱ = سراسری';
-  rg.addEventListener('input', () => { const v = +rg.value; wv.ov[key] = v < 0 ? null : v; paint(); wavePersist(); });
-  rs.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wv.ov[key] = null; rg.value = -1; paint(); wavePersist(); });
+  const paint = () => {
+    const v = o.get();
+    const following = !!(o.follow && v == null);
+    const sv = following ? o.follow.globalVal() : v;
+    rg.value = String(sv);
+    rg.disabled = following;
+    rg.title = following ? 'همگام با سراسری — برای دستی شدن چیپ را بزن' : 'دابل‌کلیک = بازنشانی';
+    const pct = (sv - o.min) / Math.max(1e-9, (o.max - o.min)) * 100;
+    rg.style.setProperty('--p', pct.toFixed(1) + '%');
+    bb.textContent = following ? `همگام با سراسری (${sv}${o.unit})` : `${sv}${o.unit}`;
+    mount.classList.toggle('is-follow', following);
+    if (chip) chip.setAttribute('aria-pressed', String(following));
+  };
+  rg.addEventListener('input', () => { o.set(+rg.value); paint(); o.onChange(); });
+  rg.addEventListener('dblclick', () => {
+    o.set(o.follow ? null : o.def);
+    paint(); o.onChange();
+  });
+  if (chip) chip.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    const v = o.get();
+    o.set((o.follow && v == null) ? o.follow.globalVal() : null);
+    paint(); o.onChange();
+  });
   paint();
-  wrap.append(head, rg);
-  return wrap;
+  (o.scope === 'global' ? waveGlobalPaints : waveListPaints).push(paint);
+  return { el: mount, paint };
 }
 function waveApplyStarter(id, applyAurora){
   const st = starterById(id);
@@ -1109,6 +1159,7 @@ function waveRenderList(){
   const list = $('wave-list');
   if (!list) return;
   list.innerHTML = '';
+  waveListPaints = [];
   const alive = new Set(waveCfg.waves.map(w => w.id));
   [...waveOpenIds].forEach(id => { if (!alive.has(id)) waveOpenIds.delete(id); });
   [...waveAdvIds].forEach(id => { if (!alive.has(id)) waveAdvIds.delete(id); });
@@ -1197,18 +1248,11 @@ function waveRenderList(){
     c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePersist(); });
     rCol.append(c1Lab, c1);
     body.appendChild(rCol);
-    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '%'], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '%'], ['thick', 'ضخامت (مطلق هر موج)', 1, 6, '']].forEach(([k, fa, mn, mx, u]) => {
-      const wrap = document.createElement('div');
-      const lab = document.createElement('div'); lab.className = 'wave-lab';
-      const sp = document.createElement('span'); sp.textContent = fa;
-      const bb = document.createElement('b'); bb.textContent = wv[k] + u;
-      lab.append(sp, bb);
-      const rg = document.createElement('input');
-      rg.type = 'range'; rg.min = mn; rg.max = mx; rg.step = k === 'thick' ? '0.5' : '1'; rg.value = wv[k];
-      rg.setAttribute('aria-label', fa);
-      rg.addEventListener('input', () => { wv[k] = +rg.value; bb.textContent = wv[k] + u; wavePersist(); });
-      wrap.append(lab, rg);
-      body.appendChild(wrap);
+    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '1', '٪', 100], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '1', '٪', 70], ['thick', 'ضخامت (مطلق هر موج)', 1, 6, '0.5', '', 2]].forEach(([k, fa, mn, mx, st, u, df]) => {
+      const mount = document.createElement('div');
+      body.appendChild(mount);
+      waveSlider(mount, { label: fa, min: mn, max: mx, step: st, unit: u, def: df, scope: 'local',
+        get: () => wv[k], set: v => { wv[k] = v; }, onChange: () => wavePersist() });
     });
     const rPk = document.createElement('div');
     const pLab = document.createElement('div'); pLab.className = 'wave-ctrl-label'; pLab.textContent = 'تراکم قله‌ها';
@@ -1241,13 +1285,15 @@ function waveRenderList(){
     waveSeg(segF, ['flat', 'center', 'edges', 'bands'], wv.profile || 'flat', WAVE_FA.profiles, v => { wv.profile = v; wavePersist(); waveRenderList(); });
     rPf.append(fLab, segF);
     adv.appendChild(rPf);
-    const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'رونوشت هر موج — ۱- = همگام با سراسری';
+    const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'رونوشت هر موج — چیپ «همگام با سراسری» = همان مقدار سراسری';
     adv.appendChild(ovLab);
-    adv.appendChild(waveOvRow(wv, 'speed', 'سرعت این موج'));
-    adv.appendChild(waveOvRow(wv, 'intensity', 'شدت این موج'));
-    adv.appendChild(waveOvRow(wv, 'attack', 'سرعت پاسخ این موج (اتک)'));
-    adv.appendChild(waveOvRow(wv, 'smooth', 'نرمی این موج (رهایی)'));
-    adv.appendChild(waveOvRow(wv, 'sensitivity', 'حساسیت این موج (گین)'));
+    [['speed', 'سرعت این موج'], ['intensity', 'شدت این موج'], ['attack', 'سرعت پاسخ این موج (اتک)'], ['smooth', 'نرمی این موج (رهایی)'], ['sensitivity', 'حساسیت این موج (گین)']].forEach(([key, label]) => {
+      const mount = document.createElement('div');
+      adv.appendChild(mount);
+      waveSlider(mount, { label, min: 0, max: 100, step: '1', unit: '٪', def: 50, scope: 'local',
+        get: () => wv.ov[key], set: v => { wv.ov[key] = v; },
+        follow: { globalVal: () => waveCfg[key] }, onChange: () => wavePersist() });
+    });
     body.appendChild(adv);
     det.appendChild(body);
     row.appendChild(det);
@@ -1269,6 +1315,8 @@ function waveSync(){
   txt('wave-spd-val', waveCfg.speed + '٪'); txt('wave-int-val', waveCfg.intensity + '٪');
   txt('wave-atk-val', waveCfg.attack + '٪'); txt('wave-sm-val', waveCfg.smooth + '٪');
   txt('wave-parts-val', waveCfg.particles); txt('wave-aurora-hue-val', waveCfg.aurora.hue);
+  waveGlobalPaints.forEach(p => p());
+  waveListPaints.forEach(p => p());
   txt('wave-count', waveCfg.waves.length + ' موج' + (waveCfg.waves.length >= 5 ? ' (سقف)' : ''));
   const nm = $('wave-name');
   if (nm) nm.textContent = `«${waveCfg.starterId === 'custom-dice' ? 'ترکیب تصادفی 🎲' : starterById(waveCfg.starterId).n}» — ${waveCfg.waves.length} موج`;
@@ -1282,21 +1330,24 @@ function waveSync(){
 function waveEnsure(){
   if (waveInit) { waveFollowStart(); waveSync(); return; }
   waveInit = true;
+  const waveGlobalKey = { 'wave-sens': 'sensitivity', 'wave-sens-mini': 'sensitivity', 'wave-atk': 'attack', 'wave-spd': 'speed', 'wave-int': 'intensity', 'wave-sm': 'smooth', 'wave-parts': 'particles' };
+  document.querySelectorAll('#panel-wave .wslider-mount').forEach(m => {
+    if (m.dataset.built) return;
+    m.dataset.built = '1';
+    const rg = m.querySelector('input[type=range]');
+    const isHue = rg.id === 'wave-aurora-hue';
+    const key = waveGlobalKey[rg.id];
+    waveSlider(m, { label: m.dataset.label || rg.getAttribute('aria-label') || rg.id,
+      min: +rg.min, max: +rg.max, step: rg.step || '1',
+      unit: m.dataset.unit || '', def: +(m.dataset.def || 50), scope: 'global', reuseInput: rg,
+      get: () => isHue ? waveCfg.aurora.hue : waveCfg[key],
+      set: v => { if (isHue) waveCfg.aurora.hue = v; else waveCfg[key] = v; },
+      onChange: () => wavePersist() });
+  });
   const cv = $('wave-preview');
   waveRenderer = createWaveRenderer(cv);
   waveRenderer.setConfig(waveCfg);
   waveRenderer.setFakeEnabled(waveFakeOn);
-  const bind = (id, key, isAurora) => {
-    $(id)?.addEventListener('input', e => {
-      if (isAurora === 'hue') waveCfg.aurora.hue = +e.target.value;
-      else waveCfg[key] = +e.target.value;
-      wavePersist();
-    });
-  };
-  bind('wave-sens', 'sensitivity'); bind('wave-sens-mini', 'sensitivity');
-  bind('wave-spd', 'speed'); bind('wave-int', 'intensity');
-  bind('wave-atk', 'attack'); bind('wave-sm', 'smooth');
-  bind('wave-parts', 'particles'); bind('wave-aurora-hue', null, 'hue');
   $('wave-aurora')?.addEventListener('change', e => { waveCfg.aurora.on = e.target.checked; wavePersist(); });
   $('wave-add')?.addEventListener('click', () => {
     if (waveCfg.waves.length >= 5) return;
