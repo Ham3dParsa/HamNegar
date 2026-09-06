@@ -521,14 +521,6 @@ function capsFor(id, pid){
 }
 // Single source of truth for STT-eligibility: every add path + row disabled state must use this.
 function isSttEligible(id, pid){ return capsFor(id, pid).caps.includes('stt'); }
-function ptagFor(pid){
-  if (pid === 'groq') return 'groq';
-  if (pid === 'gemini') return 'google';
-  if (pid === 'openrouter') return 'openrouter';
-  if (pid === 'zenspark') return 'zen';
-  try { const c = Storage.getSettings().customProviders.find(x => x.id === pid); if (c) return c.name || 'سفارشی'; } catch {}
-  return pid || 'سفارشی';
-}
 function allFlowModels(){
   const out = [], seen = new Set();
   const push = (id, pid) => {
@@ -627,21 +619,11 @@ function renderFlowList(){
     badges.className = 'mbadges';
     for (const c of d.caps) { const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
     if (d.free) { const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
-    if (loc) { const ic = document.createElement('span'); ic.className = 'badge inchain'; ic.textContent = 'در زنجیره'; badges.appendChild(ic); }
-    const tag = document.createElement('span');
-    tag.className = 'ptag';
-    tag.textContent = ptagFor(d.providerId);
-    const key = document.createElement('span');
-    key.className = 'chain-badge ' + (hasKey ? 'ok' : 'missing');
-    key.textContent = hasKey ? '✓ کلید' : '⚠ بی‌کلید';
-    title.append(b, badges, tag, key);
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = d.fa || d.providerId;
-    main.append(title, meta);
+    title.append(b, badges);
+    main.append(title);
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'btn-ghost btn-sm';
+    btn.className = 'btn-ghost btn-sm ' + (loc ? 'btn-remove' : 'btn-add');
     btn.textContent = loc ? 'حذف' : 'افزودن';
     btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
     // Same capsFor source as add paths: t2t-only rows are not addable when target=STT (remove stays enabled).
@@ -1356,21 +1338,15 @@ function renderModelPickerList(){
     badges.className = 'mbadges';
     for(const c of d.caps){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
     if(d.free){ const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
-    const tag = document.createElement('span');
-    tag.className = 'ptag';
-    tag.textContent = ptagFor(d.providerId);
-    title.append(b, badges, tag);
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = d.fa || d.providerId;
-    main.append(title, meta);
+    title.append(b, badges);
+    main.append(title);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-ghost btn-sm';
     btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'));
     if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; }
     else if(activePickerTarget === 'stt' && !isSttEligible(d.id, d.providerId)){ btn.textContent = 'افزودن'; btn.title = 'این مدل متنی است — برای STT مناسب نیست'; btn.disabled = true; }
-    else{ btn.textContent = 'افزودن'; btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(true); }); }
+    else{ btn.textContent = 'افزودن'; btn.classList.add('btn-add'); btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + (activePickerTarget === 'stt' ? 'STT' : 'پالیش'); btn.disabled = !hasKey; btn.addEventListener('click', ()=>{ addModelToChain(d.id, d.providerId, activePickerTarget); closeModelPicker(true); }); }
     card.append(main, btn);
     box.appendChild(card);
   }
