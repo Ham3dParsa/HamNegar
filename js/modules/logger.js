@@ -14,6 +14,39 @@ let progressLabel = null;
 let progressStep = null;
 let progressSteps = null;
 
+// Compact live progress (ticket/compact-live-progress): full chain stored here,
+// but only a max-2-pill window (current + next) is rendered into #progress-steps.
+let progressChain = [];
+let progressIndex = 0;
+
+function progressEntryLabel(id) { return id === 'groq' ? 'Groq' : id; }
+function renderProgressWindow() {
+  if (!progressSteps) progressSteps = document.getElementById('progress-steps');
+  if (!progressSteps) return;
+  progressSteps.innerHTML = '';
+  const n = progressChain.length;
+  if (!n) return;
+  let start = Math.max(0, Math.min(progressIndex, n - 1));
+  if (start >= n - 1 && n >= 2) start = n - 2; // last step: show prev + current
+  const end = Math.min(start + 2, n);
+  for (let idx = start; idx < end; idx++) {
+    const li = document.createElement('li');
+    li.className = 'chain-step';
+    li.dataset.idx = String(idx);
+    const rank = document.createElement('span');
+    rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
+    rank.textContent = String(idx + 1);
+    const label = document.createElement('span');
+    label.textContent = progressChain[idx].label;
+    label.style.fontSize = '12px';
+    const icon = document.createElement('span');
+    icon.className = 'step-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    li.append(rank, label, icon);
+    progressSteps.appendChild(li);
+  }
+}
+
 export const Logger = {
   init({ logBodyEl, statusTextEl, statusDotEl, toastEl: t }) {
     logBody = logBodyEl; statusText = statusTextEl; statusDot = statusDotEl; toastEl = t;
@@ -96,15 +129,22 @@ export const Logger = {
       if (progressBar) progressBar.parentElement.setAttribute('aria-valuenow', String(Math.round(((index + 1) / total) * 100)));
     }
     if (progressSteps && typeof index === 'number') {
+      const hasChain = progressChain.length > 0;
+      if (hasChain) {
+        progressIndex = Math.max(0, Math.min(index, progressChain.length - 1));
+        renderProgressWindow();
+      }
       const items = [...progressSteps.children];
       items.forEach((li, i) => {
         li.classList.remove('is-trying', 'is-current', 'is-failed', 'is-done');
-        if (i < index) li.classList.add('is-failed');
-        if (i === index) {
-          if (state === 'failed') li.classList.add('is-failed');
-          else if (state === 'done') li.classList.add('is-done');
-          else { li.classList.add('is-trying', 'is-current'); }
-        }
+        // Compact window: pills carry data-idx; static fallback (no rebuild yet) matches by position.
+        const pos = hasChain ? Number(li.dataset.idx ?? -1) : i;
+        const cur = hasChain ? progressIndex : index;
+        if (!hasChain && pos < cur) li.classList.add('is-failed');
+        if (pos !== cur) return;
+        if (state === 'failed') li.classList.add('is-failed');
+        else if (state === 'done') li.classList.add('is-done');
+        else { li.classList.add('is-trying', 'is-current'); }
       });
     }
     // sync dot
@@ -115,23 +155,14 @@ export const Logger = {
   rebuildProgress(chain) {
     if (!progressSteps) progressSteps = document.getElementById('progress-steps');
     if (!progressSteps || !Array.isArray(chain)) return;
-    progressSteps.innerHTML = '';
-    chain.forEach((entry, idx) => {
+    // Store the full chain internally; render only the max-2-pill window
+    // (current + next). Full-chain detail stays in log lines only.
+    progressChain = chain.map((entry) => {
       const id = typeof entry === 'object' ? entry.id : entry;
-      const li = document.createElement('li');
-      li.className = 'chain-step';
-      const rank = document.createElement('span');
-      rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
-      rank.textContent = String(idx + 1);
-      const label = document.createElement('span');
-      label.textContent = id === 'groq' ? 'Groq' : id;
-      label.style.fontSize = '12px';
-      const icon = document.createElement('span');
-      icon.className = 'step-icon';
-      icon.setAttribute('aria-hidden', 'true');
-      li.append(rank, label, icon);
-      progressSteps.appendChild(li);
+      return { id, label: progressEntryLabel(id) };
     });
+    progressIndex = 0;
+    renderProgressWindow();
   },
   dismissProgress(delay = 0) {
     const el = progressEl || document.getElementById('stt-progress');

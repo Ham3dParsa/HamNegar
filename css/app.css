@@ -579,6 +579,11 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 #model-picker-list::-webkit-scrollbar,#models-list::-webkit-scrollbar{width:8px;height:8px}
 #model-picker-list::-webkit-scrollbar-track,#models-list::-webkit-scrollbar-track{background:transparent}
 #model-picker-list::-webkit-scrollbar-thumb,#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
+/* ===== ticket/compact-live-progress — current+next only (max 2 pills), single row, panel ≤110px at 360 (append-only) ===== */
+#stt-progress{max-height:110px;overflow:hidden}
+#stt-progress .stt-progress__steps{flex-wrap:nowrap;overflow:hidden}
+#stt-progress .chain-step{flex:0 0 auto;max-width:46%;overflow:hidden;white-space:nowrap}
+#stt-progress .chain-step span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 /* ===== ticket/header-polish-drawer — header removed: gear in actionbar, behavior group in modal, version in modal footer ===== */
 #btn-settings.cbtn.sat{font-size:22px}
 /* ===== ticket/behavior-chips-restyle — compact standard switch rows reusing chain-item language (append-only; CSS-only, no HTML/JS changes) ===== */
