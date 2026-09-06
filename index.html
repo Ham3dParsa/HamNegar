@@ -105,11 +105,16 @@
           </div>
         </div>
         <p class="pref-sub" style="font-size:11px;color:var(--muted);margin:4px 0">اولویت از بالا به پایین — جابه‌جایی با منوی ⋮ یا کشیدن ردیف، سوییچ برای خاموش/روشن.</p>
-        <p class="hint-inline chain-legend">راهنما: 🟢 افزودن (آماده) • 🔴 حذف (در زنجیره) • 🔑 نیازمند کلید • 🚫 مناسب STT نیست</p>
+        <p class="hint-inline chain-legend">راهنما: 🟢 افزودن (آماده) • 🔴 حذف (در زنجیره) • 🔑 نیازمند کلید • STT فقط مدل صوتی — متنی‌ها پنهان‌اند</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-add-stt" style="border-radius:999px" aria-label="افزودن مدل صوتی به زنجیره STT">＋ افزودن مدل صوتی</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" style="border-radius:999px" aria-expanded="false" aria-controls="stt-add-panel" aria-label="پنل افزودن مدل صوتی به زنجیره STT">＋ افزودن مدل صوتی</button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt" aria-label="بازنشانی زنجیره STT">بازنشانی STT</button>
+        </div>
+        <div class="chain-add" id="stt-add-panel" hidden>
+          <label for="stt-add-search" class="hint-inline">جست‌وجوی مدل برای STT:</label>
+          <input type="search" id="stt-add-search" placeholder="جست‌وجوی مدل… (مثل whisper)" aria-label="جست‌وجوی مدل برای زنجیره STT">
+          <div id="stt-add-list" role="listbox" aria-label="فهرست مدل‌ها برای زنجیره STT"></div>
         </div>
       </section>
 
@@ -122,11 +127,16 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-polish-all-off" aria-label="خاموش کردن همه ویرایشگرهای پالیش">همه خاموش</button>
           <span class="hint-inline">سوییچ هر ردیف را خاموش/روشن می‌کند — جابه‌جایی و حذف با منوی ⋮</span>
         </div>
-        <p class="hint-inline chain-legend">راهنما: 🟢 افزودن (آماده) • 🔴 حذف (در زنجیره) • 🔑 نیازمند کلید • 🚫 مناسب STT نیست</p>
+        <p class="hint-inline chain-legend">راهنما: 🟢 افزودن (آماده) • 🔴 حذف (در زنجیره) • 🔑 نیازمند کلید • STT فقط مدل صوتی — متنی‌ها پنهان‌اند</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-add-polish" style="border-radius:999px" aria-label="افزودن ویرایشگر به زنجیره پالیش">＋ افزودن ویرایشگر</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" style="border-radius:999px" aria-expanded="false" aria-controls="polish-add-panel" aria-label="پنل افزودن ویرایشگر به زنجیره پالیش">＋ افزودن ویرایشگر</button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish" aria-label="بازنشانی زنجیره پالیش">بازنشانی پالیش</button>
+        </div>
+        <div class="chain-add" id="polish-add-panel" hidden>
+          <label for="polish-add-search" class="hint-inline">جست‌وجوی ویرایشگر برای پالیش:</label>
+          <input type="search" id="polish-add-search" placeholder="جست‌وجوی مدل… (مثل qwen)" aria-label="جست‌وجوی مدل برای زنجیره پالیش">
+          <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌ها برای زنجیره پالیش"></div>
         </div>
         <div class="hint" id="polish-disabled-hint" style="display:none">پالیش خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
       </section>
@@ -245,12 +255,6 @@
         </div>
       </details>
 
-      <!-- Model picker sheet: skeleton only — filled + wired by JS in ticket 3 -->
-      <div id="model-picker-sheet" hidden role="dialog" aria-label="انتخاب مدل">
-        <label for="model-picker-search" class="hint-inline">جست‌وجوی مدل:</label>
-        <input type="search" id="model-picker-search" placeholder="جست‌وجوی مدل… (مثل whisper)" aria-label="جست‌وجوی مدل">
-        <div id="model-picker-list" role="listbox" aria-label="فهرست مدل‌ها"></div>
-      </div>
     </section>
 
     <!-- Wave tab: live preview + starters + stack + globals (ticket/50) -->

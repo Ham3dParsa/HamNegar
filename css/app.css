@@ -211,24 +211,24 @@ button:active{transform:scale(.97)}
 #m-chips .fchip{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:5px 12px;border-radius:999px;cursor:pointer}
 #m-chips .fchip.active{background:var(--accent);border-color:var(--accent);color:#fff}
 #models-list{display:flex;flex-direction:column;gap:0;min-width:0}
-#models-list .mrow,#model-picker-list .mrow{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;padding:4px 10px;margin:4px 0;min-height:47px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-align:start}
-#models-list .mrow .mmain,#model-picker-list .mrow .mmain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
-#models-list .mrow .mtitle,#model-picker-list .mrow .mtitle{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:nowrap;overflow:hidden}
-#models-list .mrow .mtitle b,#model-picker-list .mrow .mtitle b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
-#models-list .mrow .mbadges,#model-picker-list .mrow .mbadges{display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:hidden;flex:0 1 auto;min-width:0}
-#models-list .mrow .badge,#model-picker-list .mrow .badge{flex-shrink:0;font-size:10px;background:#111113;border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);white-space:nowrap}
-#models-list .mrow .badge.free,#model-picker-list .mrow .badge.free{color:var(--success);border-color:rgba(52,168,83,.3)}
-#models-list .mrow>button[data-add],#models-list .mrow>.btn-ghost,#model-picker-list .mrow>.btn-ghost{flex:0 0 auto;white-space:nowrap}
+#models-list .mrow,#stt-add-list .mrow, #polish-add-list .mrow{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;padding:4px 10px;margin:4px 0;min-height:47px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;text-align:start}
+#models-list .mrow .mmain,#stt-add-list .mrow .mmain, #polish-add-list .mrow .mmain{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+#models-list .mrow .mtitle,#stt-add-list .mrow .mtitle, #polish-add-list .mrow .mtitle{display:flex;align-items:center;gap:6px;min-width:0;flex-wrap:nowrap;overflow:hidden}
+#models-list .mrow .mtitle b,#stt-add-list .mrow .mtitle b, #polish-add-list .mrow .mtitle b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+#models-list .mrow .mbadges,#stt-add-list .mrow .mbadges, #polish-add-list .mrow .mbadges{display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap;overflow:hidden;flex:0 1 auto;min-width:0}
+#models-list .mrow .badge,#stt-add-list .mrow .badge, #polish-add-list .mrow .badge{flex-shrink:0;font-size:10px;background:#111113;border:1px solid var(--border);padding:2px 6px;border-radius:999px;color:var(--muted);white-space:nowrap}
+#models-list .mrow .badge.free,#stt-add-list .mrow .badge.free, #polish-add-list .mrow .badge.free{color:var(--success);border-color:rgba(52,168,83,.3)}
+#models-list .mrow>button[data-add],#models-list .mrow>.btn-ghost,#stt-add-list .mrow>.btn-ghost, #polish-add-list .mrow>.btn-ghost{flex:0 0 auto;white-space:nowrap}
 /* ticket/44-card-cleanup: color-coded chain membership — same outline language as #btn-copy green / #btn-clear red; :not(:disabled) keeps keyless/STT-blocked/in-chain muted */
-#models-list .mrow .btn-add:not(:disabled),#model-picker-list .mrow .btn-add:not(:disabled){border:2px solid var(--success);color:var(--success);background:rgba(52,168,83,.12)}
-#models-list .mrow .btn-remove:not(:disabled),#model-picker-list .mrow .btn-remove:not(:disabled){border:2px solid var(--danger);color:var(--danger);background:var(--surface2)}
+#models-list .mrow .btn-add:not(:disabled),#stt-add-list .mrow .btn-add:not(:disabled), #polish-add-list .mrow .btn-add:not(:disabled){border:2px solid var(--success);color:var(--success);background:rgba(52,168,83,.12)}
+#models-list .mrow .btn-remove:not(:disabled),#stt-add-list .mrow .btn-remove:not(:disabled), #polish-add-list .mrow .btn-remove:not(:disabled){border:2px solid var(--danger);color:var(--danger);background:var(--surface2)}
 #models-tips{border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px;color:var(--muted)}
 #models-tips>summary{cursor:pointer;color:var(--text)}
 #models-tips ul{margin:6px 0 0;padding-inline-start:18px;display:flex;flex-direction:column;gap:4px}
 #models-tips code{direction:ltr;unicode-bidi:embed}
 /* ticket/44-card-cleanup: long ids wrap instead of truncating at 390px */
-#models-list .mrow .mtitle,#model-picker-list .mrow .mtitle{flex-wrap:wrap;overflow:visible}
-#models-list .mrow .mtitle b,#model-picker-list .mrow .mtitle b{white-space:normal;overflow-wrap:anywhere;min-width:0}
+#models-list .mrow .mtitle,#stt-add-list .mrow .mtitle, #polish-add-list .mrow .mtitle{flex-wrap:wrap;overflow:visible}
+#models-list .mrow .mtitle b,#stt-add-list .mrow .mtitle b, #polish-add-list .mrow .mtitle b{white-space:normal;overflow-wrap:anywhere;min-width:0}
 #models-flow .state-card{border:1px solid var(--border);border-radius:10px;padding:8px 10px;font-size:12px}
 #models-flow .state-card[hidden]{display:none}
 #models-flow .state-warn{border-color:rgba(234,67,53,.4);background:rgba(234,67,53,.08)}
@@ -571,14 +571,10 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 /* ===== ticket/log-splitter-bottom — splitter belongs BELOW #log-panel (order:4), not atop the column ===== */
 #log-splitter{order:5;position:sticky;bottom:0;z-index:5}
 /* ===== ticket/45-list-behavior — fixed-count internal scroll lists + sheet chrome (append-only; CSS-only caps, no JS measuring, no virtualization) ===== */
-#model-picker-sheet{border:1px solid var(--border);border-radius:12px;background:#15161a;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:8px}
-#model-picker-sheet[hidden]{display:none}
-#model-picker-search{position:sticky;top:0;z-index:2}
-#model-picker-list{max-height:calc(5 * 52px + 4 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
 #models-list{max-height:calc(8 * 52px + 7 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
-#model-picker-list::-webkit-scrollbar,#models-list::-webkit-scrollbar{width:8px;height:8px}
-#model-picker-list::-webkit-scrollbar-track,#models-list::-webkit-scrollbar-track{background:transparent}
-#model-picker-list::-webkit-scrollbar-thumb,#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
+#models-list::-webkit-scrollbar{width:8px;height:8px}
+#models-list::-webkit-scrollbar-track{background:transparent}
+#models-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
 /* ===== ticket/compact-live-progress — current+next only (max 2 pills), single row, panel ≤110px at 360 (append-only) ===== */
 #stt-progress{max-height:110px;overflow:hidden}
 #stt-progress .stt-progress__steps{flex-wrap:nowrap;overflow:hidden}
@@ -629,7 +625,15 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 .chain-menu button:disabled{opacity:.35;cursor:not-allowed}
 .chain-menu button.danger{color:var(--danger)}
 .chain-menubtn:focus-visible,.chain-menu button:focus-visible,.chain-switch input:focus-visible ~ .chain-state{outline:2px solid var(--accent);outline-offset:2px}
-/* 3-state add-button language (models tab + picker sheet): red in-chain, green ready, muted + inline reason suffix per cause — CSS-only, add-path JS untouched */
-#models-list .mrow button:disabled[title*="کلید"]::after,#model-picker-list .mrow button:disabled[title*="کلید"]::after{content:' — 🔑 نیازمند کلید'}
-#models-list .mrow button:disabled[title*="STT"]::after,#model-picker-list .mrow button:disabled[title*="STT"]::after{content:' — 🚫 مناسب STT نیست'}
+/* 3-state add-button language (models tab + inline chain panels): red in-chain, green ready, muted + inline reason suffix per cause — CSS-only, add-path JS untouched */
+#models-list .mrow button:disabled[title*="کلید"]::after,#stt-add-list .mrow button:disabled[title*="کلید"]::after,#polish-add-list .mrow button:disabled[title*="کلید"]::after{content:' — 🔑 نیازمند کلید'}
+#models-list .mrow button:disabled[title*="STT"]::after{content:' — 🚫 مناسب STT نیست'}
 @media(prefers-reduced-motion:reduce){.chain-track,.chain-track::after{transition:none !important}}
+/* ===== ticket/76-inline-chain-add — per-chain inline add panels replace the sheet (append-only; .chain-* row rules above untouched) ===== */
+.chain-add{border:1px solid var(--border);border-radius:12px;background:#15161a;padding:10px;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.chain-add[hidden]{display:none}
+.chain-add input[type="search"]{position:sticky;top:0;z-index:2}
+#stt-add-list,#polish-add-list{max-height:calc(5 * 52px + 4 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
+#stt-add-list::-webkit-scrollbar,#polish-add-list::-webkit-scrollbar{width:8px;height:8px}
+#stt-add-list::-webkit-scrollbar-track,#polish-add-list::-webkit-scrollbar-track{background:transparent}
+#stt-add-list::-webkit-scrollbar-thumb,#polish-add-list::-webkit-scrollbar-thumb{background:#3f4045;border-radius:99px;border:2px solid transparent;background-clip:content-box}
