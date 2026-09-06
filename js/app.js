@@ -2118,7 +2118,12 @@ function faNormalizeDiff(s){
     .replace(/[\u064B-\u0652\u0670\u0640]/g, ''); // Arabic diacritics + superscript-alef + tatweel
 }
 function faTokenizeDiff(s){
-  return String(s ?? '').split(/\s+/).filter(Boolean); // ZWNJ (U+200C) is not whitespace → stays inside tokens
+  // Words = letters/digits/marks/ZWNJ runs (ZWNJ never splits: «می‌شود» stays one
+  // token; diacritics/tatweel stay glued so raw/render token counts match normalized
+  // ones); every other non-space char (punctuation «،.؟!;:«»()…» etc.) is its own
+  // token, so an unchanged word stays white while attached punctuation highlights alone.
+  const m = String(s ?? '').match(/[\p{L}\p{M}\p{N}\u200C]+|[^\s\p{L}\p{M}\p{N}\u200C]/gu);
+  return m || [];
 }
 function diffFaTokens(a, b){
   const n = a.length, m = b.length;
@@ -2138,11 +2143,29 @@ function diffFaTokens(a, b){
   }
   while (i < n) { ops.push({ t: 'del', a: i }); i++; }
   while (j < m) { ops.push({ t: 'ins', b: j }); j++; }
+  diffPairSubstitutions(ops);
   let changed = 0;
   for (const o of ops) if (o.t !== 'eq') changed++;
   const total = Math.max(n, m);
   if (total > 0 && changed / total > 0.6) return { ops: null, changed, total, empty: false, fallback: true };
   return { ops, changed, total, empty: changed === 0, fallback: false };
+}
+function diffPairSubstitutions(ops){
+  // Post-pass: an adjacent DEL+INS run (either order) of small size is a substituted
+  // word, not a delete+insert — mark both sides changed. DEL keeps its `a` index,
+  // INS keeps its `b` index; the renderer maps each side. Pure runs stay del/ins.
+  for (let k = 0; k < ops.length;){
+    if (ops[k].t === 'eq' || ops[k].t === 'chg'){ k++; continue; }
+    let e = k;
+    while (e < ops.length && ops[e].t !== 'eq' && ops[e].t !== 'chg') e++;
+    let nd = 0, ni = 0;
+    for (let q = k; q < e; q++){ if (ops[q].t === 'del') nd++; else if (ops[q].t === 'ins') ni++; }
+    if (nd > 0 && ni > 0 && (e - k) <= 4){
+      for (let q = k; q < e; q++) ops[q].t = 'chg';
+    }
+    k = e;
+  }
+  return ops;
 }
 function diffFaSummary(before, after){
   return diffFaTokens(faTokenizeDiff(faNormalizeDiff(before)), faTokenizeDiff(faNormalizeDiff(after)));
@@ -2183,6 +2206,8 @@ function diffRenderSide(el, verbTokens, ops, side){
     if (o.t === 'eq') push(verbTokens[side === 'a' ? o.a : o.b], 'dd-eq');
     else if (o.t === 'del' && side === 'a') push(verbTokens[o.a], 'dd-del');
     else if (o.t === 'ins' && side === 'b') push(verbTokens[o.b], 'dd-ins');
+    else if (o.t === 'chg' && side === 'a' && o.a !== undefined) push(verbTokens[o.a], 'dd-chg');
+    else if (o.t === 'chg' && side === 'b' && o.b !== undefined) push(verbTokens[o.b], 'dd-chg');
   }
   if (!first) el.appendChild(frag);
 }

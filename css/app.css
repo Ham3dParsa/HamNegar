@@ -653,7 +653,8 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 #diff-orig,#diff-result{font-size:14px;line-height:2;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
 .dd-eq{color:var(--text)}
 .dd-del{color:var(--danger);text-decoration:line-through;text-decoration-thickness:2px;font-weight:600}
-.dd-ins{color:var(--success);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
+.dd-ins{color:#7db4f8;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
+.dd-chg{color:#f5c518;background:rgba(245,197,24,.13);border-radius:4px;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px;font-weight:600}
 .diff-note{font-size:12px;color:var(--muted);margin:0}
 .diff-note[hidden]{display:none}
 .diff-foot{position:sticky;bottom:0;display:flex;gap:8px;align-items:center;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--surface2);border-top:1px solid var(--border);flex:none}
