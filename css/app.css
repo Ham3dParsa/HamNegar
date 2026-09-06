@@ -466,7 +466,7 @@ body{overflow-x:clip}
 #stagebar{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:8px;order:2;position:relative;overflow:visible;z-index:80}
 .quota-strip{order:3}
 #log-panel{order:4}
-.stage-row{display:flex;gap:6px;align-items:center;padding:8px 10px;background:rgba(255,255,255,.02);border-radius:10px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.stage-row{display:flex;gap:6px;align-items:center;padding:8px 10px;background:rgba(255,255,255,.02);border-radius:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
 .stage-row::-webkit-scrollbar{display:none}
 #stagebar:has(#stage-settings[open]) .stage-row{overflow:visible}
 .sbtn{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;min-height:40px}
@@ -508,6 +508,7 @@ select.model{background:#111113;border:1px solid var(--border);color:var(--text)
 .demo-actionbar #btn-mic.hero{width:clamp(60px,18vw,88px);height:clamp(60px,18vw,88px)}
 .demo-actionbar .rec-timer{font-size:clamp(12px,3.4vw,18px);max-width:26vw}
 #stagebar .scope{display:none}
+#stagebar .stage-row{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .quota-grid{grid-template-columns:minmax(0,1fr)}
 }
 /* ===== ticket/droplet-glass-tokens — Apple Droplet + Glass Tokens (append-only; no HTML/JS changes) ===== */
