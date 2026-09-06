@@ -74,6 +74,7 @@
   <button id="btn-undo" class="cbtn sat" data-act="undo" title="واگرد" aria-label="واگرد" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
   <button id="btn-redo" class="cbtn sat" data-act="redo" title="ازنو" aria-label="ازنو" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
   <button id="btn-settings" class="cbtn sat" data-act="settings" title="تنظیمات" aria-label="تنظیمات">⚙️</button>
+  <button id="btn-shortcuts" class="cbtn sat" data-act="shortcuts" title="راهنمای میانبرها" aria-label="راهنمای میانبرها">؟</button>
 </footer>
 <div id="settings-modal" role="dialog" aria-modal="true" aria-label="تنظیمات">
   <div class="modal-box modal-wide">
@@ -332,6 +333,21 @@
       <button type="button" id="diff-apply" class="diff-apply">اعمال</button>
       <button type="button" id="diff-discard" class="btn-ghost">دور ریختن</button>
     </footer>
+  </section>
+</div>
+<div id="shortcuts-backdrop" hidden>
+  <section id="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" aria-describedby="shortcuts-enter-note">
+    <header class="sc-head"><b id="shortcuts-title">راهنمای میانبرها</b><span class="hint-inline">؟ بیرون از ورودی‌های متن</span></header>
+    <div class="sc-body">
+      <table class="sc-table" aria-label="فهرست میانبرها">
+        <thead><tr><th scope="col">کلید</th><th scope="col">کار</th><th scope="col">کجا</th></tr></thead>
+        <tbody id="shortcuts-rows"></tbody>
+      </table>
+      <h4 class="sc-h">ترتیب Esc (بالاترین لایه اول می‌برد)</h4>
+      <ol class="sc-esclayers" id="shortcuts-esc-order"></ol>
+      <p class="sc-note" id="shortcuts-enter-note">اینتر (Enter) همیشه زمینه‌ای است، هرگز سراسری — در شیت بازبینی یعنی اعمال، در جست‌وجوی زبان یعنی اجرای ترجمه، در تغییرنام موج یعنی تأیید، روی جداکنندهٔ لاگ (Enter/Space) یعنی ایزوله‌کردن اجرا.</p>
+    </div>
+    <footer class="sc-foot"><button type="button" id="shortcuts-close" class="btn-ghost">بستن</button></footer>
   </section>
 </div>
 <div id="chain-live" class="sr-only" role="status" aria-live="polite"></div>

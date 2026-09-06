@@ -297,7 +297,8 @@ function renderChain(container, chain, type){
     const menuLabel = `گزینه‌های مدل ${meta.label}: جابه‌جایی، حذف`;
     // ticket/75-chainrows-compact: one ⋮ menu per row (up/down/remove) — ✕ off the surface.
     // aria-labels of the old ▲▼✕ buttons move onto menu items; Ctrl+Arrow/drag/undo paths untouched.
-    item.title = 'بکش تا جابه‌جا شود';
+    item.title = 'بکش تا جابه‌جا شود — Ctrl+↑/↓ جابه‌جایی ردیف';
+    item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
     item.innerHTML = `
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
       <div class="chain-main">
@@ -368,6 +369,7 @@ function renderChain(container, chain, type){
       });
       document.addEventListener('keydown', (e)=>{
         if(e.key === 'Escape' && !e.defaultPrevented){
+          if (shortcutsOpen()) return; // guide owns Esc while open (ticket/51)
           const open = document.querySelector('.chain-menu-wrap.open .chain-menubtn');
           if(!open) return;
           e.preventDefault(); e.stopPropagation(); // consumed — later document layers (recording-cancel) must see defaultPrevented (ticket/2x)
@@ -1869,6 +1871,7 @@ els.btnCancel?.addEventListener('click', cancelTranscription);
 // the diff sheet / modal / tr-panel own Esc.
 document.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (shortcutsOpen()) return; // guide owns Esc while open (ticket/51)
   if (diffPending && diffEls().back && !diffEls().back.hidden) return; // #83 owns Esc (registered later on document)
   const trp = $('tr-panel');
   if (trp && !trp.hidden){ e.preventDefault(); trp.hidden = true; return; } // panel fallback: close, never cancel
@@ -2270,6 +2273,7 @@ $('diff-backdrop')?.addEventListener('click', (e) => { if (e.target?.id === 'dif
 document.addEventListener('keydown', (e) => {
   if (!diffPending || diffEls().back?.hidden) return;
   if (e.defaultPrevented) return;
+  if (shortcutsOpen()) return; // guide owns keys while open (ticket/51)
   const ae = document.activeElement;
   const inModal = els.modal && els.modal.style.display === 'flex' && els.modal.contains(ae);
   if (inModal) return; // modal owns Esc while it has focus
@@ -2288,6 +2292,110 @@ document.addEventListener('keydown', (e) => {
     else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
   }
 });
+// --- shortcut guide (ticket/51): single source of truth for every user-facing binding ---
+// Any PR adding/changing/removing a keydown/keyup listener MUST touch this map:
+// the guide dialog AND the title/aria-keyshortcuts hints render from it.
+const SHORTCUTS = [
+  { id:'undo', keysFa:'Ctrl/⌘ + Z', keys:'Control+z Meta+z', action:'واگرد متن', scope:'کادر خروجی — فقط با فوکوس همین کادر' },
+  { id:'redo', keysFa:'Ctrl/⌘ + Shift + Z یا Ctrl/⌘ + Y', keys:'Control+Shift+z Meta+Shift+z Control+y Meta+y', action:'ازنو (برگرداندن واگرد)', scope:'کادر خروجی — فقط با فوکوس همین کادر' },
+  { id:'reorder', keysFa:'Ctrl + ↑ / ↓', keys:'Control+ArrowUp Control+ArrowDown', action:'جابه‌جایی ردیف زنجیره', scope:'ردیف فوکوس‌شدهٔ زنجیرهٔ STT/پالیش' },
+  { id:'guide', keysFa:'؟ / ?', keys:'?', action:'باز کردن همین راهنما', scope:'هرجا بیرون از ورودی‌های متن' },
+  { id:'enter-diff', keysFa:'Enter', keys:'Enter', action:'اعمال نتیجه', scope:'شیت بازبینی باز — زمینه‌ای', contextual:true },
+  { id:'enter-lang', keysFa:'Enter', keys:'Enter', action:'اجرای ترجمه به زبان برجسته', scope:'جست‌وجوی زبان — زمینه‌ای', contextual:true },
+  { id:'enter-rename', keysFa:'Enter', keys:'Enter', action:'تأیید نام', scope:'تغییرنام موج — زمینه‌ای', contextual:true },
+  { id:'esc-guide', keysFa:'Esc', keys:'Escape', layer:1, action:'بستن همین راهنما', scope:'راهنما باز' },
+  { id:'esc-tr', keysFa:'Esc', keys:'Escape', layer:2, action:'بستن پنل ترجمه', scope:'پنل ترجمه باز' },
+  { id:'esc-diff', keysFa:'Esc', keys:'Escape', layer:3, action:'دور ریختن نتیجه', scope:'شیت بازبینی باز' },
+  { id:'esc-modal', keysFa:'Esc', keys:'Escape', layer:4, action:'بستن مدال تنظیمات (اول پنل افزودن، بعد مدال — بدون ذخیره)', scope:'مدال تنظیمات باز' },
+  { id:'esc-cancel', keysFa:'Esc', keys:'Escape', layer:5, action:'لغو ضبط/رونویسی', scope:'حین ضبط یا رونویسی — آخرین راه' },
+];
+function shortcutById(id){ return SHORTCUTS.find(s => s.id === id); }
+function shortcutsOpen(){ return !($('shortcuts-backdrop')?.hidden ?? true); }
+function renderShortcuts(){
+  const tb = $('shortcuts-rows');
+  if (tb){
+    tb.innerHTML = '';
+    for (const s of SHORTCUTS.filter(s => !s.layer)){
+      const tr = document.createElement('tr');
+      const tdK = document.createElement('td'); tdK.className = 'sc-keys'; tdK.textContent = s.keysFa; tdK.dir = 'auto';
+      const tdA = document.createElement('td'); tdA.textContent = s.action;
+      const tdS = document.createElement('td'); tdS.className = 'sc-scope'; tdS.textContent = s.scope;
+      tr.append(tdK, tdA, tdS);
+      tb.appendChild(tr);
+    }
+  }
+  const ol = $('shortcuts-esc-order');
+  if (ol){
+    ol.innerHTML = '';
+    for (const s of SHORTCUTS.filter(s => s.layer).sort((a, b) => a.layer - b.layer)){
+      const li = document.createElement('li');
+      li.textContent = `Esc — ${s.action} (${s.scope})`;
+      ol.appendChild(li);
+    }
+  }
+}
+let lastShortcutsFocus = null;
+function openShortcuts(){
+  renderShortcuts();
+  const back = $('shortcuts-backdrop');
+  if (!back || !back.hidden) return;
+  lastShortcutsFocus = document.activeElement;
+  back.hidden = false;
+  $('shortcuts-close')?.focus?.();
+}
+function closeShortcuts(){
+  const back = $('shortcuts-backdrop');
+  if (!back || back.hidden) return;
+  back.hidden = true;
+  if (lastShortcutsFocus?.focus) lastShortcutsFocus.focus();
+  else $('btn-shortcuts')?.focus?.();
+}
+function applyShortcutHints(){
+  const set = (el, ids) => {
+    if (!el) return;
+    const list = ids.map(shortcutById).filter(Boolean);
+    if (!list.length) return;
+    el.setAttribute('aria-keyshortcuts', list.map(s => s.keys).join(' '));
+    const hint = list.map(s => s.keysFa).join(' یا ');
+    const t = el.getAttribute('title') || '';
+    if (!t.includes(hint)) el.setAttribute('title', (t ? t + ' — ' : '') + hint);
+  };
+  set(els.output, ['undo', 'redo']);
+  set($('btn-undo'), ['undo']);
+  set($('btn-redo'), ['redo']);
+  set($('btn-shortcuts'), ['guide']);
+  set($('btn-cancel-stt'), ['esc-cancel']);
+  set($('diff-discard'), ['esc-diff']);
+  set($('diff-apply'), ['enter-diff']);
+  set($('stage-lang-search'), ['enter-lang', 'esc-tr']);
+  set($('settings-modal'), ['esc-modal']);
+  set($('btn-close-modal'), ['esc-modal']);
+  set($('diff-sheet'), ['esc-diff']);
+  set($('tr-panel'), ['esc-tr']);
+}
+$('btn-shortcuts')?.addEventListener('click', openShortcuts);
+$('shortcuts-close')?.addEventListener('click', closeShortcuts);
+$('shortcuts-backdrop')?.addEventListener('click', (e) => { if (e.target?.id === 'shortcuts-backdrop') closeShortcuts(); });
+$('shortcuts-dialog')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeShortcuts(); return; } // consume: topmost layer owns Esc
+  if (e.key !== 'Tab') return;
+  const items = [...($('shortcuts-dialog')?.querySelectorAll('button:not([disabled])') || [])].filter(el => el.getClientRects().length > 0);
+  if (!items.length) return;
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented) return;
+  if (shortcutsOpen()) return;
+  if (e.key !== '?' && e.key !== '؟') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const t = e.target, tag = t?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return; // inert inside text inputs
+  e.preventDefault();
+  openShortcuts();
+});
+applyShortcutHints();
 function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } if(!b){ const raw = $('stage-raw'); if(raw) raw.disabled = !stageRawStack.length; } }
 async function runStage(kind, faLabel, sysPrompt, logTitle){
   const scope = stageScope();
