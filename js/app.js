@@ -1936,7 +1936,7 @@ function updateStageScope(){
 ['select', 'keyup', 'mouseup'].forEach(ev => els.output.addEventListener(ev, updateStageScope));
 els.output.addEventListener('focus', updateStageScope);
 // stagebar button visibility (session-only: storage seam is locked, so no persistence here)
-const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…'], ['stage-raw', 'خام']];
+const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…']];
 function stageBarApplyVisibility(){
   const menu = $('stage-edit-menu');
   if (menu && !menu.dataset.built) {
@@ -1944,12 +1944,13 @@ function stageBarApplyVisibility(){
     for (const [id, label] of STAGE_BTNS) {
       const lab = document.createElement('label');
       lab.className = 'switch';
+      lab.title = 'برداشتن تیک فقط دکمه را پنهان می‌کند؛ ابزار غیرفعال نمی‌شود';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.checked = true;
       cb.setAttribute('aria-label', 'نمایش دکمه ' + label);
       cb.addEventListener('change', () => { const btn = $(id); if (btn) btn.hidden = !cb.checked; });
-      lab.append(cb, document.createTextNode(' ' + label));
+      lab.append(cb, document.createTextNode(' نمایش: ' + label));
       menu.appendChild(lab);
     }
   }
@@ -1968,7 +1969,8 @@ function renderStageModelOptions(){
   sel.innerHTML = '';
   const head = document.createElement('option');
   head.value = '';
-  head.textContent = 'همان مدل متن اصلی';
+  head.textContent = 'خودکار: زنجیرهٔ پالایش به‌ترتیب';
+  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه زنجیرهٔ پالایش به‌ترتیب جلو می‌رود. مدل انتخابیِ بی‌کلید بی‌صدا نادیده گرفته می‌شود و زنجیره ادامه می‌دهد.';
   sel.appendChild(head);
   const seen = new Set();
   for (const e of polishChainState) {

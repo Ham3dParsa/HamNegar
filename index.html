@@ -40,9 +40,11 @@
       <button type="button" id="stage-raw" class="sbtn ghost" disabled>↩ <span class="t">خام</span></button>
       <details id="stage-settings" class="settings icon-only"><summary title="تنظیمات مراحل" aria-label="تنظیمات مراحل">⚙️</summary>
         <div class="menu">
-          <label style="font-size:12px;color:var(--muted)">مدل متنی <select class="model" id="stage-model"><option value="">همان مدل متن اصلی</option></select></label>
-          <div class="menu-div">نمایش دکمه‌ها</div>
+          <div class="hint-inline">هیچ ابزاری خودکار اجرا نمی‌شود؛ هر دکمه فقط با کلیک روی متن فعلی کار می‌کند.</div>
+          <label style="font-size:12px;color:var(--muted)">مدل متنی <select class="model" id="stage-model"><option value="" title="اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه زنجیرهٔ پالایش به‌ترتیب جلو می‌رود. مدل انتخابیِ بی‌کلید بی‌صدا نادیده گرفته می‌شود و زنجیره ادامه می‌دهد.">خودکار: زنجیرهٔ پالایش به‌ترتیب</option></select></label>
+          <div class="menu-div">نمایش دکمه‌ها (فقط پنهان‌سازی؛ ابزار همیشه آماده است)</div>
           <div id="stage-edit-menu"></div>
+          <div class="hint-inline">چیدمان دکمه‌ها با بستن صفحه به حالت پیش‌فرض برمی‌گردد.</div>
         </div>
       </details>
       <span class="scope" id="stage-scope">دامنه: کل متن</span>
