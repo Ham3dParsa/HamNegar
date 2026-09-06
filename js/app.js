@@ -1042,7 +1042,7 @@ function waveRenderList(){
       muteBtn.setAttribute('aria-label', (wv.mute ? 'فعال‌سازی ' : 'بی‌صدا کردن ') + waveName(wv, idx));
     };
     paintMute();
-    muteBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); wv.mute = !wv.mute; row.classList.toggle('muted', wv.mute); paintTitle(); title.classList.toggle('dim', !!wv.mute); paintMute(); wavePersist(); });
+    muteBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const live = waveCfg.waves.find(w => w.id === wv.id) || wv; const next = !live.mute; live.mute = next; wv.mute = next; row.classList.toggle('muted', next); paintTitle(); title.classList.toggle('dim', next); paintMute(); wavePersist(); const stored = waveCfg.waves.find(w => w.id === wv.id); if (stored && stored.mute !== next) { wv.mute = stored.mute; row.classList.toggle('muted', stored.mute); paintTitle(); title.classList.toggle('dim', !!stored.mute); paintMute(); } });
     const rn = document.createElement('button');
     rn.type = 'button'; rn.className = 'wave-rename'; rn.textContent = '✎'; rn.title = 'تغییر نام موج';
     rn.setAttribute('aria-label', 'تغییر نام ' + waveName(wv, idx));
