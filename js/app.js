@@ -261,6 +261,16 @@ function showUndoToast(label, ms = 8000){
   undoTimer = setTimeout(()=>{ lastDeleted = null; hideUndoToast(); }, ms);
 }
 
+let chainMenuDocBound = false; // one delegated closer for all ⋮ row menus (bound lazily)
+function closeChainMenus(except, refocus){
+  document.querySelectorAll('.chain-menu-wrap.open').forEach(w=>{
+    if(w === except) return;
+    w.classList.remove('open');
+    w.querySelector('.chain-menu')?.setAttribute('hidden','');
+    w.querySelector('.chain-menubtn')?.setAttribute('aria-expanded','false');
+  });
+  if(refocus?.focus) refocus.focus();
+}
 function renderChain(container, chain, type){
   if(!container) return;
   container.innerHTML='';
@@ -281,22 +291,29 @@ function renderChain(container, chain, type){
     item.tabIndex = 0; // keyboard reorder target: Ctrl+ArrowUp/Down
     const dotCls = hasKey ? 'ok' : 'missing';
     const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
-    const toggleHtml = `<label class="chip chain-switch" style="padding:4px 8px;gap:4px"><input type="checkbox" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}"><span style="font-size:11px">${enabled?'روشن':'خاموش'}</span></label>`;
+    const statusText = `● ${providerId} · ${hasKey ? '✓' : '⚠'}`;
+    const statusTitle = hasKey ? `${providerId} — کلید دارد` : `${providerId} — بی‌کلید (اول کلید را وارد کن)`;
+    const menuLabel = `گزینه‌های مدل ${meta.label}: جابه‌جایی، حذف`;
+    // ticket/75-chainrows-compact: one ⋮ menu per row (up/down/remove) — ✕ off the surface.
+    // aria-labels of the old ▲▼✕ buttons move onto menu items; Ctrl+Arrow/drag/undo paths untouched.
+    item.title = 'بکش تا جابه‌جا شود';
     item.innerHTML = `
-      <span class="drag-handle" title="بکش تا جابه‌جا شود" aria-hidden="true">⋮⋮</span>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
-      <span class="dot ${dotCls}" title="${esc(providerId)}"></span>
-      <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-        <span class="chain-label" style="font-size:13px">${esc(meta.label)}</span>
-        ${meta.sub?`<span style="font-size:11px;color:var(--muted)">${esc(meta.sub)}</span>`:''}
+      <div class="chain-main">
+        <span class="chain-label" dir="auto" title="${esc(meta.label)}${meta.sub?` — ${esc(meta.sub)}`:''}">${esc(meta.label)}</span>
+        <span class="chain-meta">
+          ${meta.sub?`<span class="chain-sub">${esc(meta.sub)}</span><span aria-hidden="true">·</span>`:''}
+          <span class="chain-status ${dotCls}" title="${esc(statusTitle)}">${esc(statusText)}</span>
+        </span>
       </div>
-      <span class="chain-badge" style="font-size:10px">${esc(providerId)}</span>
-      ${toggleHtml}
-      <span class="chain-badge ${hasKey?'ok':'missing'}">${hasKey?'✓ کلید':'⚠ بی‌کلید'}</span>
-      <div class="chain-actions">
-        <button type="button" class="chain-btn" data-up aria-label="انتقال ${esc(meta.label)} به بالا" ${idx===0?'disabled':''}>▲</button>
-        <button type="button" class="chain-btn" data-down aria-label="انتقال ${esc(meta.label)} به پایین" ${idx===chain.length-1?'disabled':''}>▼</button>
-        <button type="button" class="chain-btn" data-remove aria-label="حذف مدل ${esc(meta.label)}" title="حذف">✕</button>
+      <label class="chain-switch"><input type="checkbox" class="sr-only" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}"><span class="chain-track" aria-hidden="true"></span><span class="chain-state" aria-hidden="true">${enabled?'روشن':'خاموش'}</span></label>
+      <div class="chain-menu-wrap">
+        <button type="button" class="chain-menubtn" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}">⋮</button>
+        <div class="chain-menu ${idx===chain.length-1?'up':''}" role="menu" aria-label="${esc(menuLabel)}" hidden>
+          <button type="button" role="menuitem" data-up aria-label="انتقال ${esc(meta.label)} به بالا" ${idx===0?'disabled':''}>▲ بالا</button>
+          <button type="button" role="menuitem" data-down aria-label="انتقال ${esc(meta.label)} به پایین" ${idx===chain.length-1?'disabled':''}>▼ پایین</button>
+          <button type="button" role="menuitem" class="danger" data-remove aria-label="حذف مدل ${esc(meta.label)}">✕ حذف</button>
+        </div>
       </div>
     `;
     // toggle per-model (both chains) — single path: canonical {id, providerId, enabled}
@@ -319,6 +336,42 @@ function renderChain(container, chain, type){
       showUndoToast(meta.label);
       focusChainRow(type, idx);
     });
+    // ⋮ menu open/close (single open at a time; Esc closes and refocuses the trigger)
+    const wrap = item.querySelector('.chain-menu-wrap');
+    const menuBtn = item.querySelector('.chain-menubtn');
+    const menu = item.querySelector('.chain-menu');
+    menuBtn?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const willOpen = !!menu?.hasAttribute('hidden');
+      closeChainMenus();
+      if(willOpen && menu){
+        menu.removeAttribute('hidden');
+        wrap?.classList.add('open');
+        menuBtn.setAttribute('aria-expanded','true');
+        menu.querySelector('button:not([disabled])')?.focus?.();
+      }
+    });
+    menu?.addEventListener('keydown', (e)=>{
+      const items = [...menu.querySelectorAll('button:not([disabled])')];
+      const at = items.indexOf(document.activeElement);
+      if(e.key === 'Escape'){ e.preventDefault(); closeChainMenus(null, menuBtn); }
+      else if(e.key === 'ArrowDown'){ e.preventDefault(); (items[at + 1] || items[0])?.focus?.(); }
+      else if(e.key === 'ArrowUp'){ e.preventDefault(); (items[at - 1] || items[items.length - 1])?.focus?.(); }
+      else if(e.key === 'Home'){ e.preventDefault(); items[0]?.focus?.(); }
+      else if(e.key === 'End'){ e.preventDefault(); items[items.length - 1]?.focus?.(); }
+    });
+    if(!chainMenuDocBound){
+      chainMenuDocBound = true;
+      document.addEventListener('click', (e)=>{
+        if(!e.target?.closest?.('.chain-menu-wrap')) closeChainMenus();
+      });
+      document.addEventListener('keydown', (e)=>{
+        if(e.key === 'Escape' && !e.defaultPrevented){
+          const open = document.querySelector('.chain-menu-wrap.open .chain-menubtn');
+          closeChainMenus(null, open);
+        }
+      });
+    }
     // up/down
     item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
     item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
