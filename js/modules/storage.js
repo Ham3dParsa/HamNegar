@@ -2,26 +2,45 @@
 // Interface: small surface to read/write all persisted state. Everything about localStorage keys stays inside.
 // Depth: hides 11+ keys, serialization, defaults, and migration behind getSettings/saveSettings plus
 // provider helpers (getProviders/hasKeyForProvider). Chains (STT + polish) share one entry shape
-// {id, providerId, enabled} where providerId is 'groq'|'gemini'|'openrouter'|'zenspark'|custom id.
+// {id, providerId, enabled} where providerId is 'groq'|'google'|'openrouter'|custom id
+// (legacy stored providerIds migrate on read; purged ones are dropped).
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
-export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter','zenspark'];
+export const BUILTIN_PROVIDER_IDS = ['groq','google','openrouter'];
 export const SCHEMA_VERSION = 1;
-// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|zenspark|custom id
+// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|google|openrouter|custom id
 export const POLISH_DEFAULTS = [
-  { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
+  { id:'openai/gpt-oss-120b', providerId:'groq', enabled:true },
   { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
+  { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
   { id:'openai/gpt-oss-20b', providerId:'groq', enabled:true },
 ];
-const POLISH_DEFAULTS_LEGACY = ['qwen/qwen3.6-27b','qwen/qwen3.8-27b','openai/gpt-oss-20b'];
+const POLISH_DEFAULTS_LEGACY = ['openai/gpt-oss-120b','qwen/qwen3.8-27b','qwen/qwen3.6-27b','openai/gpt-oss-20b'];
+
+// Canonical provider ids: groq|google|openrouter (+ customs). Legacy stored aliases
+// map to their canonical id (same localStorage slot, so no saved key is lost);
+// purged ids map to null so chain normalizers can drop those entries.
+// Customs pass through untouched.
+function migrateProviderId(raw){
+  const t = typeof raw === 'string' ? raw.trim() : '';
+  if(!t) return '';
+  if(t === 'gemini') return 'google';
+  if(t === 'zenspark') return null;
+  return t;
+}
 
 function inferSTTProviderId(id, explicit){
-  if(typeof explicit === 'string' && explicit.trim()) return explicit.trim();
+  if(typeof explicit === 'string' && explicit.trim()){
+    const m = migrateProviderId(explicit);
+    if(m === null) return null;
+    if(m) return m;
+    return explicit.trim();
+  }
   if(id === 'groq') return 'groq';
-  if(/^gemini/i.test(id)) return 'gemini';
+  if(/^gemini/i.test(id)) return 'google';
   if(id.includes(':free')) return 'openrouter';
   return 'groq';
 }
@@ -41,9 +60,10 @@ function normalizePolishEntry(x){
     const rawPid = (typeof x.providerId === 'string' && x.providerId.trim())
       ? x.providerId.trim()
       : (typeof x.provider === 'string' && x.provider.trim() ? x.provider.trim() : '');
+    const mig = migrateProviderId(rawPid);
+    if(mig === null) return null; // purged provider entry dropped
     let providerId;
-    if(rawPid === 'openrouter' || rawPid === 'gemini' || rawPid === 'groq') providerId = rawPid;
-    else if(rawPid) providerId = rawPid; // custom id passthrough
+    if(mig) providerId = mig;
     else providerId = id.includes(':free') ? 'openrouter' : 'groq';
     const cleanId = id.replace(':free','');
     const enabled = x.enabled === false ? false : true;
@@ -67,15 +87,20 @@ function normalizePolishChain(arr){
 function normalizeSTTEntry(x){
   if(typeof x === 'string'){
     const id=x.trim(); if(!id) return null;
+    if(migrateProviderId(id) === null) return null; // purged provider id dropped
     const cleanId = id.replace(':free','');
-    return { id: cleanId, providerId: inferSTTProviderId(id, ''), enabled:true };
+    const pid = inferSTTProviderId(id, '');
+    if(pid === null) return null; // purged provider entry dropped
+    return { id: cleanId, providerId: pid, enabled:true };
   }
   if(x && typeof x === 'object' && typeof x.id==='string' && x.id.trim()){
     const id=x.id.trim().replace(':free','');
     const explicit = (typeof x.providerId==='string' && x.providerId.trim())
       ? x.providerId.trim()
       : (typeof x.provider==='string' && x.provider.trim() ? x.provider.trim() : '');
-    return { id, providerId: inferSTTProviderId(id, explicit || (x.id.includes(':free') ? 'openrouter' : '')), enabled: x.enabled===false?false:true };
+    const pid = inferSTTProviderId(id, explicit || (x.id.includes(':free') ? 'openrouter' : ''));
+    if(pid === null) return null; // purged provider entry dropped
+    return { id, providerId: pid, enabled: x.enabled===false?false:true };
   }
   return null;
 }
@@ -114,7 +139,6 @@ const KEYS = {
   GEMINI: 'KEY_GEMINI',
   OPENROUTER: 'KEY_OPENROUTER',
   OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
-  ZEN: 'KEY_ZEN',
   CUSTOM_PROVIDERS: 'CUSTOM_PROVIDERS',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
@@ -332,13 +356,14 @@ export const Storage = {
     const peRaw = localStorage.getItem(KEYS.POLISH_ENABLED);
     const logColRaw = localStorage.getItem(KEYS.LOG_COLLAPSED);
     const repColRaw = localStorage.getItem(KEYS.REPORT_COLLAPSED);
+    const googleKey = localStorage.getItem(KEYS.GEMINI) || '';
     return {
       groqKey: localStorage.getItem(KEYS.GROQ) || '',
       groqBaseURL: localStorage.getItem(KEYS.GROQ_BASE) || GROQ_BASE_DEFAULT,
-      geminiKey: localStorage.getItem(KEYS.GEMINI) || '',
+      geminiKey: googleKey,
+      googleKey,
       openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
       openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
-      zenKey: localStorage.getItem(KEYS.ZEN) || '',
       primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
       model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
       sttChain,
@@ -372,10 +397,10 @@ export const Storage = {
     }
     if ('groqKey' in patch) localStorage.setItem(KEYS.GROQ, patch.groqKey.trim());
     if ('groqBaseURL' in patch) localStorage.setItem(KEYS.GROQ_BASE, groqBaseNorm);
-    if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, patch.geminiKey.trim());
+    if ('geminiKey' in patch) localStorage.setItem(KEYS.GEMINI, String(patch.geminiKey || '').trim());
+    if ('googleKey' in patch) localStorage.setItem(KEYS.GEMINI, String(patch.googleKey || '').trim());
     if ('openrouterKey' in patch) localStorage.setItem(KEYS.OPENROUTER, patch.openrouterKey.trim());
     if ('openrouterBaseURL' in patch) localStorage.setItem(KEYS.OPENROUTER_BASE, orBaseNorm);
-    if ('zenKey' in patch) localStorage.setItem(KEYS.ZEN, String(patch.zenKey || '').trim());
     if ('primary' in patch) localStorage.setItem(KEYS.PRIMARY, patch.primary);
     if ('model' in patch) localStorage.setItem(KEYS.MODEL, patch.model);
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
@@ -393,19 +418,19 @@ export const Storage = {
     const s = Storage.getSettings();
     return [
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
-      { id: 'gemini', name: 'Google AI Studio', baseURL: '', hasKey: !!s.geminiKey },
+      { id: 'google', name: 'Google', baseURL: '', hasKey: !!(s.googleKey || s.geminiKey) },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
-      { id: 'zenspark', name: 'OpenCode_Zen', baseURL: '', hasKey: !!s.zenKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];
   },
   hasKeyForProvider(providerId) {
     const s = Storage.getSettings();
-    if(providerId === 'groq') return !!s.groqKey;
-    if(providerId === 'gemini') return !!s.geminiKey;
-    if(providerId === 'openrouter') return !!s.openrouterKey;
-    if(providerId === 'zenspark') return !!s.zenKey;
-    const c = s.customProviders.find(x => x.id === providerId);
+    const pid = migrateProviderId(providerId);
+    if(pid === 'groq') return !!s.groqKey;
+    if(pid === 'google') return !!(s.googleKey || s.geminiKey);
+    if(pid === 'openrouter') return !!s.openrouterKey;
+    if(pid === null || !pid) return false;
+    const c = s.customProviders.find(x => x.id === pid);
     return !!(c && c.key);
   },
   getDraft() { return localStorage.getItem(KEYS.DRAFT) || ''; },
@@ -518,9 +543,8 @@ export const Storage = {
   getSecretsMeta() {
     return {
       groq: Storage.hasKeyForProvider('groq'),
-      gemini: Storage.hasKeyForProvider('gemini'),
+      google: Storage.hasKeyForProvider('google'),
       openrouter: Storage.hasKeyForProvider('openrouter'),
-      zenspark: Storage.hasKeyForProvider('zenspark'),
     };
   },
 };
