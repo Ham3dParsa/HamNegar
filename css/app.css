@@ -296,6 +296,9 @@ button:active{transform:scale(.97)}
    Track fill via --p (set from JS); track itself stays LTR so fill+thumb math match,
    labels/bubbles/ticks inherit page RTL. --- */
 .wslider{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;padding:10px 12px 8px;display:flex;flex-direction:column;gap:8px}
+/* T2 dead-setting hygiene (#109): .wslider sets display:flex which beats the UA
+   [hidden] rule — re-hide explicitly so the aurora-hue slider stays hidden while off. */
+.wslider[hidden]{display:none}
 .wslider-global{background:linear-gradient(180deg,rgba(26,115,232,.10),rgba(255,255,255,.02));border-color:rgba(26,115,232,.35)}
 .wslider-local{border-style:dashed}
 .wslider-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
