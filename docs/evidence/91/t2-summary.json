@@ -1,0 +1,218 @@
+{
+ "issue": 91,
+ "ticket": "T2/2 steps legibility",
+ "before_viewports": {
+  "360": {
+   "bodyH": 60,
+   "estLines": 2,
+   "headerH": 135,
+   "headerRows": 1
+  },
+  "390": {
+   "bodyH": 70,
+   "estLines": 3,
+   "headerH": 108,
+   "headerRows": 1
+  },
+  "1440": {
+   "bodyH": 135,
+   "estLines": 5,
+   "headerH": 43,
+   "headerRows": 1
+  }
+ },
+ "after_viewports": {
+  "360": {
+   "bodyH": 135,
+   "estLines": 5,
+   "headerH": 43,
+   "headerRows": 1
+  },
+  "390": {
+   "bodyH": 135,
+   "estLines": 5,
+   "headerH": 43,
+   "headerRows": 1
+  },
+  "1440": {
+   "bodyH": 135,
+   "estLines": 5,
+   "headerH": 43,
+   "headerRows": 1
+  }
+ },
+ "after_steps": [
+  {
+   "i": 1,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۱ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Groq…",
+   "pills": [
+    {
+     "text": "Groq",
+     "clipped": false
+    },
+    {
+     "text": "Flash-Lite",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 2,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۲ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash-Lite…",
+   "pills": [
+    {
+     "text": "Flash-Lite",
+     "clipped": false
+    },
+    {
+     "text": "Flash-Lite 3.5",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 3,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۳ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash-Lite 3.5…",
+   "pills": [
+    {
+     "text": "Flash-Lite 3.5",
+     "clipped": false
+    },
+    {
+     "text": "Flash-Lite 3.1",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 4,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۴ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash-Lite 3.1…",
+   "pills": [
+    {
+     "text": "Flash-Lite 3.1",
+     "clipped": false
+    },
+    {
+     "text": "Flash 2.5",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 5,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۵ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash 2.5…",
+   "pills": [
+    {
+     "text": "Flash 2.5",
+     "clipped": false
+    },
+    {
+     "text": "Flash 2.0",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 6,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۶ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash 2.0…",
+   "pills": [
+    {
+     "text": "Flash 2.0",
+     "clipped": false
+    },
+    {
+     "text": "Flash 1.5",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 7,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۷ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash 1.5…",
+   "pills": [
+    {
+     "text": "Flash 1.5",
+     "clipped": false
+    },
+    {
+     "text": "Flash",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 8,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۸ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Flash…",
+   "pills": [
+    {
+     "text": "Flash",
+     "clipped": false
+    },
+    {
+     "text": "Groq Whisper 2",
+     "clipped": false
+    }
+   ]
+  },
+  {
+   "i": 9,
+   "panel_h": 96,
+   "bar_h": 4,
+   "head": "13px",
+   "counter": "قدم ۹ از ۹",
+   "counter_visible": true,
+   "label": "در حال تبدیل با Groq Whisper 2…",
+   "pills": [
+    {
+     "text": "Flash",
+     "clipped": false
+    },
+    {
+     "text": "Groq Whisper 2",
+     "clipped": false
+    }
+   ]
+  }
+ ],
+ "console_errors_after": []
+}
