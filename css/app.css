@@ -128,7 +128,7 @@ button:active{transform:scale(.97)}
 #log-panel{background:#141416;border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;flex:0 0 auto;height:180px;min-height:80px;max-height:50vh;overflow:hidden;transition:height .2s ease}
 #log-panel.collapsed{height:42px !important;min-height:42px;max-height:42px}
 #log-panel.collapsed #log-body{display:none}
-#log-panel.collapsed .log-filters,#log-panel.collapsed #log-search{display:none}
+#log-panel.collapsed .log-filters,#log-panel.collapsed #log-search-wrap,#log-panel.collapsed #log-search-toggle{display:none}
 #log-header{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;position:sticky;top:0;gap:8px;flex-wrap:wrap}
 #log-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .log-filters{display:flex;gap:4px;align-items:center}
@@ -137,9 +137,18 @@ button:active{transform:scale(.97)}
 .log-filter[data-level="warn"].active{background:var(--warning);color:#000;border-color:var(--warning)}
 .log-filter[data-level="error"].active{background:var(--danger);color:#fff;border-color:var(--danger)}
 .log-filter[data-level="debug"].active{background:#5f6368;color:#fff;border-color:#5f6368}
-#log-search{width:120px;max-width:22vw;background:#111113;border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:999px;font-size:12px;outline:none}
+#log-search-toggle{min-width:44px;min-height:44px;width:44px;height:44px;margin:-8px 0;display:inline-flex;align-items:center;justify-content:center;font-size:17px;line-height:1;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;padding:0;flex:0 0 auto}
+#log-search-toggle:hover{border-color:var(--accent)}
+#log-search-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#log-search-toggle[aria-expanded="true"]{border-color:var(--accent);box-shadow:0 0 0 2px rgba(26,115,232,.25)}
+#log-search-wrap{display:none;position:absolute;inset-inline:8px;top:8px;z-index:5;align-items:center;gap:6px;background:var(--surface2);padding:4px;border-radius:12px}
+#log-search-wrap.open{display:flex}
+#log-search{flex:1;min-width:0;background:#111113;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:999px;font-size:12px;outline:none}
 #log-search:focus{border-color:var(--accent)}
 #log-search::placeholder{color:var(--muted)}
+#log-search-close{flex:0 0 auto;min-width:44px;min-height:44px;width:44px;height:44px;display:inline-flex;align-items:center;justify-content:center;background:transparent;border:1px solid transparent;border-radius:10px;color:var(--muted);font-size:15px;cursor:pointer}
+#log-search-close:hover{color:var(--text);border-color:var(--border)}
+#log-search-close:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #log-body{overflow:auto;padding:6px;font-family:ui-monospace,monospace;font-size:12px;line-height:1.6;display:flex;flex-direction:column;gap:4px;flex:1;min-height:60px}
 .log-line{padding:5px 8px;border-radius:8px;border-left:3px solid transparent;background:rgba(255,255,255,.03);word-break:break-word;white-space:pre-wrap}
 .log-line.info{border-color:var(--accent)}.log-line.warn{border-color:var(--warning);background:rgba(251,188,4,.08)}.log-line.error{border-color:var(--danger);background:rgba(234,67,53,.09)}.log-line.debug{border-color:#5f6368;opacity:.85}
@@ -420,7 +429,7 @@ body{overflow-x:clip}
 #log-header>div[style]{flex:0 1 auto;min-width:0;flex-wrap:wrap;display:flex;gap:6px}
 #log-header .log-filters{flex:0 1 auto;min-width:0;flex-wrap:wrap}
 #log-header .log-filter{flex:0 0 auto}
-#log-search{flex:1 1 110px;min-width:90px;max-width:220px;width:auto}
+#log-search-wrap{flex:0 0 auto;min-width:0}
 #log-body{min-width:0;max-width:100%}
 .log-line{overflow-wrap:anywhere;word-break:break-word;min-width:0}
 /* --- actionbar variant A: fluid shrinking buttons, fixed hero, no page overflow --- */
@@ -482,8 +491,13 @@ body{overflow-x:clip}
 .status-bar{font-size:12px}
 }
 @media(max-width:640px){
-#log-search{flex:1 1 100%;max-width:none}
-#log-header>div[style]{flex:1 1 100%}
+/* T1/2: single-row log header — title (ellipsis) + scrollable filter strip + actions; search is overlay (0px) */
+#log-header{flex-wrap:nowrap;padding:6px 8px;gap:6px}
+#log-header>div[style]{flex:0 0 auto;min-width:0;flex-wrap:nowrap}
+#log-header .log-filters{flex:1 1 auto;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+#log-header .log-filters::-webkit-scrollbar{display:none}
+#log-actions{flex:0 0 auto;flex-wrap:nowrap}
+#log-search-toggle{margin:0}
 .wave-cards{grid-template-columns:minmax(0,1fr)}
 }
 /* ===== ticket 16 — stagebar (port of temp/hamnegar-demo stagebar block; owner labels kept) + per-run log separators (append-only) ===== */
