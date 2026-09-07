@@ -171,6 +171,7 @@ function parsePolishChain(raw, defaults){
 
 // Wave personalization (ticket/50): stack model v3 under its own key. Never logs colors/keys.
 export const WAVE_KEY = 'hamnegar.wave.v3';
+export const WAVE_IDLE_KEY = 'hamnegar.wave.idle';
 export const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line', 'bars'];
 export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
 export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
@@ -419,6 +420,18 @@ export const Storage = {
     localStorage.setItem(WAVE_KEY, JSON.stringify({ wave: norm }));
     // Accept both bare {…v3…} and wrapped {wave:{…}} on read; always persist wrapped.
     return norm;
+  },
+  getWaveIdle() {
+    const raw = localStorage.getItem(WAVE_IDLE_KEY);
+    if (raw === null) return true;
+    if (raw === '1') return true;
+    if (raw === '0') return false;
+    return true;
+  },
+  saveWaveIdle(v) {
+    if (typeof v !== 'boolean') return Storage.getWaveIdle();
+    localStorage.setItem(WAVE_IDLE_KEY, v ? '1' : '0');
+    return v;
   },
   getPrefs() {
     const s = Storage.getSettings();
