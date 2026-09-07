@@ -415,7 +415,8 @@ export const Transcription = {
           }
         }
         if(polished){
-          finalText = rulePolish(polished);
+          const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
+          finalText = applyPersonalDictionary(rulePolish(polished), dict).text;
         } else {
           finalText = ruleFixed;
           if(usablePolish.length>0) Logger.log('info','پالیش مدل‌ها ناموفق — قانون محلی اعمال شد',{before:rawText.slice(0,60), after:finalText.slice(0,60)});
@@ -434,7 +435,7 @@ export const Transcription = {
     const chain = enabledChain.filter(e => hasKeyForPolish(e));
     if(chain.length===0) return ruleFixed;
     for(const entry of chain){
-      try{ const out=await queryPolish(text,entry); if(out) return rulePolish(out); }catch{}
+      try{ const out=await queryPolish(text,entry); if(out){ const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : []; return applyPersonalDictionary(rulePolish(out), dict).text; } }catch{}
     }
     return ruleFixed;
   },
