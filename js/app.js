@@ -91,6 +91,8 @@ function buildFilterUI() {
     });
     filtersWrap.appendChild(btn);
   }
+  const searchWrap = document.createElement('div');
+  searchWrap.id = 'log-search-wrap';
   const search = document.createElement('input');
   search.id = 'log-search';
   search.type = 'search';
@@ -100,13 +102,47 @@ function buildFilterUI() {
     searchQuery = search.value.trim();
     applyFilters();
   });
+  // Esc collapses, focus returns to toggle; query preserved (input never cleared)
+  search.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); collapseSearch(true); }
+  });
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.id = 'log-search-close';
+  closeBtn.textContent = '✕';
+  closeBtn.setAttribute('aria-label', 'بستن جستجو');
+  closeBtn.addEventListener('click', () => collapseSearch(true));
+  searchWrap.append(search, closeBtn);
   let actionsDiv = header.querySelector('#log-actions');
   if (!actionsDiv) {
     const btns = header.querySelector('div');
     if (btns) { btns.id = 'log-actions'; actionsDiv = btns; }
   }
-  header.insertBefore(search, actionsDiv);
-  header.insertBefore(filtersWrap, search);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.id = 'log-search-toggle';
+  toggle.textContent = '🔍';
+  toggle.setAttribute('aria-label', 'جستجو در لاگ');
+  toggle.title = 'جستجو در لاگ';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', 'log-search');
+  toggle.addEventListener('click', () => {
+    if (searchWrap.classList.contains('open')) collapseSearch(true);
+    else expandSearch();
+  });
+  actionsDiv.appendChild(toggle);
+  header.appendChild(searchWrap);
+  function expandSearch() {
+    searchWrap.classList.add('open');
+    toggle.setAttribute('aria-expanded', 'true');
+    search.focus();
+  }
+  function collapseSearch(refocus) {
+    searchWrap.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+    if (refocus) toggle.focus();
+  }
+  header.insertBefore(filtersWrap, searchWrap);
 }
 buildFilterUI();
 const _origLog = Logger.log.bind(Logger);
