@@ -180,6 +180,8 @@ export const WAVE_PEAKS = ['low', 'mid', 'high'];
 // T3/3 (ticket/53): bars EQ column options — shape/count/gap persist per wave.
 export const WAVE_BAR_SHAPES = ['rounded', 'square', 'needle'];
 export const WAVE_BAR_DEFAULTS = { shape: 'rounded', count: 24, gap: 2 };
+export const DICT_KEY = 'hamnegar.dict.v1';
+const DICT_MAX = 200;
 const WAVE_MAX = 5;
 
 function waveClampInt(v, lo, hi, fb) {
@@ -289,6 +291,28 @@ function normalizeWaveConfig(raw) {
     },
     waves: waves.length ? waves : fb.waves,
   };
+}
+function normalizeDictEntry(x) {
+  if (!x || typeof x !== 'object') return null;
+  const from = typeof x.from === 'string' ? x.from.trim() : '';
+  const to = typeof x.to === 'string' ? x.to.trim() : '';
+  if (!from || !to) return null;
+  if (from === to) return null;
+  return { from, to, enabled: x.enabled === false ? false : true };
+}
+function normalizeDict(arr) {
+  if (!Array.isArray(arr)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const raw of arr) {
+    if (out.length >= DICT_MAX) break;
+    const e = normalizeDictEntry(raw);
+    if (!e) continue;
+    if (seen.has(e.from)) continue;
+    seen.add(e.from);
+    out.push(e);
+  }
+  return out;
 }
 export const Storage = {
   getSettings() {
@@ -433,6 +457,20 @@ export const Storage = {
     localStorage.setItem(WAVE_IDLE_KEY, v ? '1' : '0');
     return v;
   },
+  getDict() {
+    try {
+      const raw = localStorage.getItem(DICT_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return normalizeDict(parsed);
+    } catch { return []; }
+  },
+  saveDict(arr) {
+    const norm = normalizeDict(arr);
+    localStorage.setItem(DICT_KEY, JSON.stringify(norm));
+    return norm;
+  },
   getPrefs() {
     const s = Storage.getSettings();
     return {
@@ -445,6 +483,7 @@ export const Storage = {
         vad: s.vad,
         autocopy: s.autocopy,
         wave: Storage.getWave(),
+        dict: Storage.getDict(),
       },
     };
   },
@@ -473,6 +512,7 @@ export const Storage = {
     }
     Storage.saveSettings(patch);
     if (p.wave !== undefined) Storage.saveWave(p.wave);
+    if (Array.isArray(p.dict)) Storage.saveDict(p.dict);
     return Storage.getPrefs().prefs;
   },
   getSecretsMeta() {
