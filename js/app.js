@@ -1744,11 +1744,20 @@ selStart=0; selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart;
 els.output.addEventListener('click',saveCursor); els.output.addEventListener('keyup',saveCursor); els.output.addEventListener('select',saveCursor);
 const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; autogrowOutput(); };
 // transcript autogrow (ticket/51): grow with content, cap ~60vh, then internal scroll; native resize:vertical kept for manual override
+// transcript touch resize (#93): a grip drag sets a manual-override flag — input may
+// grow a user-enlarged box, never shrink it; double-tap on #output resets the flag.
+let outManual=false;
 function autogrowOutput(){
   if(!els.output) return;
   const cap = Math.round(window.innerHeight * 0.6);
-  els.output.style.height = 'auto';
-  els.output.style.height = Math.min(els.output.scrollHeight, cap) + 'px';
+  const need = Math.min(els.output.scrollHeight, cap);
+  if(outManual){
+    if(need > els.output.offsetHeight) els.output.style.height = need + 'px';
+    else els.output.style.height = Math.max(120, Math.min(els.output.offsetHeight, cap)) + 'px';
+  } else {
+    els.output.style.height = 'auto';
+    els.output.style.height = need + 'px';
+  }
   els.output.style.overflowY = els.output.scrollHeight > cap + 1 ? 'auto' : 'hidden';
 }
 window.addEventListener('resize', ()=> autogrowOutput());
@@ -1832,25 +1841,44 @@ els.output.addEventListener('keydown', (e)=>{
     const roOut=new ResizeObserver(()=>{ clearTimeout(roOut._t); roOut._t=setTimeout(()=> Storage.saveHeights({out: getComputedStyle(els.output).height}),300); }); roOut.observe(els.output);
   }
 })();
-els.output.addEventListener('dblclick', ()=>{
+function resetOutputHeight(){
+  outManual=false;
   saveCursor();
   els.output.style.height='auto';
   const nh=Math.min(els.output.scrollHeight, window.innerHeight*0.5)+'px';
   els.output.style.height=nh;
   Storage.saveHeights({ out: nh });
-});
-// grip drag = manual resize affordance (prototype v2); autogrow resumes on next input
+}
+els.output.addEventListener('dblclick', resetOutputHeight);
+(() => { // touch double-tap reset (dblclick does not fire reliably on mobile)
+  let lastTap=0;
+  els.output.addEventListener('touchend', ()=>{
+    const now=Date.now();
+    if(now-lastTap<300) resetOutputHeight();
+    lastTap=now;
+  });
+})();
+// grip drag = manual resize affordance (prototype v2); sets the manual-override flag (#93)
+// so autogrow never shrinks a user-enlarged height. Pointer events carry touch (with
+// touch-action:none + capture + pointercancel); touchstart/move/end fallback mirrors the
+// #log-splitter pattern for browsers without PointerEvent.
 (()=>{
   const grip = document.getElementById('grip');
   if(!grip || !els.output) return;
   let drag=false, y0=0, h0=0;
-  grip.addEventListener('pointerdown', e=>{ drag=true; y0=e.clientY; h0=els.output.offsetHeight; try{ grip.setPointerCapture(e.pointerId); }catch{} });
-  grip.addEventListener('pointermove', e=>{
-    if(!drag) return;
-    els.output.style.height = Math.max(120, Math.min(h0 + (e.clientY - y0), Math.round(window.innerHeight * 0.6))) + 'px';
-    els.output.style.overflowY = 'auto';
-  });
-  grip.addEventListener('pointerup', ()=>{ if(!drag) return; drag=false; Storage.saveHeights({ out: getComputedStyle(els.output).height }); });
+  const clampH = v => Math.max(120, Math.min(v, Math.round(window.innerHeight * 0.6)));
+  const begin = (y)=>{ drag=true; y0=y; h0=els.output.offsetHeight; };
+  const move = (y, prevent)=>{ if(!drag) return; outManual=true; els.output.style.height = clampH(h0 + (y - y0)) + 'px'; els.output.style.overflowY = 'auto'; if(prevent) prevent(); };
+  const end = ()=>{ if(!drag) return; drag=false; try{ Storage.saveHeights({ out: getComputedStyle(els.output).height }); }catch{} };
+  grip.addEventListener('pointerdown', e=>{ begin(e.clientY); try{ grip.setPointerCapture(e.pointerId); }catch{} try{ e.preventDefault(); }catch{} });
+  grip.addEventListener('pointermove', e=>{ if(!drag) return; if(e.pointerId!==undefined && e.isPrimary===false) return; move(e.clientY); });
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+  try{ grip.addEventListener('lostpointercapture', ()=>{ drag=false; }); }catch{}
+  grip.addEventListener('touchstart', e=>{ if(e.touches && e.touches.length) begin(e.touches[0].clientY); try{ e.preventDefault(); }catch{} }, {passive:false});
+  grip.addEventListener('touchmove', e=>{ if(e.touches && e.touches.length) move(e.touches[0].clientY, ()=>{ try{ e.preventDefault(); }catch{} }); }, {passive:false});
+  grip.addEventListener('touchend', end);
+  grip.addEventListener('touchcancel', end);
 })();
 
 // main rec strip (ticket/51): wave.js renderer on the user's saved stack; idle near-still (fake off), live via Audio.getAnalyser()

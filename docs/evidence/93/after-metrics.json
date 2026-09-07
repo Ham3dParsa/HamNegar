@@ -1,0 +1,71 @@
+{
+ "360": {
+  "grip": {
+   "gripW": 52.921875,
+   "gripH": 44,
+   "touchAction": "none",
+   "outResize": "none",
+   "coarse": true
+  },
+  "h0": 306,
+  "dragPlus60dh": 60,
+  "dragMinus60dh": -60,
+  "scrollSteal": 0,
+  "autogrowNoShrink": {
+   "afterClear": 306,
+   "kept": true
+  },
+  "doubleTapReset": {
+   "h": 154,
+   "reset": true
+  },
+  "rotationH": 154,
+  "consoleErrors": []
+ },
+ "390": {
+  "grip": {
+   "gripW": 52.921875,
+   "gripH": 44,
+   "touchAction": "none",
+   "outResize": "none",
+   "coarse": true
+  },
+  "h0": 275,
+  "dragPlus60dh": 60,
+  "dragMinus60dh": -60,
+  "scrollSteal": 0,
+  "autogrowNoShrink": {
+   "afterClear": 275,
+   "kept": true
+  },
+  "doubleTapReset": {
+   "h": 154,
+   "reset": true
+  },
+  "rotationH": 154,
+  "consoleErrors": []
+ },
+ "1440": {
+  "grip": {
+   "gripW": 52.921875,
+   "gripH": 44,
+   "touchAction": "none",
+   "outResize": "vertical",
+   "coarse": false
+  },
+  "h0": 161,
+  "dragPlus60dh": 60,
+  "dragMinus60dh": -60,
+  "scrollSteal": 0,
+  "autogrowNoShrink": {
+   "afterClear": 161,
+   "kept": true
+  },
+  "doubleTapReset": {
+   "h": 161,
+   "reset": false
+  },
+  "rotationH": 161,
+  "consoleErrors": []
+ }
+}
