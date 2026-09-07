@@ -2495,6 +2495,48 @@ const SHORTCUTS = [
   { id:'esc-cancel', keysFa:'Esc', keys:'Escape', layer:5, action:'لغو ضبط/رونویسی', scope:'حین ضبط یا رونویسی — آخرین راه' },
 ];
 function shortcutById(id){ return SHORTCUTS.find(s => s.id === id); }
+// --- user guide (issue #95, ticket/guide-content): single source of truth for guide tabs + control titles ---
+// ANTI-ROT: any PR touching stagebar/settings/quota UI MUST touch this GUIDE map
+// (add/update/remove the matching entry) — enforced via the hamnegar-reviewer gate.
+// The guide dialog tabs AND the applyShortcutHints() control titles render from it.
+const GUIDE = {
+  tools: [
+    { id:'g-mic', title:'ضبط صدا', body:'دکمهٔ میکروفون نوار پایین ضبط را شروع/متوقف می‌کند؛ ✕ کناری لغو و دورریختن است.', ref:'btn-mic' },
+    { id:'g-cancel', title:'لغو ضبط', body:'ضبط یا رونویسی جاری را لغو و دور می‌ریزد (آخرین راه Esc هم همین است).', ref:'btn-cancel-stt' },
+    { id:'g-undo', title:'واگرد', body:'متن را یک قدم برمی‌گرداند — فقط وقتی کادر خروجی فوکوس است.', ref:'btn-undo' },
+    { id:'g-redo', title:'ازنو', body:'واگرد را برمی‌گرداند — فقط با فوکوس کادر خروجی.', ref:'btn-redo' },
+    { id:'g-output', title:'کادر خروجی', body:'متن نهایی اینجاست؛ پیش‌نویس خودکار ذخیره می‌شود.', ref:'output' },
+    { id:'g-simple', title:'پالایش ساده', body:'املا و علائم نگارشی متن دامنه (کل متن یا انتخاب).', ref:'stage-simple' },
+    { id:'g-advanced', title:'پالایش پیشرفته', body:'املا + دستور زبان؛ کامل‌ترین ویرایش فارسی.', ref:'stage-advanced' },
+    { id:'g-grammar', title:'پالایش دستوری', body:'فقط دستور زبان؛ املا و واژه‌ها دست نمی‌خورند.', ref:'stage-grammar' },
+    { id:'g-trquick', title:'ترجمه سریع EN⇄FA', body:'ترجمهٔ فوری انگلیسی⇄فارسی بدون انتخاب زبان.', ref:'stage-tr-quick' },
+    { id:'g-trpanel', title:'ترجمه به زبان…', body:'پنل جست‌وجوی زبان را باز می‌کند؛ Enter یعنی اجرای ترجمه به زبان برجسته.', ref:'stage-tr-panel' },
+    { id:'g-langsearch', title:'جست‌وجوی زبان', body:'نام یا کد زبان را بنویس (مثل en یا عربی)؛ Enter ترجمه به زبان برجسته است.', ref:'stage-lang-search' },
+    { id:'g-raw', title:'خام', body:'متن پیش از آخرین پالایش را برمی‌گرداند؛ تا پالایشی نشده غیرفعال است.', ref:'stage-raw' },
+    { id:'g-diffapply', title:'اعمال نتیجه', body:'نتیجهٔ شیت بازبینی را می‌پذیرد؛ سهمیه فقط همین‌جا مصرف می‌شود.', ref:'diff-apply' },
+    { id:'g-diffdiscard', title:'دور ریختن نتیجه', body:'نتیجهٔ بازبینی‌نشده را دور می‌ریزد؛ هیچ پشته‌ای لمس نمی‌شود.', ref:'diff-discard' },
+  ],
+  config: [
+    { id:'g-settings', title:'تنظیمات', body:'دکمهٔ ⚙️ نوار پایین مدال تنظیمات را باز می‌کند: زنجیره‌ها، کلیدها، رفتار.', ref:'btn-settings' },
+    { id:'g-modal', title:'مدال تنظیمات', body:'Esc اول پنل افزودن را می‌بندد، بعد خود مدال را — بدون ذخیره.', ref:'settings-modal' },
+    { id:'g-closemodal', title:'بستن تنظیمات', body:'مدال را بدون ذخیرهٔ اضافه می‌بندد.', ref:'btn-close-modal' },
+    { id:'g-realtime', title:'حالت آنی', body:'پیش‌نمایش زندهٔ رونویسی حین صحبت.', ref:'toggle-realtime' },
+    { id:'g-vad', title:'VAD', body:'ارسال خودکار پس از سکوت؛ بدون آن باید دستی متوقف کنی.', ref:'toggle-vad' },
+    { id:'g-autocopy', title:'کپی خودکار', body:'متن نهایی پس از هر اجرا خودکار کپی می‌شود.', ref:'toggle-autocopy' },
+    { id:'g-polish', title:'پالیش نهایی', body:'ویرایش خودکار متن رونوشت؛ خاموش یعنی درج متن خام.', ref:'toggle-polish' },
+    { id:'g-stt', title:'زنجیرهٔ STT', body:'ترتیب تلاش مدل‌های گفتار→متن؛ مدل بی‌کلید بی‌صدا رد می‌شود.', ref:'stt-chain' },
+    { id:'g-polishchain', title:'زنجیرهٔ پالیش', body:'ترتیب ویرایشگرهای فارسی؛ اولین مدلِ دارای کلید جواب می‌دهد.', ref:'polish-chain' },
+    { id:'g-keys', title:'کلیدهای ارائه‌دهنده', body:'کلید Groq (با gsk_) و Google (با AQ.) را در کارت خود بگذار و «تست» بزن.', ref:'provider-drawer' },
+  ],
+  quota: [
+    { id:'g-quota', title:'سهمیه امروز', body:'روی نوار «سهمیه امروز» بزن تا جزئیات هر مدل باز شود: مصرف امروز در برابر سقف روزانه.', ref:'quota-toggle' },
+    { id:'g-quotadetail', title:'جزئیات مصرف', body:'کارت هر مدل: مصرف امروز، سقف روزانه و هشدار نزدیک‌شدن به سقف.', ref:'quota-detail' },
+  ],
+};
+function guideEntryByRef(ref){
+  for (const sec of Object.values(GUIDE)){ const f = sec.find(e => e.ref === ref); if (f) return f; }
+  return null;
+}
 function shortcutsOpen(){ return !($('shortcuts-backdrop')?.hidden ?? true); }
 function renderShortcuts(){
   const tb = $('shortcuts-rows');
@@ -2520,8 +2562,54 @@ function renderShortcuts(){
   }
 }
 let lastShortcutsFocus = null;
+const GUIDE_TABS = ['shortcuts', 'tools', 'config', 'quota'];
+function renderGuide(){
+  for (const name of GUIDE_TABS){
+    if (name === 'shortcuts') continue; // shortcuts tab output untouched (renders from SHORTCUTS)
+    const panel = $('guide-panel-' + name);
+    if (!panel) continue;
+    panel.innerHTML = '';
+    for (const e of (GUIDE[name] || [])){
+      const row = document.createElement('div');
+      const b = document.createElement('b'); b.textContent = e.title;
+      const p = document.createElement('p'); p.className = 'sc-note'; p.textContent = e.body;
+      row.append(b, p);
+      panel.appendChild(row);
+    }
+  }
+}
+function selectGuideTab(name){
+  if (!GUIDE_TABS.includes(name)) return;
+  for (const n of GUIDE_TABS){
+    const tab = $('guide-tab-' + n), panel = $('guide-panel-' + n);
+    const on = n === name;
+    tab?.setAttribute('aria-selected', on ? 'true' : 'false');
+    tab?.classList.toggle('active', on);
+    if (tab) tab.tabIndex = on ? 0 : -1;
+    // NOTE: author CSS sets display on .sc-body which beats [hidden]; hide inline (no css/app.css change).
+    if (panel){ panel.hidden = !on; panel.style.display = on ? '' : 'none'; }
+  }
+}
+for (const n of GUIDE_TABS){
+  $('guide-tab-' + n)?.addEventListener('click', () => selectGuideTab(n));
+}
+$('shortcuts-dialog')?.addEventListener('keydown', (e) => {
+  if (e.target?.getAttribute?.('role') !== 'tab') return;
+  const i = GUIDE_TABS.indexOf(GUIDE_TABS.find(n => $('guide-tab-' + n) === e.target));
+  if (i < 0) return;
+  let j = null;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') j = (i + (e.key === 'ArrowLeft' ? 1 : -1) + GUIDE_TABS.length) % GUIDE_TABS.length; // RTL: Left = next
+  else if (e.key === 'Home') j = 0;
+  else if (e.key === 'End') j = GUIDE_TABS.length - 1;
+  if (j === null) return;
+  e.preventDefault();
+  selectGuideTab(GUIDE_TABS[j]);
+  $('guide-tab-' + GUIDE_TABS[j])?.focus?.();
+});
 function openShortcuts(){
   renderShortcuts();
+  renderGuide();
+  selectGuideTab('shortcuts');
   const back = $('shortcuts-backdrop');
   if (!back || !back.hidden) return;
   lastShortcutsFocus = document.activeElement;
@@ -2542,8 +2630,8 @@ function applyShortcutHints(){
     if (!list.length) return;
     el.setAttribute('aria-keyshortcuts', list.map(s => s.keys).join(' '));
     const hint = list.map(s => s.keysFa).join(' یا ');
-    const t = el.getAttribute('title') || '';
-    if (!t.includes(hint)) el.setAttribute('title', (t ? t + ' — ' : '') + hint);
+    const base = (el.id && guideEntryByRef(el.id)?.title) || el.getAttribute('title') || '';
+    if (!base.includes(hint)) el.setAttribute('title', (base ? base + ' — ' : '') + hint);
   };
   set(els.output, ['undo', 'redo']);
   set($('btn-undo'), ['undo']);
