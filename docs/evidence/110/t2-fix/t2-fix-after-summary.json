@@ -1,0 +1,164 @@
+[
+ {
+  "viewport": "360",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ],
+  "overflow": 46,
+  "rowH": 56,
+  "distinctSvg": 6,
+  "btns": [
+   {
+    "id": "stage-simple",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش ساده",
+    "aria": "پالایش ساده"
+   },
+   {
+    "id": "stage-advanced",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش پیشرفته",
+    "aria": "پالایش پیشرفته"
+   },
+   {
+    "id": "stage-grammar",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش دستوری",
+    "aria": "پالایش دستوری"
+   },
+   {
+    "id": "stage-tr-quick",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه سریع EN⇄FA",
+    "aria": "ترجمه سریع EN⇄FA"
+   },
+   {
+    "id": "stage-tr-panel",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه به زبان…",
+    "aria": "ترجمه به زبان…"
+   },
+   {
+    "id": "stage-raw",
+    "h": 40,
+    "svg": 1,
+    "title": "خام",
+    "aria": "خام"
+   }
+  ]
+ },
+ {
+  "viewport": "390",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ],
+  "overflow": 16,
+  "rowH": 56,
+  "distinctSvg": 6,
+  "btns": [
+   {
+    "id": "stage-simple",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش ساده",
+    "aria": "پالایش ساده"
+   },
+   {
+    "id": "stage-advanced",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش پیشرفته",
+    "aria": "پالایش پیشرفته"
+   },
+   {
+    "id": "stage-grammar",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش دستوری",
+    "aria": "پالایش دستوری"
+   },
+   {
+    "id": "stage-tr-quick",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه سریع EN⇄FA",
+    "aria": "ترجمه سریع EN⇄FA"
+   },
+   {
+    "id": "stage-tr-panel",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه به زبان…",
+    "aria": "ترجمه به زبان…"
+   },
+   {
+    "id": "stage-raw",
+    "h": 40,
+    "svg": 1,
+    "title": "خام",
+    "aria": "خام"
+   }
+  ]
+ },
+ {
+  "viewport": "1440",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ],
+  "overflow": 0,
+  "rowH": 56,
+  "distinctSvg": 6,
+  "btns": [
+   {
+    "id": "stage-simple",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش ساده",
+    "aria": "پالایش ساده"
+   },
+   {
+    "id": "stage-advanced",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش پیشرفته",
+    "aria": "پالایش پیشرفته"
+   },
+   {
+    "id": "stage-grammar",
+    "h": 40,
+    "svg": 1,
+    "title": "پالایش دستوری",
+    "aria": "پالایش دستوری"
+   },
+   {
+    "id": "stage-tr-quick",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه سریع EN⇄FA",
+    "aria": "ترجمه سریع EN⇄FA"
+   },
+   {
+    "id": "stage-tr-panel",
+    "h": 40,
+    "svg": 1,
+    "title": "ترجمه به زبان…",
+    "aria": "ترجمه به زبان…"
+   },
+   {
+    "id": "stage-raw",
+    "h": 40,
+    "svg": 1,
+    "title": "خام",
+    "aria": "خام"
+   }
+  ]
+ }
+]
