@@ -1,0 +1,83 @@
+{
+ "360": {
+  "grip": {
+   "x": 21,
+   "y": 417,
+   "w": 52.921875,
+   "h": 21,
+   "cx": 47.4609375,
+   "cy": 427.5,
+   "touchAction": "auto",
+   "minH": "auto",
+   "minW": "auto"
+  },
+  "outH0": 306,
+  "outResize": "vertical",
+  "dragPlus60": {
+   "h0": 306,
+   "h1": 328.5,
+   "dh": 22.5
+  },
+  "dragMinus60": {
+   "h1": 328.5,
+   "h2": 328.5,
+   "dh": 0.0
+  },
+  "scrollSteal": 0,
+  "consoleErrors": []
+ },
+ "390": {
+  "grip": {
+   "x": 21,
+   "y": 386,
+   "w": 52.921875,
+   "h": 21,
+   "cx": 47.4609375,
+   "cy": 396.5,
+   "touchAction": "auto",
+   "minH": "auto",
+   "minW": "auto"
+  },
+  "outH0": 275,
+  "outResize": "vertical",
+  "dragPlus60": {
+   "h0": 275,
+   "h1": 297.5,
+   "dh": 22.5
+  },
+  "dragMinus60": {
+   "h1": 297.5,
+   "h2": 297.5,
+   "dh": 0.0
+  },
+  "scrollSteal": 0,
+  "consoleErrors": []
+ },
+ "1440": {
+  "grip": {
+   "x": 25,
+   "y": 274,
+   "w": 52.921875,
+   "h": 21,
+   "cx": 51.4609375,
+   "cy": 284.5,
+   "touchAction": "auto",
+   "minH": "auto",
+   "minW": "auto"
+  },
+  "outH0": 161,
+  "outResize": "vertical",
+  "dragPlus60": {
+   "h0": 161,
+   "h1": 183.5,
+   "dh": 22.5
+  },
+  "dragMinus60": {
+   "h1": 183.5,
+   "h2": 183.5,
+   "dh": 0.0
+  },
+  "scrollSteal": 0,
+  "consoleErrors": []
+ }
+}
