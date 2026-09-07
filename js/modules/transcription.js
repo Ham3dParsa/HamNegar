@@ -259,6 +259,11 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
       if(out){
         if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${model} (${providerId})`);
         else Logger.log('debug',`${layer} ok`,{model, providerId});
+        if(layer === 'polish'){
+          const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
+          const applied = applyPersonalDictionary(out, dict);
+          return { text: applied.text, model, providerId };
+        }
         return { text: out, model, providerId };
       }
       Logger.log('warn',`${providerId} ${layer} empty`,{model});
