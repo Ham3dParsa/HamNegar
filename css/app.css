@@ -781,3 +781,9 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
      (it squeezed title+filters+actions into one scrollable row). Kept empty to avoid
      specificity fights with the T2 block. */
 }
+/* ===== ticket/110-t2-stagebar-icons (issue #110 T2) — iconify stagebar tools (append-only) =====
+   cbtn precedent: icon-only buttons; full FA name on hover via title, AT name via
+   aria-label. Tap height stays ≥40px via the base .sbtn min-height; mobile padding untouched. */
+.sbtn{min-width:40px;justify-content:center}
+.sbtn .s-ic{font-size:17px;line-height:1}
+.sbtn:hover{border-color:var(--accent)}
