@@ -1,6 +1,6 @@
 // Module: wave
 // Interface: createWaveRenderer(canvas) -> { setConfig, setAnalyser, setFakeEnabled, start, stop, renderOnce }
-//            + STARTERS (10 presets), randomStack(), WAVE_FA labels.
+//            + STARTERS (11 presets, incl. eq-bars), randomStack(), WAVE_FA labels.
 // Depth: hides standing-wave engine ported from approved prototypes (v4 behaviors + settings v3
 // stack model): noise gate with hysteresis, perc loudness curve, near-still idle, standing waves
 // only (PH0 fixed — no horizontal travel), thickness coupling, band drivers, spatial profiles,
@@ -8,11 +8,12 @@
 import { defaultWaveConfig } from './storage.js';
 
 export const WAVE_FA = {
-  types: { sine: 'سینوسی', 'mirror-sine': 'آینه‌ای', dash: 'خط‌چین', steps: 'پله‌ای', ribbon: 'نواری', 'flat-glow-line': 'خط تخت درخشان' },
+  types: { sine: 'سینوسی', 'mirror-sine': 'آینه‌ای', dash: 'خط‌چین', steps: 'پله‌ای', ribbon: 'نواری', 'flat-glow-line': 'خط تخت درخشان', bars: 'ستون‌ها (اکولایزر)' },
   colorModes: { solid: 'تک‌رنگ', gradient: 'گرادیان عمودی', rainbow: 'رنگین‌کمان جاری' },
   bands: { low: 'بم', mid: 'میانی', high: 'زیر', rms: 'کل' },
   profiles: { flat: 'یکنواخت', center: 'مرکز-شدید', edges: 'لبه-شدید', bands: 'تفکیک باندی' },
   peaks: { low: 'کم', mid: 'متوسط', high: 'زیاد' },
+  barShapes: { rounded: 'گرد', square: 'مربع', needle: 'سوزنی' },
 };
 
 const PEAK_CYC = { low: 1.5, mid: 3, high: 5.5 };
@@ -26,6 +27,7 @@ function W(o) {
   const w = {
     id: nid(), name: '', type: 'sine', colorMode: 'solid', c1: '#8ab4f8', c2: '#c4b5fd',
     opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+    barShape: 'rounded', barCount: 24, barGap: 2,
     ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
   };
   if (o) {
@@ -47,6 +49,7 @@ export const STARTERS = [
   { id: 'quantum-steps', n: 'پله‌های کوانتومی', d: 'پله + شبح.', stack: () => [W({ type: 'steps', c1: '#fde68a', opacity: 100, glow: 60, thick: 2, peaks: 'mid', band: 'mid' }), W({ type: 'sine', c1: '#fde68a', opacity: 25, glow: 20, thick: 1, peaks: 'mid', band: 'rms' })] },
   { id: 'ice-glow', n: 'درخشش یخی', d: 'گرادیان عمودی + گلو قوی.', stack: () => [W({ type: 'sine', colorMode: 'gradient', c1: '#bfe3ff', c2: '#8ab4f8', opacity: 100, glow: 100, thick: 2, peaks: 'mid', band: 'rms' })] },
   { id: 'heartbeat', n: 'نبض قلب', d: 'سینوس + ریبون رنگین‌کمانی.', stack: () => [W({ type: 'sine', c1: '#fca5a5', opacity: 100, glow: 60, thick: 2, peaks: 'high', band: 'mid' }), W({ type: 'ribbon', colorMode: 'rainbow', c1: '#fca5a5', opacity: 45, glow: 40, thick: 2, peaks: 'low', band: 'low' })] },
+  { id: 'eq-bars', n: 'اکولایزر ستونی', d: 'ستون‌های گرد؛ تفکیک باندی.', stack: () => [W({ type: 'bars', colorMode: 'gradient', c1: '#5eead4', c2: '#8ab4f8', opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'bands', barShape: 'rounded', barCount: 24, barGap: 2 })] },
 ];
 export const starterById = id => STARTERS.find(s => s.id === id) || STARTERS[0];
 
@@ -55,7 +58,8 @@ export function randomStack() {
   const fam = FAMILIES[Math.floor(Math.random() * FAMILIES.length)];
   const n = 1 + Math.floor(Math.random() * 3);
   const allowRainbow = Math.random() < 0.25;
-  const types = ['sine', 'sine', 'mirror-sine', 'ribbon', 'dash', 'steps', 'flat-glow-line'];
+  const types = ['sine', 'sine', 'mirror-sine', 'ribbon', 'dash', 'steps', 'flat-glow-line', 'bars'];
+  const barShapes = ['rounded', 'rounded', 'square', 'needle'];
   const bands = ['low', 'mid', 'high', 'rms'], pks = ['low', 'mid', 'mid', 'high'], profs = ['flat', 'flat', 'center', 'edges', 'bands'];
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -66,6 +70,8 @@ export function randomStack() {
       opacity: 60 + Math.floor(Math.random() * 41), glow: 30 + Math.floor(Math.random() * 51),
       thick: [1.5, 2, 2.5][Math.floor(Math.random() * 3)], peaks: pks[Math.floor(Math.random() * pks.length)],
       band: bands[Math.floor(Math.random() * bands.length)], profile: profs[Math.floor(Math.random() * profs.length)],
+      barShape: barShapes[Math.floor(Math.random() * barShapes.length)],
+      barCount: 12 + Math.floor(Math.random() * 21), barGap: 1 + Math.floor(Math.random() * 3),
     }));
   }
   return out;
@@ -103,6 +109,7 @@ export function createWaveRenderer(canvas) {
   let fakeOn = true;
   let raf = 0;
   let last = 0;
+  let lastF = 0; // renderFrame() clock for externally-driven thumbs (T3/3 shared loop)
   const t0 = performance.now();
   let gateOpen = false, env = 0, envFast = 0, envSlow = 0;
   const wSm = new Map();
@@ -276,6 +283,69 @@ export function createWaveRenderer(canvas) {
     g.restore();
   }
 
+  // T3/3 (ticket/53): `bars` EQ type — vertical columns driven by the SAME
+  // smoothed band levels as the 6 line types (shown()/bandLevels), center-mirrored
+  // so it sits in the standing-wave family. Shape/count/gap persist per wave.
+  // Existing line renderers above are untouched.
+  function barBase(u, bl, wv) {
+    if ((wv.profile || 'flat') === 'bands') {
+      if (u < 0.5) { const k = u * 2; return bl.low * (1 - k) + bl.mid * k; }
+      const k = (u - 0.5) * 2; return bl.mid * (1 - k) + bl.high * k;
+    }
+    return bl[wv.band] ?? bl.rms;
+  }
+  function drawBars(t, wv, bl) {
+    if (wv.mute || wv.opacity <= 0) return;
+    const count = Math.max(8, Math.min(48, Math.round(wv.barCount ?? 24)));
+    const gap = Math.max(0, Math.min(8, +(wv.barGap ?? 2)));
+    const shape = wv.barShape === 'square' || wv.barShape === 'needle' ? wv.barShape : 'rounded';
+    const cyc = PEAK_CYC[wv.peaks] || 3;
+    const rate = 0.1 + 3.0 * (eff(wv, 'speed') / 100);
+    const s = t / 1000;
+    const wob = 0.7 + 0.3 * Math.sin(2 * Math.PI * 0.9 * rate * s + 0.7) * Math.sin(2 * Math.PI * 1.3 * rate * s);
+    const slot = Wd / count;
+    const bw = Math.max(1, slot - gap);
+    const col = strokeFor(wv, t);
+    const op = wv.opacity / 100, gl = wv.glow / 100;
+    const geo = [];
+    for (let i = 0; i < count; i++) {
+      const u = (i + 0.5) / count;
+      const amp = ampOf(H, sm(barBase(u, bl, wv)), wv);
+      const mod = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * u + 0.9 * Math.sin(2 * Math.PI * 0.9 * rate * s + u * 3) + 0.4 * Math.sin(2 * Math.PI * 1.7 * rate * s)));
+      let h = Math.max(2, Math.min(H, amp * 2 * mod * profMul(wv.profile || 'flat', u) * wob));
+      geo.push({ x: i * slot + (slot - bw) / 2, y: H / 2 - h / 2, h });
+    }
+    g.save();
+    g.globalAlpha = op;
+    if (gl > 0) {
+      // One cheap glow pass (wider translucent columns, no shadowBlur) + main pass.
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = op * 0.22 * gl;
+      g.fillStyle = col;
+      for (const b of geo) g.fillRect(b.x - 1, b.y - 1, bw + 2, b.h + 2);
+      g.restore();
+    }
+    if (shape === 'needle') {
+      g.strokeStyle = col;
+      g.lineWidth = Math.max(1, Math.min(2.5, bw * 0.4));
+      g.lineCap = 'round';
+      g.beginPath();
+      for (const b of geo) { const nx = b.x + bw / 2; g.moveTo(nx, b.y); g.lineTo(nx, b.y + b.h); }
+      g.stroke();
+    } else {
+      g.fillStyle = col;
+      g.beginPath();
+      const r = shape === 'square' ? 0 : Math.min(bw / 2, 3);
+      for (const b of geo) {
+        if (r > 0 && g.roundRect) { g.moveTo(b.x, b.y); g.roundRect(b.x, b.y, bw, b.h, r); }
+        else g.rect(b.x, b.y, bw, b.h);
+      }
+      g.fill();
+    }
+    g.restore();
+  }
+
   const PARTS = Array.from({ length: 24 }, (_, i) => ({ u: (i + 0.5) / 24, sz: 1 + (i % 2), al: 0.22 + 0.28 * ((i * 53 % 10) / 10), j: (i * 7919 % 100) / 100 * 6.283 }));
   function drawParts(t, top) {
     const n = Math.min(cfg.particles, 24);
@@ -306,7 +376,11 @@ export function createWaveRenderer(canvas) {
     if (dt > 0) vis.forEach(wv => { ['low', 'mid', 'high', 'rms'].forEach(b => shown(wv, b, bl[b] ?? bl.rms, dt)); });
     const smBl = wv => ({ low: shown(wv, 'low', bl.low, 0), mid: shown(wv, 'mid', bl.mid, 0), high: shown(wv, 'high', bl.high, 0), rms: shown(wv, 'rms', bl.rms, 0) });
     // list TOP = front: draw back-to-front so index 0 lands on top.
-    for (let i = vis.length - 1; i >= 0; i--) drawWave(t, vis[i], smBl(vis[i]));
+    for (let i = vis.length - 1; i >= 0; i--) {
+      const wv = vis[i];
+      if (wv.type === 'bars') drawBars(t, wv, smBl(wv));
+      else drawWave(t, wv, smBl(wv));
+    }
     const top = vis[0];
     if (top) drawParts(t, top);
   }
@@ -348,6 +422,23 @@ export function createWaveRenderer(canvas) {
     getLevel() { return sm(env); },
     start() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } },
     stop() { if (raf) cancelAnimationFrame(raf); raf = 0; },
+    // T3/3: one synchronous frame on the caller's clock — lets app.js drive ALL
+    // starter thumbs from ONE shared rAF instead of N per-renderer loops.
+    renderFrame(now) {
+      const r = canvas.getBoundingClientRect();
+      if (Math.abs(r.width - Wd) > 1 || Math.abs(r.height - H) > 1) fit();
+      g.clearRect(0, 0, Wd, H);
+      if (reduced) {
+        g.fillStyle = '#333439';
+        g.fillRect(0, H / 2 - 1, Wd, 2);
+        return;
+      }
+      if (!lastF) lastF = now;
+      const dt = Math.min(0.1, Math.max(0.001, (now - lastF) / 1000));
+      lastF = now;
+      stepLevel(now - t0, dt);
+      drawStack(now - t0, dt, bandLevels());
+    },
     renderOnce() {
       fit();
       g.clearRect(0, 0, Wd, H);

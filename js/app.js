@@ -556,7 +556,7 @@ function switchTab(name){
     tabs[k]?.setAttribute('aria-selected', active ? 'true' : 'false');
     if(panels[k]) panels[k].hidden = !active;
   }
-  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
+  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveStarterPause(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
 }
 els.tabPipeline?.addEventListener('click', ()=> switchTab('pipeline'));
 els.tabWave?.addEventListener('click', ()=> switchTab('wave'));
@@ -1134,26 +1134,117 @@ function waveApplyStarter(id, applyAurora){
   waveAdvIds = new Set();
   wavePersist(); waveRenderList();
 }
+// --- live starter previews T3/3 (ticket/53): tiny canvases reusing createWaveRenderer,
+// driven by ONE shared rAF (~16fps), paused via IntersectionObserver + tab-hidden.
+// T1 discipline: starter `waves` are static preset defs (pinned per build), but every
+// tick re-reads the LIVE waveCfg globals — thumbs never desync like mute did.
+// prefers-reduced-motion → static renderOnce() frame, no loop.
+let waveStarterLive = { raf: 0, last: 0, items: [], io: null };
+function waveStarterLoop(now) {
+  waveStarterLive.raf = 0;
+  if (document.hidden) return; // zero CPU while hidden — resumed by waveStarterVis
+  if (now - waveStarterLive.last >= 60) {
+    waveStarterLive.last = now;
+    const stats = (window.__waveStarterStats = window.__waveStarterStats || { ticks: 0, draws: 0 });
+    stats.ticks++;
+    const cfg = waveCfg; // live config every tick (never a closed-over copy)
+    for (const it of waveStarterLive.items) {
+      if (!it.visible || !it.renderer) continue;
+      try {
+        it.renderer.setConfig({ ...cfg, waves: it.waves, starterId: it.id });
+        it.renderer.renderFrame(now); // same wall clock for all → shared fake clock
+        stats.draws++;
+      } catch {}
+    }
+  }
+  waveStarterLive.raf = requestAnimationFrame(waveStarterLoop);
+}
+function waveStarterVis() {
+  if (document.hidden) {
+    if (waveStarterLive.raf) cancelAnimationFrame(waveStarterLive.raf);
+    waveStarterLive.raf = 0;
+    return;
+  }
+  if (waveStarterLive.items.length && !waveStarterLive.raf &&
+    !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    waveStarterLive.last = performance.now();
+    waveStarterLive.raf = requestAnimationFrame(waveStarterLoop);
+  }
+}
+function waveStarterPause() {
+  // Modal closed / tab left: stop the loop + observer, keep DOM for cheap re-attach.
+  if (waveStarterLive.raf) cancelAnimationFrame(waveStarterLive.raf);
+  waveStarterLive.raf = 0;
+  try { waveStarterLive.io?.disconnect(); } catch {}
+  waveStarterLive.io = null;
+  document.removeEventListener('visibilitychange', waveStarterVis);
+  waveStarterLive.items = [];
+}
+function waveStarterAttach() {
+  // Re-create renderers on the EXISTING canvases (after a pause) without DOM churn.
+  const grid = $('wave-starters');
+  if (!grid) return;
+  const cvs = [...grid.querySelectorAll('canvas.wave-thumb')];
+  if (cvs.length !== STARTERS.length) { grid.dataset.built = ''; waveRenderStarters(); return; }
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  waveStarterLive.items = STARTERS.map((s, i) => {
+    const waves = s.stack();
+    let renderer = null;
+    try {
+      renderer = createWaveRenderer(cvs[i]);
+      renderer.setFakeEnabled(true);
+      if (reduced) {
+        renderer.setConfig({ ...waveCfg, waves, starterId: s.id });
+        renderer.renderOnce();
+      }
+    } catch { renderer = null; }
+    return { id: s.id, waves, renderer, cv: cvs[i], visible: true };
+  });
+  if (!reduced) {
+    try {
+      waveStarterLive.io = new IntersectionObserver(es => {
+        es.forEach(e => {
+          const it = waveStarterLive.items.find(x => x.cv === e.target);
+          if (it) it.visible = e.isIntersecting;
+        });
+      }, { threshold: 0.05 });
+      waveStarterLive.items.forEach(it => waveStarterLive.io.observe(it.cv));
+    } catch { waveStarterLive.io = null; }
+    document.addEventListener('visibilitychange', waveStarterVis);
+    waveStarterLive.last = performance.now();
+    waveStarterLive.raf = requestAnimationFrame(waveStarterLoop);
+  }
+}
 function waveRenderStarters(){
   const grid = $('wave-starters');
   if (!grid) return;
+  // Cheap path (runs on EVERY waveSync incl. slider drags): grid built + loop alive
+  // → just refresh active states, never touch canvases/renderers.
+  if (grid.dataset.built === '1' && grid.children.length === STARTERS.length) {
+    [...grid.children].forEach((b, i) => b.classList.toggle('active', STARTERS[i].id === waveCfg.starterId));
+    if (!waveStarterLive.items.length) waveStarterAttach(); // resume after pause
+    return;
+  }
+  waveStarterPause();
   grid.innerHTML = '';
+  grid.dataset.built = '1';
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   STARTERS.forEach((s, i) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'wave-card' + (s.id === waveCfg.starterId ? ' active' : '');
-    const sw = document.createElement('span');
-    sw.className = 'swatch';
-    const preview = s.stack();
-    sw.style.background = preview.length > 1
-      ? `linear-gradient(90deg, ${preview[0].c1}, ${preview[1].c1})`
-      : preview[0].c1;
+    b.setAttribute('aria-label', `استارتر ${i + 1}: ${s.n} — ${s.d}`);
+    const cv = document.createElement('canvas');
+    cv.className = 'wave-thumb';
+    cv.width = 240; cv.height = 96; // ~120×48 CSS px ×2 for DPR
+    cv.setAttribute('aria-hidden', 'true');
     const t = document.createElement('b'); t.textContent = `${i + 1} — ${s.n}`;
     const d = document.createElement('span'); d.textContent = s.d;
-    b.append(sw, t, d);
+    b.append(cv, t, d);
     b.addEventListener('click', () => waveApplyStarter(s.id, true));
     grid.appendChild(b);
   });
+  waveStarterAttach();
 }
 function waveRenderList(){
   const list = $('wave-list');
@@ -1236,6 +1327,22 @@ function waveRenderList(){
     waveSeg(segT, WAVE_TYPES, wv.type, WAVE_FA.types, v => { wv.type = v; wavePersist(); waveRenderList(); });
     rType.append(tLab, segT);
     body.appendChild(rType);
+    // T3/3 bars EQ options: shape seg + count/gap sliders, only for bars waves.
+    // Same pattern as sibling segs: mutate + persist + re-render (fresh objects after).
+    if (wv.type === 'bars') {
+      const rBar = document.createElement('div');
+      const sLab = document.createElement('div'); sLab.className = 'wave-ctrl-label'; sLab.textContent = 'شکل ستون‌ها';
+      const segS = document.createElement('div'); segS.className = 'wave-seg';
+      waveSeg(segS, ['rounded', 'square', 'needle'], wv.barShape || 'rounded', WAVE_FA.barShapes, v => { wv.barShape = v; wavePersist(); waveRenderList(); });
+      rBar.append(sLab, segS);
+      body.appendChild(rBar);
+      [['barCount', 'تعداد ستون‌ها', 8, 48, 24], ['barGap', 'فاصله ستون‌ها', 0, 8, 2]].forEach(([k, fa, mn, mx, df]) => {
+        const mount = document.createElement('div');
+        body.appendChild(mount);
+        waveSlider(mount, { label: fa, min: mn, max: mx, step: '1', unit: '', def: df, scope: 'local',
+          get: () => (wv[k] ?? df), set: v => { wv[k] = v; }, onChange: () => wavePersist() });
+      });
+    }
     const rCm = document.createElement('div');
     const cLab = document.createElement('div'); cLab.className = 'wave-ctrl-label'; cLab.textContent = 'حالت رنگ';
     const segC = document.createElement('div'); segC.className = 'wave-seg';
@@ -1357,6 +1464,7 @@ function waveEnsure(){
       id: `w${Date.now().toString(36)}`, name: `موج ${waveCfg.waves.length + 1}`, type: 'sine',
       colorMode: 'solid', c1: pal[waveCfg.waves.length % pal.length], c2: '#c4b5fd',
       opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+      barShape: 'rounded', barCount: 24, barGap: 2,
       ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
     });
     waveOpenIds.add(waveCfg.waves[waveCfg.waves.length - 1].id);
@@ -1545,6 +1653,7 @@ function closeModal(){
   els.modal.style.display = 'none';
   mainWaveSync(); // wave tab edits persist live; main strip picks them up here
   wavePrevStop();
+  waveStarterPause();
   waveFollowStop();
   const hadMic = !!waveMicStream || !!waveMicCtx;
   waveMicStop();
