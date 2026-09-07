@@ -1,15 +1,10 @@
 // Module: transcription
-// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, textChain(text,{system,layer})->{text,model,providerId} (full polish-chain fallback for stages/translate), translate(text,lang,entry?)->{text,model,providerId} (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, queryResponsesText (Zen Responses API, text-only), testGroq(), testGemini(), testZenspark(), listModels(providerId)
-// Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Gemini) with fallback, quota, header handling
+// Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, textChain(text,{system,layer})->{text,model,providerId} (full polish-chain fallback for stages/translate), translate(text,lang,entry?)->{text,model,providerId} (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, testGroq(), testGemini(), listModels(providerId)
+// Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Google) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
-
-// Muse Spark via OpenCode Zen — Responses API (NOT chat/completions; queryChat can't speak it).
-// Auth assumption (ticket 12, re-verify with curl if Zen docs change): Zen key as Bearer.
-const ZEN_RESPONSES_URL = 'https://opencode.ai/zen/v1/responses';
-const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',413:'ورودی طولانی (413)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
@@ -96,7 +91,7 @@ async function queryGemini(blob, model, externalSignal){
   const j=await res.json(); Logger.log('debug','Gemini raw',j); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
 }
 
-// Polish adapters — dual provider (Groq OpenAI-compatible + OpenRouter + Gemini fallback)
+// Polish adapters — canonical providers groq|google|openrouter (+ custom) + Google fallback
 // Qwen reasoning models leak <think> into content unless reasoning_format:hidden — strip defensively + length guard
 // Ticket 21 (chunk guard): the unclosed-think strip below is narrowed — an
 // unclosed trailing block is removed only when usable text precedes it, so a
@@ -138,6 +133,29 @@ function polishOutputBudget(text){
 function longInputError(layer = 'polish'){
   const msg = layer === 'polish' ? 'متن طولانی است — ورودی را کوتاه‌تر کن' : `متن طولانی برای ${layer} — ورودی را کوتاه‌تر کن`;
   return Object.assign(new Error(msg), { status: 413 });
+}
+
+// Canonical text/STT provider ids: groq|google|openrouter (+ custom ids).
+// Legacy 'gemini' stored in old chains maps to 'google' (same endpoint + x-goog-api-key).
+function canonicalProviderId(pid){
+  if(typeof pid !== 'string') return pid;
+  const t = pid.trim();
+  if(t === 'gemini') return 'google';
+  return t;
+}
+// Storage still keys the Google credential as geminiKey, so 'google' resolves there.
+function hasKeyForProviderId(providerId){
+  const c = canonicalProviderId(providerId);
+  if(c === 'zenspark') return false; // purged provider: filter pre-flight, no network attempt
+  if(c === 'google'){
+    try{
+      const s = Storage.getSettings();
+      if(s && s.geminiKey) return true;
+    }catch{}
+    try{ return Storage.hasKeyForProvider('gemini'); }catch{ return false; }
+    return false;
+  }
+  return Storage.hasKeyForProvider(c);
 }
 
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
@@ -202,39 +220,14 @@ function polishTargetOf(entry){
   const model = (entry.id || '').replace(':free','');
   const rawPid = (typeof entry.providerId === 'string' && entry.providerId.trim()) ? entry.providerId.trim()
     : (typeof entry.provider === 'string' && entry.provider.trim() ? entry.provider.trim() : '');
-  let providerId = rawPid;
-  if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'gemini' : 'groq');
+  let providerId = canonicalProviderId(rawPid);
+  if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'google' : 'groq');
   return { model, providerId };
 }
 async function queryPolish(text, entry, layer = 'polish'){
   const { model, providerId } = polishTargetOf(entry);
-  if(providerId === 'gemini') return queryPolishViaGemini(text, model, layer);
-  if(providerId === 'zenspark') return queryResponsesText(text, { model, layer });
-  return queryChat(providerId, text, { model, layer });
-}
-// Muse Spark (Zen) text ops over the Responses API. Text-only models: never STT
-// (callers gate via isSttEligible/capsFor); prompts/completions may train Meta models.
-async function queryResponsesText(text, { system, model, layer = 'polish' } = {}){
-  if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
-  const { zenKey: k } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error(layer==='polish' ? 'کلید OpenCode_Zen برای پالیش نیست' : `کلید OpenCode_Zen برای ${layer} نیست`),{status:401});
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-  const body = { model, instructions: system || DEFAULT_POLISH_SYSTEM, input: text };
-  let res; try{
-    res=await fetch(ZEN_RESPONSES_URL,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?`تایم‌اوت OpenCode_Zen ${layer}`:`شبکه OpenCode_Zen ${layer}: `+e.message),{status:e.name==='AbortError'?408:0}); }
-  clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`zenspark ${layer} fail`,{status:res.status, model}); throw err; }
-  const j=await res.json();
-  let out='';
-  try{
-    const msg=(j.output||[]).find(o=>o && o.type==='message');
-    const part=((msg&&msg.content)||[]).find(c=>c && c.type==='output_text' && typeof c.text==='string');
-    out=(part?part.text:'').trim();
-  }catch{}
-  Logger.log('debug',`zenspark ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
-  if(!out) Logger.log('warn','zenspark unknown responses shape',{model, keys:Object.keys(j||{})});
-  return validatePolishOutput(out, text, model, layer);
+  if(canonicalProviderId(providerId) === 'google') return queryPolishViaGemini(text, model, layer);
+  return queryChat(canonicalProviderId(providerId), text, { model, layer });
 }
 
 // Full-chain text op (ticket/16 chain fallback): iterates ENABLED polishChain entries
@@ -251,7 +244,7 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
   if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
     // explicit dropdown picks carry no enabled flag — resolve it from the chain itself
     const rawMatch = rawChain.find(e => e && polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId);
-    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: prefer.providerId, enabled: true });
+    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: canonicalProviderId(prefer.providerId), enabled: true });
     else Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
   }
   if(chain.length===0) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
@@ -261,9 +254,8 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
     const { model, providerId } = polishTargetOf(entry);
     try{
       let out;
-      if(providerId === 'gemini') out = await queryPolishViaGemini(text, model, layer, system);
-      else if(providerId === 'zenspark') out = await queryResponsesText(text, { system, model, layer });
-      else out = await queryChat(providerId, text, { system, model, layer });
+      if(canonicalProviderId(providerId) === 'google') out = await queryPolishViaGemini(text, model, layer, system);
+      else out = await queryChat(canonicalProviderId(providerId), text, { system, model, layer });
       if(out){
         if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${model} (${providerId})`);
         else Logger.log('debug',`${layer} ok`,{model, providerId});
@@ -293,35 +285,34 @@ async function translateText(text, lang, entry){
   const system = translateSystem(lang);
   if(entry){
     const { model, providerId } = polishTargetOf(entry);
-    if(!Storage.hasKeyForProvider(providerId)) throw Object.assign(new Error(`⚠ کلید ${providerId} نیست`),{status:401});
+    if(!hasKeyForProviderId(providerId)) throw Object.assign(new Error(`⚠ کلید ${providerId} نیست`),{status:401});
     let t;
-    if(providerId === 'gemini') t = await queryPolishViaGemini(text, model, 'translate', system);
-    else if(providerId === 'zenspark') t = await queryResponsesText(text, { system, model, layer: 'translate' });
-    else t = await queryChat(providerId, text, { system, model, layer: 'translate' });
+    if(canonicalProviderId(providerId) === 'google') t = await queryPolishViaGemini(text, model, 'translate', system);
+    else t = await queryChat(canonicalProviderId(providerId), text, { system, model, layer: 'translate' });
     return { text: t, model, providerId };
   }
   return textChain(text, { system, layer: 'translate' });
 }
 function sttProviderOf(entry){
   if(entry && typeof entry === 'object'){
-    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return entry.providerId.trim();
-    if(typeof entry.provider === 'string' && entry.provider.trim()) return entry.provider.trim();
+    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return canonicalProviderId(entry.providerId.trim());
+    if(typeof entry.provider === 'string' && entry.provider.trim()) return canonicalProviderId(entry.provider.trim());
   }
   const id = typeof entry === 'object' ? entry.id : entry;
   if(id==='groq') return 'groq';
-  return 'gemini';
+  return 'google';
 }
 function hasKeyFor(entry){
-  return Storage.hasKeyForProvider(sttProviderOf(entry));
+  return hasKeyForProviderId(sttProviderOf(entry));
 }
 function hasKeyForPolish(entry){
-  return Storage.hasKeyForProvider(polishTargetOf(entry).providerId);
+  return hasKeyForProviderId(polishTargetOf(entry).providerId);
 }
 export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-flash-lite-latest',providerId:'gemini',enabled:true}];
+    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-flash-lite-latest',providerId:'google',enabled:true}];
     // support both string[] legacy and object[] new
     const enabledChain = rawChain.filter(e=> typeof e==='object' ? e.enabled!==false : true);
     let chain = enabledChain.filter(id => hasKeyFor(id));
@@ -403,16 +394,17 @@ export const Transcription = {
         for(let i=0;i<usablePolish.length;i++){
           const entry = usablePolish[i];
           const pm = entry.id;
+          const ppid = polishTargetOf(entry).providerId;
           try{
             const out = await queryPolish(rawText, entry);
             if(out){
               polished = out;
-              polishModelUsed = `${pm} (${entry.providerId || entry.provider})`;
-              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${pm} (${entry.providerId || entry.provider})`);
+              polishModelUsed = `${pm} (${ppid})`;
+              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${pm} (${ppid})`);
               break;
             }
           }catch(e){
-            Logger.log('warn',`پالیش ${pm} (${entry.providerId || entry.provider}) خطا`,{msg:e.message, status:e.status});
+            Logger.log('warn',`پالیش ${pm} (${ppid}) خطا`,{msg:e.message, status:e.status});
             if(e.status===429) await new Promise(r=>setTimeout(r,500));
             if(i===usablePolish.length-1) break;
           }
@@ -442,23 +434,11 @@ export const Transcription = {
     return ruleFixed;
   },
   async listModels(providerId){
-    if(providerId === 'zenspark'){
-      const { zenKey: k }=Storage.getSettings();
-      if(!k) throw Object.assign(new Error('کلید OpenCode_Zen نیست'),{status:401});
-      const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-      let r; try{
-        r=await fetch(ZEN_MODELS_URL,{headers:{'Authorization':`Bearer ${k}`},signal:ctrl.signal});
-      }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?'تایم‌اوت لیست مدل‌ها':'شبکه لیست مدل‌ها: '+e.message),{status:e.name==='AbortError'?408:0}); }
-      clearTimeout(to);
-      if(!r.ok){ const e=await parseErr(r); throw Object.assign(new Error(`${fmt(r.status)} — ${e.msg}`),{status:r.status}); }
-      const j=await r.json();
-      const arr = Array.isArray(j) ? j : (j.data || j.models || []);
-      return (arr||[]).map(m=>String((m&&(m.id||m.name))||'')).filter(id=>/^muse-spark-/i.test(id));
-    }
-    if(providerId === 'gemini'){
+    const pid = canonicalProviderId(providerId);
+    if(pid === 'google'){
       const { geminiKey: k }=Storage.getSettings();
-      if(!k) throw Object.assign(new Error('کلید gemini نیست'),{status:401});
-      if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Gemini اشتباه'),{status:401});
+      if(!k) throw Object.assign(new Error('کلید google نیست'),{status:401});
+      if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error('فرمت کلید Google اشتباه'),{status:401});
       const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
       let r; try{
         r=await fetch('https://generativelanguage.googleapis.com/v1beta/models',{headers:{'x-goog-api-key':k},signal:ctrl.signal});
@@ -468,12 +448,15 @@ export const Transcription = {
       const j=await r.json();
       return (j.models||[]).map(m=>String(m.name||'').replace(/^models\//,'')).filter(Boolean);
     }
-    const { key: k, base, trusted } = resolveChatProvider(providerId);
-    if(!k) throw new Error(`کلید ${providerId} نیست`);
-    if(!base) throw new Error('BaseURL ارائه‌دهنده خالی است');
+    let resolved;
+    try{ resolved = resolveChatProvider(pid); }
+    catch(e){ throw Object.assign(new Error(`ارائه‌دهنده ناشناس: ${String(providerId ?? '')}`),{status:400}); }
+    const { key: k, base, trusted } = resolved;
+    if(!k) throw Object.assign(new Error(`کلید ${pid} نیست`),{status:401});
+    if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
     assertTrustedBase(base, trusted);
     const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
-    if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
+    if(!r.ok){ const e=await parseErr(r); const err=new Error(`${fmt(r.status)} — ${e.msg}`); err.status=r.status; throw err; }
     const j=await r.json(); return j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
   },
   // provider model lists: single path is listModels(providerId); app.js calls it via fetchAndShowModels/loadEasyModels
@@ -496,12 +479,7 @@ export const Transcription = {
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();
   },
-  async testZenspark(){
-    const ids = await this.listModels('zenspark');
-    if(!ids.length) throw new Error('لیست خالی برگشت');
-    return true;
-  },
-  async queryChat(providerId, text, opts){ return queryChat(providerId, text, opts); },
+  async queryChat(providerId, text, opts){ return queryChat(canonicalProviderId(providerId), text, opts); },
   async textChain(text, opts){ return textChain(text, opts); },
   async translate(text, lang, entry){ return translateText(text, lang, entry); },
   async testPolish(){
