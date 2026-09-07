@@ -1,0 +1,83 @@
+{
+ "360x800": {
+  "stt": {
+   "clientH": 643,
+   "scrollH": 643,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "polish": {
+   "clientH": 678,
+   "scrollH": 678,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "modalClientH": 734,
+  "modalScrollH": 3734,
+  "vh": 800,
+  "rowH": 78.5,
+  "n_stt": 8,
+  "n_pol": 8,
+  "console_errors": [],
+  "tail_scroll": {
+   "top": 0,
+   "max": 0
+  }
+ },
+ "390x844": {
+  "stt": {
+   "clientH": 583,
+   "scrollH": 583,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "polish": {
+   "clientH": 583,
+   "scrollH": 583,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "modalClientH": 774,
+  "modalScrollH": 3531,
+  "vh": 844,
+  "rowH": 78.5,
+  "n_stt": 8,
+  "n_pol": 8,
+  "console_errors": [],
+  "tail_scroll": {
+   "top": 0,
+   "max": 0
+  }
+ },
+ "1440x900": {
+  "stt": {
+   "clientH": 570,
+   "scrollH": 570,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "polish": {
+   "clientH": 570,
+   "scrollH": 570,
+   "maxH": "none",
+   "ov": "visible",
+   "rows": 8
+  },
+  "modalClientH": 826,
+  "modalScrollH": 3281,
+  "vh": 900,
+  "rowH": 66,
+  "n_stt": 8,
+  "n_pol": 8,
+  "console_errors": [],
+  "tail_scroll": {
+   "top": 0,
+   "max": 0
+  }
+ }
+}

@@ -173,7 +173,8 @@ button:active{transform:scale(.97)}
 .pref-head h4{font-size:13px;font-weight:700}
 .pref-sub{font-size:11px;color:var(--muted)}
 .chip-toggle{background:var(--surface2)}
-.chain-list{display:flex;flex-direction:column;gap:6px}
+.chain-list{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent;min-height:0}
+@media(min-width:1024px){.chain-list{max-height:calc(6 * 66px + 5 * 6px)}}
 .chain-item{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:8px 10px;transition:.15s}
 .chain-item.dragging{opacity:.5;border-color:var(--accent)}
 .chain-item.missing{opacity:.6;border-style:dashed}
