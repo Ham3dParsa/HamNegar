@@ -1367,6 +1367,7 @@ function waveRenderList(){
     // Same pattern as sibling segs: mutate + persist + re-render (fresh objects after).
     if (wv.type === 'bars') {
       const rBar = document.createElement('div');
+      rBar.dataset.hygiene = 'bar-opts';
       const sLab = document.createElement('div'); sLab.className = 'wave-ctrl-label'; sLab.textContent = 'شکل ستون‌ها';
       const segS = document.createElement('div'); segS.className = 'wave-seg';
       waveSeg(segS, ['rounded', 'square', 'needle'], wv.barShape || 'rounded', WAVE_FA.barShapes, v => { wv.barShape = v; wavePersist(); waveRenderList(); });
@@ -1374,6 +1375,7 @@ function waveRenderList(){
       body.appendChild(rBar);
       [['barCount', 'تعداد ستون‌ها', 8, 48, 24], ['barGap', 'فاصله ستون‌ها', 0, 8, 2]].forEach(([k, fa, mn, mx, df]) => {
         const mount = document.createElement('div');
+        mount.dataset.hygiene = k;
         body.appendChild(mount);
         waveSlider(mount, { label: fa, min: mn, max: mx, step: '1', unit: '', def: df, scope: 'local',
           get: () => (wv[k] ?? df), set: v => { wv[k] = v; }, onChange: () => wavePersist() });
@@ -1391,8 +1393,11 @@ function waveRenderList(){
     c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePersist(); });
     rCol.append(c1Lab, c1);
     body.appendChild(rCol);
-    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '1', '٪', 100], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '1', '٪', 70], ['thick', 'ضخامت (مطلق هر موج)', 1, 6, '0.5', '', 2]].forEach(([k, fa, mn, mx, st, u, df]) => {
+    // T2 dead-setting hygiene (#109): `thick` is never read in drawBars (wave.js) —
+    // hide it on bars waves; it stays for the 6 line types.
+    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '1', '٪', 100], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '1', '٪', 70], ...(wv.type === 'bars' ? [] : [['thick', 'ضخامت (مطلق هر موج)', 1, 6, '0.5', '', 2]])].forEach(([k, fa, mn, mx, st, u, df]) => {
       const mount = document.createElement('div');
+      mount.dataset.hygiene = k;
       body.appendChild(mount);
       waveSlider(mount, { label: fa, min: mn, max: mx, step: st, unit: u, def: df, scope: 'local',
         get: () => wv[k], set: v => { wv[k] = v; }, onChange: () => wavePersist() });
@@ -1410,6 +1415,7 @@ function waveRenderList(){
     adv.appendChild(advSum);
     if (wv.colorMode === 'gradient') {
       const rC2 = document.createElement('div'); rC2.className = 'wave-row-btns';
+      rC2.dataset.hygiene = 'c2-row';
       const c2Lab = document.createElement('span'); c2Lab.className = 'wave-ctrl-label'; c2Lab.textContent = 'رنگ ۲ (توقف دوم گرادیان)';
       const c2 = document.createElement('input'); c2.type = 'color'; c2.value = wv.c2; c2.setAttribute('aria-label', 'رنگ ۲');
       c2.addEventListener('input', () => { wv.c2 = c2.value; wavePersist(); });
@@ -1430,7 +1436,10 @@ function waveRenderList(){
     adv.appendChild(rPf);
     const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'رونوشت هر موج — چیپ «همگام با سراسری» = همان مقدار سراسری';
     adv.appendChild(ovLab);
-    [['speed', 'سرعت این موج'], ['intensity', 'شدت این موج'], ['attack', 'سرعت پاسخ این موج (اتک)'], ['smooth', 'نرمی این موج (رهایی)'], ['sensitivity', 'حساسیت این موج (گین)']].forEach(([key, label]) => {
+    // T2 dead-setting hygiene (#109): per-wave ov.sensitivity only scales the preview
+    // gain in shown() (wave.js:182) — it never gates open/close like the global
+    // sensMap does. Labelled honestly (label, not gate: zero behavior risk).
+    [['speed', 'سرعت این موج'], ['intensity', 'شدت این موج'], ['attack', 'سرعت پاسخ این موج (اتک)'], ['smooth', 'نرمی این موج (رهایی)'], ['sensitivity', 'حساسیت این موج (گین پیش‌نمایش — گیت را عوض نمی‌کند)']].forEach(([key, label]) => {
       const mount = document.createElement('div');
       adv.appendChild(mount);
       waveSlider(mount, { label, min: 0, max: 100, step: '1', unit: '٪', def: 50, scope: 'local',
@@ -1444,6 +1453,13 @@ function waveRenderList(){
   });
   const addBtn = $('wave-add');
   if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
+}
+function waveSyncHue(){
+  // T2 dead-setting hygiene (#109): aurora hue is dead while aurora is off
+  // (early-return in wave.js drawAurora) — hide its slider unless aurora.on.
+  const rg = $('wave-aurora-hue');
+  const mount = rg?.closest('.wslider');
+  if (mount) mount.hidden = !waveCfg.aurora.on;
 }
 function waveSync(){
   waveRenderStarters();
@@ -1460,6 +1476,7 @@ function waveSync(){
   txt('wave-parts-val', waveCfg.particles); txt('wave-aurora-hue-val', waveCfg.aurora.hue);
   waveGlobalPaints.forEach(p => p());
   waveListPaints.forEach(p => p());
+  waveSyncHue();
   txt('wave-count', waveCfg.waves.length + ' موج' + (waveCfg.waves.length >= 5 ? ' (سقف)' : ''));
   const nm = $('wave-name');
   if (nm) nm.textContent = `«${waveCfg.starterId === 'custom-dice' ? 'ترکیب تصادفی 🎲' : starterById(waveCfg.starterId).n}» — ${waveCfg.waves.length} موج`;
@@ -2598,6 +2615,7 @@ const GUIDE = {
     { id:'g-stt', title:'زنجیرهٔ STT', body:'ترتیب تلاش مدل‌های گفتار→متن؛ مدل بی‌کلید بی‌صدا رد می‌شود.', ref:'stt-chain' },
     { id:'g-polishchain', title:'زنجیرهٔ پالیش', body:'ترتیب ویرایشگرهای فارسی؛ اولین مدلِ دارای کلید جواب می‌دهد.', ref:'polish-chain' },
     { id:'g-keys', title:'کلیدهای ارائه‌دهنده', body:'کلید Groq (با gsk_) و Google (با AQ.) را در کارت خود بگذار و «تست» بزن.', ref:'provider-drawer' },
+    { id:'g-wavehygiene', title:'تنظیمات مرده موج', body:'ضخامت فقط ۶ نوع خطی، شکل/تعداد/فاصله فقط ستون‌ها، رنگ ۲ فقط گرادیان، ته‌رنگ فقط با aurora روشن؛ حساسیت هر موج گین پیش‌نمایش است نه گیت.', ref:'panel-wave' },
   ],
   quota: [
     { id:'g-quota', title:'سهمیه امروز', body:'روی نوار «سهمیه امروز» بزن تا جزئیات هر مدل باز شود: مصرف امروز در برابر سقف روزانه.', ref:'quota-toggle' },

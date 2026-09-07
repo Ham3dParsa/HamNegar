@@ -1,0 +1,176 @@
+{
+ "360x800": {
+  "aurora_off": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": false,
+   "console_errors": [],
+   "viewport": "360x800"
+  },
+  "aurora_on": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": true,
+   "console_errors": [],
+   "viewport": "360x800"
+  }
+ },
+ "390x844": {
+  "aurora_off": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": false,
+   "console_errors": [],
+   "viewport": "390x844"
+  },
+  "aurora_on": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": true,
+   "console_errors": [],
+   "viewport": "390x844"
+  }
+ },
+ "1440x900": {
+  "aurora_off": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": false,
+   "console_errors": [],
+   "viewport": "1440x900"
+  },
+  "aurora_on": {
+   "perWave": [
+    {
+     "title": "bars-wave — ستون‌ها (اکولایزر) · گرادیان عمودی · تفکیک باندی",
+     "thick": 1,
+     "barCount": 1,
+     "barGap": 1,
+     "barShape": 1,
+     "c2": 1,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    },
+    {
+     "title": "sine-wave — سینوسی · تک‌رنگ · یکنواخت",
+     "thick": 1,
+     "barCount": 0,
+     "barGap": 0,
+     "barShape": 0,
+     "c2": 0,
+     "sensOv": 1,
+     "sensLabel": "حساسیت این موج (گین)همگام با سراسری (50٪)همگام با سراسری"
+    }
+   ],
+   "hueVisible": true,
+   "auroraOn": true,
+   "console_errors": [],
+   "viewport": "1440x900"
+  }
+ }
+}
