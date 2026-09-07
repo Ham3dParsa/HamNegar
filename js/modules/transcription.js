@@ -35,6 +35,35 @@ function rulePolish(text){
   return out;
 }
 
+function escapeRegExp(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+// Personal dictionary core (ticket 19) — pure: no storage, no fetch, no DOM, no logging.
+// Rules: trim from/to, drop empties, drop from===to, skip enabled===false
+// (missing enabled means on). Longest-from-first. Literal global case-sensitive
+// replace. Returns { text, count }.
+export function applyPersonalDictionary(text, entries){
+  const base = typeof text === 'string' ? text : String(text ?? '');
+  if(!Array.isArray(entries) || entries.length === 0) return { text: base, count: 0 };
+  const rules = [];
+  for(const e of entries){
+    if(!e || typeof e !== 'object') continue;
+    if(e.enabled === false) continue;
+    const from = typeof e.from === 'string' ? e.from.trim() : String(e.from ?? '').trim();
+    const to = typeof e.to === 'string' ? e.to.trim() : String(e.to ?? '').trim();
+    if(!from || !to) continue;
+    if(from === to) continue;
+    rules.push({ from, to });
+  }
+  rules.sort((a, b) => b.from.length - a.from.length);
+  let out = base;
+  let count = 0;
+  for(const { from, to } of rules){
+    const re = new RegExp(escapeRegExp(from), 'g');
+    out = out.replace(re, () => { count++; return to; });
+  }
+  return { text: out, count };
+}
+
 async function queryGroq(blob, externalSignal){
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error('کلید Groq نیست'),{status:401});
