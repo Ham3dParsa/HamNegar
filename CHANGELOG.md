@@ -2,6 +2,10 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.17] - 2026-09-07
+### Changed
+- **نوار اصلی صدا زنده شد (#91 T1):** `.rec-strip` قد ۴۸→۶۸px (‏`flex-shrink:0` و `overflow:hidden` سر جاست، هاله بریده نمی‌شود)؛ نوار اصلی بدون میک با fake می‌تپد (‏`setFakeEnabled(true)` تا analyser بنشیند — اتصال analyser اولویت دارد، رفتار full-level و خط ثابت `reduced-motion` دست‌نخورده). حاشیه‌های recording/transcribing دست‌نخورده.
+
 ## [0.6.16] - 2026-09-07
 ### Fixed
 - **خوانایی قدم‌های STT در موبایل (#91 T2):** پنل `#stt-progress` کف `96px` با `flex-shrink:0` گرفت (سقف ۱۱۰px و `hidden` سر جاست) + محافظ شرینک نوار؛ نام‌های نمایشی انسانی (`Groq`، `Flash-Lite 3.5`…) با ارقام فارسی (شمارندهٔ `قدم i از n` همیشه پیدا، بدون ellipsis در ۳۶۰)؛ سربرگ ۱۳px؛ هدر لاگ در `≤640px` تک‌سطر شد (اسکرول افقی درون‌خطی) تا `#log-body` در ۳۹۰ حداقل ۵ سطر جا بدهد. شکل فراخوانی‌های `transcription.js` دست‌نخورده.
