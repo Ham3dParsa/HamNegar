@@ -1917,14 +1917,14 @@ els.output.addEventListener('dblclick', resetOutputHeight);
   grip.addEventListener('touchcancel', end);
 })();
 
-// main rec strip (ticket/51): wave.js renderer on the user's saved stack; idle near-still (fake off), live via Audio.getAnalyser()
+// main rec strip (ticket/51 + mainwave T1): wave.js renderer on the user's saved stack; idle breathes via fake (until analyser attaches), live via Audio.getAnalyser()
 let mainWave = null;
 function mainWaveInit(){
   if(!els.wave) return;
   try{
     mainWave = createWaveRenderer(els.wave);
     mainWave.setConfig(Storage.getWave());
-    mainWave.setFakeEnabled(false);
+    mainWave.setFakeEnabled(true);
     mainWave.start();
   }catch{ mainWave = null; }
 }
