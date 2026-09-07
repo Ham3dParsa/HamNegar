@@ -170,11 +170,14 @@ function parsePolishChain(raw, defaults){
 
 // Wave personalization (ticket/50): stack model v3 under its own key. Never logs colors/keys.
 export const WAVE_KEY = 'hamnegar.wave.v3';
-export const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line'];
+export const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line', 'bars'];
 export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
 export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
 export const WAVE_PROFILES = ['flat', 'center', 'edges', 'bands'];
 export const WAVE_PEAKS = ['low', 'mid', 'high'];
+// T3/3 (ticket/53): bars EQ column options — shape/count/gap persist per wave.
+export const WAVE_BAR_SHAPES = ['rounded', 'square', 'needle'];
+export const WAVE_BAR_DEFAULTS = { shape: 'rounded', count: 24, gap: 2 };
 const WAVE_MAX = 5;
 
 function waveClampInt(v, lo, hi, fb) {
@@ -214,6 +217,10 @@ function normalizeWaveEntry(x, idx) {
     band: wavePick(x.band, WAVE_BANDS, 'rms'),
     profile: wavePick(x.profile, WAVE_PROFILES, 'flat'),
     mute: x.mute === true,
+    // T3/3 bars EQ: old entries safely fall back to defaults (never wiped).
+    barShape: wavePick(x.barShape, WAVE_BAR_SHAPES, WAVE_BAR_DEFAULTS.shape),
+    barCount: waveClampInt(x.barCount, 8, 48, WAVE_BAR_DEFAULTS.count),
+    barGap: waveClampInt(x.barGap, 0, 8, WAVE_BAR_DEFAULTS.gap),
     ov: {
       speed: waveOv(ov.speed),
       intensity: waveOv(ov.intensity),
@@ -255,6 +262,7 @@ export function defaultWaveConfig() {
       id: 'w1', name: 'موج ۱', type: 'sine', colorMode: 'solid',
       c1: '#8ab4f8', c2: '#c4b5fd', opacity: 100, glow: 70, thick: 2,
       peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+      barShape: 'rounded', barCount: 24, barGap: 2,
       ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
     }],
   };

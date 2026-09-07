@@ -317,7 +317,8 @@ button:active{transform:scale(.97)}
 .wave-card.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,.18)}
 .wave-card b{font-size:13px}
 .wave-card span{font-size:11px;color:var(--muted);line-height:1.7}
-.wave-card .swatch{height:14px;border-radius:999px;border:1px solid var(--border)}
+/* T3/3 (ticket/53): live starter thumbs (~120×48 CSS px, ×2 backing for DPR). */
+.wave-card .wave-thumb{width:100%;height:48px;display:block;border-radius:8px;background:var(--surface);border:1px solid var(--border)}
 .wave-list{display:flex;flex-direction:column;gap:8px}
 .wave-item{background:var(--surface2);border:2px solid var(--border);border-radius:12px;overflow:hidden}
 .wave-item.muted{opacity:.55}
