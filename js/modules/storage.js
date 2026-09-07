@@ -9,6 +9,7 @@ export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
 export const BUILTIN_PROVIDER_IDS = ['groq','gemini','openrouter','zenspark'];
+export const SCHEMA_VERSION = 1;
 // پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|gemini|openrouter|zenspark|custom id
 export const POLISH_DEFAULTS = [
   { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
@@ -418,5 +419,55 @@ export const Storage = {
     localStorage.setItem(WAVE_KEY, JSON.stringify({ wave: norm }));
     // Accept both bare {…v3…} and wrapped {wave:{…}} on read; always persist wrapped.
     return norm;
+  },
+  getPrefs() {
+    const s = Storage.getSettings();
+    return {
+      version: SCHEMA_VERSION,
+      prefs: {
+        sttChain: s.sttChain,
+        polishChain: s.polishChain,
+        polishEnabled: s.polishEnabled,
+        realtime: s.realtime,
+        vad: s.vad,
+        autocopy: s.autocopy,
+        wave: Storage.getWave(),
+      },
+    };
+  },
+  exportPrefs() {
+    return JSON.stringify(Storage.getPrefs());
+  },
+  importPrefs(json) {
+    let parsed;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      throw Object.assign(new Error('ورودی نامعتبر — JSON خراب است'), { status: 400 });
+    }
+    if (!parsed || typeof parsed !== 'object' || parsed.version !== SCHEMA_VERSION
+      || !parsed.prefs || typeof parsed.prefs !== 'object') {
+      throw Object.assign(new Error('نسخه طرح ناسازگار — version باید 1 باشد'), { status: 400 });
+    }
+    const p = parsed.prefs;
+    let sttChain = Array.isArray(p.sttChain) ? normalizeSTTChain(p.sttChain) : [];
+    if (!sttChain.length) sttChain = normalizeSTTChain(STT_DEFAULTS);
+    let polishChain = Array.isArray(p.polishChain) ? normalizePolishChain(p.polishChain) : [];
+    if (!polishChain.length) polishChain = POLISH_DEFAULTS.map(e => ({ ...e }));
+    const patch = { sttChain, polishChain };
+    for (const k of ['polishEnabled', 'realtime', 'vad', 'autocopy']) {
+      if (typeof p[k] === 'boolean') patch[k] = p[k];
+    }
+    Storage.saveSettings(patch);
+    if (p.wave !== undefined) Storage.saveWave(p.wave);
+    return Storage.getPrefs().prefs;
+  },
+  getSecretsMeta() {
+    return {
+      groq: Storage.hasKeyForProvider('groq'),
+      gemini: Storage.hasKeyForProvider('gemini'),
+      openrouter: Storage.hasKeyForProvider('openrouter'),
+      zenspark: Storage.hasKeyForProvider('zenspark'),
+    };
   },
 };
