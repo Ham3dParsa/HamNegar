@@ -340,8 +340,14 @@
 </div>
 <div id="shortcuts-backdrop" hidden>
   <section id="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" aria-describedby="shortcuts-enter-note">
-    <header class="sc-head"><b id="shortcuts-title">راهنمای میانبرها</b><span class="hint-inline">؟ بیرون از ورودی‌های متن</span></header>
-    <div class="sc-body">
+    <header class="sc-head"><b id="shortcuts-title">راهنما</b><span class="hint-inline">؟ بیرون از ورودی‌های متن</span></header>
+    <div class="sc-tabs" role="tablist" aria-label="بخش‌های راهنما">
+      <button type="button" role="tab" id="guide-tab-shortcuts" aria-selected="true" aria-controls="guide-panel-shortcuts" class="settings-tab active">میانبرها</button>
+      <button type="button" role="tab" id="guide-tab-tools" aria-selected="false" aria-controls="guide-panel-tools" class="settings-tab" tabindex="-1">ابزارها</button>
+      <button type="button" role="tab" id="guide-tab-config" aria-selected="false" aria-controls="guide-panel-config" class="settings-tab" tabindex="-1">تنظیمات</button>
+      <button type="button" role="tab" id="guide-tab-quota" aria-selected="false" aria-controls="guide-panel-quota" class="settings-tab" tabindex="-1">سهمیه</button>
+    </div>
+    <div class="sc-body" id="guide-panel-shortcuts" role="tabpanel" aria-labelledby="guide-tab-shortcuts" tabindex="0">
       <table class="sc-table" aria-label="فهرست میانبرها">
         <thead><tr><th scope="col">کلید</th><th scope="col">کار</th><th scope="col">کجا</th></tr></thead>
         <tbody id="shortcuts-rows"></tbody>
@@ -350,6 +356,9 @@
       <ol class="sc-esclayers" id="shortcuts-esc-order"></ol>
       <p class="sc-note" id="shortcuts-enter-note">اینتر (Enter) همیشه زمینه‌ای است، هرگز سراسری — در شیت بازبینی یعنی اعمال، در جست‌وجوی زبان یعنی اجرای ترجمه، در تغییرنام موج یعنی تأیید، روی جداکنندهٔ لاگ (Enter/Space) یعنی ایزوله‌کردن اجرا.</p>
     </div>
+    <div class="sc-body" id="guide-panel-tools" role="tabpanel" aria-labelledby="guide-tab-tools" tabindex="0" hidden></div>
+    <div class="sc-body" id="guide-panel-config" role="tabpanel" aria-labelledby="guide-tab-config" tabindex="0" hidden></div>
+    <div class="sc-body" id="guide-panel-quota" role="tabpanel" aria-labelledby="guide-tab-quota" tabindex="0" hidden></div>
     <footer class="sc-foot"><button type="button" id="shortcuts-close" class="btn-ghost">بستن</button></footer>
   </section>
 </div>
