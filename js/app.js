@@ -104,7 +104,7 @@ function buildFilterUI() {
   });
   // Esc collapses, focus returns to toggle; query preserved (input never cleared)
   search.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); collapseSearch(true); }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); collapseSearch(true); }
   });
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
@@ -1731,7 +1731,14 @@ let logCollapsed = Storage.getSettings().logCollapsed;
 function applyLogCollapsed(collapsed){
   logCollapsed=collapsed;
   els.logPanel.classList.toggle('collapsed', collapsed);
-  els.btnToggleLog.textContent= collapsed ? 'نمایش' : 'بستن';
+  const label = collapsed ? 'نمایش' : 'بستن';
+  const tx = els.btnToggleLog.querySelector('.log-tx');
+  const ic = els.btnToggleLog.querySelector('.log-ic');
+  if (tx) tx.textContent = label; else els.btnToggleLog.textContent = label;
+  if (ic) ic.textContent = collapsed ? '▴' : '▾';
+  const full = collapsed ? 'نمایش لاگ' : 'بستن لاگ';
+  els.btnToggleLog.title = full;
+  els.btnToggleLog.setAttribute('aria-label', full);
   const splitter=document.getElementById('log-splitter');
   if(splitter) splitter.style.display = collapsed ? 'none' : 'flex';
   Storage.saveSettings({ logCollapsed: collapsed });

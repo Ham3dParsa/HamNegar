@@ -142,6 +142,7 @@ button:active{transform:scale(.97)}
 #log-search-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #log-search-toggle[aria-expanded="true"]{border-color:var(--accent);box-shadow:0 0 0 2px rgba(26,115,232,.25)}
 #log-search-wrap{display:none;position:absolute;inset-inline:8px;top:8px;z-index:5;align-items:center;gap:6px;background:var(--surface2);padding:4px;border-radius:12px}
+/* T2 note: overlay containing block is #log-header via position:sticky — never set it to static. */
 #log-search-wrap.open{display:flex}
 #log-search{flex:1;min-width:0;background:#111113;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:999px;font-size:12px;outline:none}
 #log-search:focus{border-color:var(--accent)}
@@ -490,13 +491,20 @@ body{overflow-x:clip}
 @media(max-width:768px){
 .status-bar{font-size:12px}
 }
+#log-header .log-ic{display:none}
 @media(max-width:640px){
-/* T1/2: single-row log header — title (ellipsis) + scrollable filter strip + actions; search is overlay (0px) */
-#log-header{flex-wrap:nowrap;padding:6px 8px;gap:6px}
+/* T2/2 (#90): two-row compact header — row1 single-row (ellipsized title + icon actions),
+   row2 scrollable filter strip (no wrap). Search stays a 0px overlay. */
+#log-header{flex-wrap:wrap;padding:4px 8px 4px;gap:2px 6px;overflow:visible}
+#log-header>b{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #log-header>div[style]{flex:0 0 auto;min-width:0;flex-wrap:nowrap}
-#log-header .log-filters{flex:1 1 auto;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-#log-header .log-filters::-webkit-scrollbar{display:none}
 #log-actions{flex:0 0 auto;flex-wrap:nowrap}
+#log-actions .btn-ghost{width:44px;height:44px;min-width:44px;min-height:44px;padding:0;font-size:18px;display:inline-flex;align-items:center;justify-content:center}
+#log-actions .log-tx{display:none}
+#log-actions .log-ic{display:inline;line-height:1}
+#log-header .log-filters{flex:1 1 100%;order:3;min-width:0;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding:1px 0 3px}
+#log-header .log-filters::-webkit-scrollbar{display:none}
+#log-header .log-filter{flex:0 0 auto;padding:6px 12px;min-height:28px;font-size:12px}
 #log-search-toggle{margin:0}
 .wave-cards{grid-template-columns:minmax(0,1fr)}
 }
@@ -768,12 +776,7 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
    fits 360 without ellipsis; nowrap+hidden stays as a guard only. */
 #stt-progress .chain-step{min-width:0}
 @media(max-width:640px){
-  /* Log header to ONE row: nowrap + inline scroll instead of the 100%-width
-     search row, so #log-body keeps ≥5 lines at 390 (panel is 180px). */
-  #log-header{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex-shrink:0}
-  #log-header::-webkit-scrollbar{display:none}
-  #log-header>b{flex:0 0 auto}
-  #log-header .log-filters{flex:0 0 auto;flex-wrap:nowrap}
-  #log-search{flex:0 0 84px;min-width:64px;max-width:120px;width:auto}
-  #log-header #log-actions{flex:0 0 auto;flex-wrap:nowrap}
+  /* Superseded by T2/2 (#90) two-row compact header above — single-row rule retired
+     (it squeezed title+filters+actions into one scrollable row). Kept empty to avoid
+     specificity fights with the T2 block. */
 }
