@@ -593,7 +593,7 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
   }
 }
 /* ===== ticket/log-splitter-bottom — splitter belongs BELOW #log-panel (order:4), not atop the column ===== */
-#log-splitter{order:5;position:sticky;bottom:0;z-index:5}
+#log-splitter{order:5}
 /* ===== ticket/45-list-behavior — fixed-count internal scroll lists + sheet chrome (append-only; CSS-only caps, no JS measuring, no virtualization) ===== */
 #models-list{max-height:calc(8 * 52px + 7 * 8px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:#3f4045 transparent}
 #models-list::-webkit-scrollbar{width:8px;height:8px}
