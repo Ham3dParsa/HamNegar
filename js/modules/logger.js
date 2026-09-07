@@ -19,7 +19,39 @@ let progressSteps = null;
 let progressChain = [];
 let progressIndex = 0;
 
-function progressEntryLabel(id) { return id === 'groq' ? 'Groq' : id; }
+// Display names for STT engines (ticket/stt-steps-readable, issue #91 T2):
+// raw chain ids (e.g. gemini-flash-lite-latest) never reach the progress UI.
+const STT_DISPLAY_NAMES = {
+  groq: 'Groq',
+  'gemini-flash-lite-latest': 'Flash-Lite',
+  'gemini-3.5-flash-lite': 'Flash-Lite 3.5',
+  'gemini-3.1-flash-lite': 'Flash-Lite 3.1',
+  'gemini-2.5-flash': 'Flash 2.5',
+  'gemini-2.0-flash': 'Flash 2.0',
+  'gemini-1.5-flash': 'Flash 1.5',
+  'gemini-flash-latest': 'Flash',
+  'groq-whisper-2': 'Groq Whisper 2',
+};
+const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+function faNum(n) { return String(n).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]); }
+function progressEntryLabel(id) {
+  if (Object.prototype.hasOwnProperty.call(STT_DISPLAY_NAMES, id)) return STT_DISPLAY_NAMES[id];
+  return String(id ?? '').replace(/^gemini-/i, '').replace(/-/g, ' ').trim() || '—';
+}
+// setProgress labels are built in transcription.js (call shapes frozen) — humanize
+// any raw id embedded in the label here so the head row never shows a raw id.
+function humanizeLabel(text) {
+  let out = String(text ?? '');
+  for (const [id, name] of Object.entries(STT_DISPLAY_NAMES).sort((a, b) => b[0].length - a[0].length)) {
+    if (id === 'groq') {
+      // standalone 'groq' only — never inside 'groq-whisper-2' (handled above by length order)
+      out = out.replace(/(?<![-\w])groq(?![-\w])/g, name);
+    } else if (out.includes(id)) {
+      out = out.split(id).join(name);
+    }
+  }
+  return out;
+}
 function renderProgressWindow() {
   if (!progressSteps) progressSteps = document.getElementById('progress-steps');
   if (!progressSteps) return;
@@ -35,7 +67,7 @@ function renderProgressWindow() {
     li.dataset.idx = String(idx);
     const rank = document.createElement('span');
     rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
-    rank.textContent = String(idx + 1);
+    rank.textContent = faNum(idx + 1);
     const label = document.createElement('span');
     label.textContent = progressChain[idx].label;
     label.style.fontSize = '12px';
@@ -122,9 +154,9 @@ export const Logger = {
     if (!progressStep) progressStep = document.getElementById('progress-step');
     if (!progressSteps) progressSteps = document.getElementById('progress-steps');
     progressEl.hidden = false;
-    if (progressLabel && label) progressLabel.textContent = label;
+    if (progressLabel && label) progressLabel.textContent = humanizeLabel(label);
     if (progressStep && typeof index === 'number' && typeof total === 'number') {
-      progressStep.textContent = `قدم ${index + 1} از ${total}`;
+      progressStep.textContent = `قدم ${faNum(index + 1)} از ${faNum(total)}`;
       if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
       if (progressBar) progressBar.parentElement.setAttribute('aria-valuenow', String(Math.round(((index + 1) / total) * 100)));
     }

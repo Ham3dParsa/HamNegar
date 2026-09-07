@@ -753,3 +753,27 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
   #shortcuts-close{flex:1;width:100%;min-height:48px}
 }
 @media(prefers-reduced-motion:reduce){#shortcuts-dialog .sc-acc,#shortcuts-dialog .sc-table tr{transition:none !important;animation:none !important}}
+/* ===== ticket/stt-steps-readable (issue #91 T2) — STT steps legible at 360 (append-only) ===== */
+/* Panel was the ONLY shrinkable flex child of .main → clipped to 18px of 46px content.
+   Floor it, guard the bar, keep the 110px cap + hidden from compact-live-progress. */
+#stt-progress{flex-shrink:0;min-height:96px;max-height:110px;overflow:hidden}
+#stt-progress .stt-progress__steps{flex-shrink:0}
+/* Head 13px; counter never shrinks/wraps (always visible), label truncates instead. */
+.stt-progress__head{font-size:13px;gap:8px}
+#progress-label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#progress-step{flex:0 0 auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* Bar shrink guard: stays 4px even when the column squeezes. */
+.stt-progress__bar{flex-shrink:0;min-height:4px}
+/* Pills carry short display names (Groq / Flash-Lite 3.5) so the max-2 window
+   fits 360 without ellipsis; nowrap+hidden stays as a guard only. */
+#stt-progress .chain-step{min-width:0}
+@media(max-width:640px){
+  /* Log header to ONE row: nowrap + inline scroll instead of the 100%-width
+     search row, so #log-body keeps ≥5 lines at 390 (panel is 180px). */
+  #log-header{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;flex-shrink:0}
+  #log-header::-webkit-scrollbar{display:none}
+  #log-header>b{flex:0 0 auto}
+  #log-header .log-filters{flex:0 0 auto;flex-wrap:nowrap}
+  #log-search{flex:0 0 84px;min-width:64px;max-width:120px;width:auto}
+  #log-header #log-actions{flex:0 0 auto;flex-wrap:nowrap}
+}
