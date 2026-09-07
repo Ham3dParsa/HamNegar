@@ -785,5 +785,10 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
    cbtn precedent: icon-only buttons; full FA name on hover via title, AT name via
    aria-label. Tap height stays ≥40px via the base .sbtn min-height; mobile padding untouched. */
 .sbtn{min-width:40px;justify-content:center}
-.sbtn .s-ic{font-size:17px;line-height:1}
+.sbtn .s-ic{font-size:17px;line-height:1;display:inline-grid;place-items:center}
+.sbtn .s-ic svg{width:19px;height:19px;display:block}
 .sbtn:hover{border-color:var(--accent)}
+/* ===== ticket/tool-icons-fix (hotfix #110 on #115) — distinct stagebar glyphs (append-only) =====
+   Emoji removed from 6x .sbtn; each action has its own stroke=currentColor metaphor
+   (simple=sparkle, advanced=sparkle+sliders, grammar=text+check, tr-quick=swap-arrows,
+   tr-panel=window+lines, raw=return+dot). Tap height still >=40px via base .sbtn. */

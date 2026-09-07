@@ -1,0 +1,23 @@
+[
+ {
+  "viewport": "360",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ]
+ },
+ {
+  "viewport": "390",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ]
+ },
+ {
+  "viewport": "1440",
+  "console": [
+   "warning: [warn] کلید تنظیم نشده — ⚙️ نوار پایین را بزن ",
+   "log: [info] هم‌نگار v0.6.21 (2026-09-07) آماده {hasRealtime: true, proto: http:, version: 0.6.21}"
+  ]
+ }
+]
