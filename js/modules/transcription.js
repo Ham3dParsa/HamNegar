@@ -11,7 +11,7 @@ import { Logger } from './logger.js';
 const ZEN_RESPONSES_URL = 'https://opencode.ai/zen/v1/responses';
 const ZEN_MODELS_URL = 'https://opencode.ai/zen/v1/models';
 
-function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
+function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',413:'ورودی طولانی (413)',429:'سهمیه پر شد (429)',500:'خطای سرور (500)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
   let u; try{ u = new URL(base); }catch{ throw Object.assign(new Error('BaseURL نامعتبر — باید https:// باشد'),{status:400}); }
   if(u.protocol!=='https:') throw Object.assign(new Error('BaseURL باید https باشد'),{status:400});
@@ -98,12 +98,18 @@ async function queryGemini(blob, model, externalSignal){
 
 // Polish adapters — dual provider (Groq OpenAI-compatible + OpenRouter + Gemini fallback)
 // Qwen reasoning models leak <think> into content unless reasoning_format:hidden — strip defensively + length guard
+// Ticket 21 (chunk guard): the unclosed-think strip below is narrowed — an
+// unclosed trailing block is removed only when usable text precedes it, so a
+// length-cut reply that lives entirely inside <think> is never reduced to ''.
 function cleanPolishOutput(raw){
   if(!raw) return '';
   let out = String(raw);
   out = out.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-  // unclosed trailing think block (stream cut)
-  out = out.replace(/<think>[\s\S]*$/gi, '').replace(/<thinking>[\s\S]*$/gi, '');
+  // unclosed trailing think block (stream cut): strip only with a usable prefix
+  for(const re of [/<think>[\s\S]*$/gi, /<thinking>[\s\S]*$/gi]){
+    const stripped = out.replace(re, '');
+    if(stripped.trim()) out = stripped;
+  }
   return out.trim();
 }
 function validatePolishOutput(raw, text, model, layer = 'polish'){
@@ -115,6 +121,24 @@ function validatePolishOutput(raw, text, model, layer = 'polish'){
   return out;
 }
 const DEFAULT_POLISH_SYSTEM = `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`;
+
+// Ticket 21 (chunk guard): output budget scales with input length instead of a
+// fixed 2000 cap. Short inputs (<=1000 chars) still request exactly 2000, so
+// short-input behavior is byte-for-byte; longer inputs scale up to the model
+// ceiling instead of truncating mid-<think>.
+const POLISH_MIN_OUTPUT_TOKENS = 2000;
+const POLISH_MAX_OUTPUT_TOKENS = 8192;
+function polishOutputBudget(text){
+  const len = typeof text === 'string' ? text.length : String(text ?? '').length;
+  const scaled = Math.ceil(len * 1.5) + 500;
+  return Math.min(POLISH_MAX_OUTPUT_TOKENS, Math.max(POLISH_MIN_OUTPUT_TOKENS, scaled));
+}
+// Distinct length-cut error (status 413, never 500-empty): callers already map
+// typed errors to toast/status, and textChain keeps iterating the chain.
+function longInputError(layer = 'polish'){
+  const msg = layer === 'polish' ? 'متن طولانی است — ورودی را کوتاه‌تر کن' : `متن طولانی برای ${layer} — ورودی را کوتاه‌تر کن`;
+  return Object.assign(new Error(msg), { status: 413 });
+}
 
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
 // keys+bases, customs by id from Storage. Never logs key material — callers must not log the result.
@@ -140,7 +164,7 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
   assertTrustedBase(base, trusted);
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature:0.2, max_tokens:2000 };
+  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature:0.2, max_tokens:polishOutputBudget(text) };
   // Qwen thinking models: instruct mode, hide reasoning (gpt-oss does NOT support reasoning_format — skip there)
   if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
@@ -148,7 +172,9 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${providerId} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${providerId} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${providerId} ${layer} fail`,{status:res.status, model, base}); throw err; }
-  const j=await res.json(); Logger.log('debug',`${providerId} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''}); return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
+  const j=await res.json(); Logger.log('debug',`${providerId} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''});
+  if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${providerId} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
+  return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
 }
 async function queryPolishViaGemini(text, model, layer = 'polish', system = null){
   const { geminiKey: k } = Storage.getSettings();
@@ -158,12 +184,13 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
   const prompt = (system || `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; do not change the language, meaning or tone, do not explain, return ONLY the corrected text. If no correction is needed, return the input verbatim; never comment or apologize. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`) + `\nText:\n${text}`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
-    res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:2000}}),signal:ctrl.signal});
+    res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:polishOutputBudget(text)}}),signal:ctrl.signal});
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت Gemini ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه Gemini ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`Gemini ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
   Logger.log('debug',`Gemini ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  if(j.candidates?.[0]?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`Gemini ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(out, text, model, layer);
 }
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
