@@ -1,0 +1,59 @@
+{
+ "360x800": {
+  "stripH": 68,
+  "stripRectH": 68,
+  "stripHidden": false,
+  "stripClass": "rec-strip",
+  "waveIdle": null,
+  "hideChecked": false,
+  "pxChanging": false,
+  "starterStats": {
+   "ticks": 28,
+   "draws": 56
+  },
+  "borders": {
+   "recording": false,
+   "transcribing": false
+  },
+  "console_errors": [],
+  "viewport": "360x800"
+ },
+ "390x844": {
+  "stripH": 68,
+  "stripRectH": 68,
+  "stripHidden": false,
+  "stripClass": "rec-strip",
+  "waveIdle": null,
+  "hideChecked": false,
+  "pxChanging": false,
+  "starterStats": {
+   "ticks": 28,
+   "draws": 56
+  },
+  "borders": {
+   "recording": false,
+   "transcribing": false
+  },
+  "console_errors": [],
+  "viewport": "390x844"
+ },
+ "1440x900": {
+  "stripH": 68,
+  "stripRectH": 68,
+  "stripHidden": false,
+  "stripClass": "rec-strip",
+  "waveIdle": null,
+  "hideChecked": false,
+  "pxChanging": false,
+  "starterStats": {
+   "ticks": 23,
+   "draws": 92
+  },
+  "borders": {
+   "recording": false,
+   "transcribing": false
+  },
+  "console_errors": [],
+  "viewport": "1440x900"
+ }
+}

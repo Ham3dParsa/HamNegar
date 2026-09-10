@@ -59,6 +59,8 @@ button:active{transform:scale(.97)}
 .rec-strip.recording{border-color:var(--danger)}
 .rec-strip.transcribing{border-color:var(--accent)}
 .rec-strip canvas{width:100%;height:100%;display:block}
+.rec-strip.wave-hidden{height:0;min-height:0;margin-top:0;margin-bottom:0;padding-top:0;padding-bottom:0;border-width:0;overflow:hidden}
+.rec-strip.wave-hidden canvas{display:none}
 .chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);border-radius:999px;padding:7px 13px;font-size:13px;color:var(--muted)}
 .chip input{accent-color:var(--accent);width:16px;height:16px}
 .chip strong{color:var(--text);font-weight:600}

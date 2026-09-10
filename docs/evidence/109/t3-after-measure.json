@@ -1,0 +1,122 @@
+{
+ "360x800": {
+  "visible_baseline": {
+   "stripH": 68,
+   "hideChecked": false,
+   "waveIdle": null
+  },
+  "hidden": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "hideChecked": true,
+   "waveIdle": "0",
+   "starterTicksFrozen": true,
+   "starterTicks": [
+    18,
+    18
+   ],
+   "previewPxFrozen": true
+  },
+  "after_reload": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "waveIdle": "0",
+   "hideChecked": true
+  },
+  "reenabled": {
+   "stripH": 68,
+   "stripClass": "rec-strip",
+   "waveIdle": "1",
+   "recBorder": "rgb(234, 67, 53)",
+   "trBorder": "rgb(26, 115, 232)",
+   "starterTicksResumed": true,
+   "starterTicks": [
+    18,
+    31
+   ],
+   "borderMethod": "class added, read after 400ms settle (border-color transition .2s); verified on 390, same rules all viewports"
+  },
+  "console_errors": [],
+  "viewport": "360x800"
+ },
+ "390x844": {
+  "visible_baseline": {
+   "stripH": 68,
+   "hideChecked": false,
+   "waveIdle": null
+  },
+  "hidden": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "hideChecked": true,
+   "waveIdle": "0",
+   "starterTicksFrozen": true,
+   "starterTicks": [
+    18,
+    18
+   ],
+   "previewPxFrozen": true
+  },
+  "after_reload": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "waveIdle": "0",
+   "hideChecked": true
+  },
+  "reenabled": {
+   "stripH": 68,
+   "stripClass": "rec-strip",
+   "waveIdle": "1",
+   "recBorder": "rgb(234, 67, 53)",
+   "trBorder": "rgb(26, 115, 232)",
+   "starterTicksResumed": true,
+   "starterTicks": [
+    18,
+    31
+   ],
+   "borderMethod": "class added, read after 400ms settle (border-color transition .2s); verified on 390, same rules all viewports"
+  },
+  "console_errors": [],
+  "viewport": "390x844"
+ },
+ "1440x900": {
+  "visible_baseline": {
+   "stripH": 68,
+   "hideChecked": false,
+   "waveIdle": null
+  },
+  "hidden": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "hideChecked": true,
+   "waveIdle": "0",
+   "starterTicksFrozen": true,
+   "starterTicks": [
+    16,
+    16
+   ],
+   "previewPxFrozen": true
+  },
+  "after_reload": {
+   "stripH": 0,
+   "stripClass": "rec-strip wave-hidden",
+   "waveIdle": "0",
+   "hideChecked": true
+  },
+  "reenabled": {
+   "stripH": 68,
+   "stripClass": "rec-strip",
+   "waveIdle": "1",
+   "recBorder": "rgb(234, 67, 53)",
+   "trBorder": "rgb(26, 115, 232)",
+   "starterTicksResumed": true,
+   "starterTicks": [
+    14,
+    24
+   ],
+   "borderMethod": "class added, read after 400ms settle (border-color transition .2s); verified on 390, same rules all viewports"
+  },
+  "console_errors": [],
+  "viewport": "1440x900"
+ }
+}
