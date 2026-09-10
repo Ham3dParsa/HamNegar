@@ -340,8 +340,15 @@ button:active{transform:scale(.97)}
 .wave-item.muted{opacity:.55}
 .wave-item details summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;list-style:none}
 .wave-item details summary::-webkit-details-marker{display:none}
+/* #109 T4: native marker stays hidden — .wave-chev below is the explicit open/collapse affordance. */
+.wave-chev{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px 8px;font-size:13px;line-height:1.6;border-radius:8px;transition:transform .15s ease}
+.wave-chev:hover{color:var(--text);background:rgba(255,255,255,.06)}
+.wave-chev:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+/* RTL: ▾ = open; rotated 90° = ◂ (pointing inline-start) = closed. */
+.wave-item details:not([open])>summary .wave-chev{transform:rotate(90deg)}
+@media(prefers-reduced-motion:reduce){.wave-chev{transition:none}}
 .wave-dot{width:14px;height:14px;border-radius:50%;border:1px solid var(--border);flex:none}
-.wave-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:text}
+.wave-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
 .wave-title.dim{opacity:.6;text-decoration:line-through}
 .wave-rename{flex:none;border:none;background:transparent;color:var(--muted);cursor:pointer;padding:2px 6px;font-size:12px;border-radius:8px}
 .wave-rename:hover{color:var(--text);background:rgba(255,255,255,.06)}
@@ -351,6 +358,8 @@ button:active{transform:scale(.97)}
 .wave-tag{font-size:10px;font-weight:700;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:var(--muted);flex:none}
 .wave-tag.front{color:#cfe3ff;border-color:var(--accent)}
 .wave-tools{display:flex;gap:4px;margin-inline-start:auto}
+/* #109 T4 zone separation: move/delete are bordered surface buttons, visually
+   distinct from the ghost chevron (.wave-chev) + rename (.wave-rename) zone. */
 .wave-tools button{padding:4px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;min-width:0;min-height:0}
 .wave-tools button:disabled{opacity:.35;cursor:default}
 .wave-body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border)}
