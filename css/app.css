@@ -284,7 +284,7 @@ button:active{transform:scale(.97)}
 /* --- wave tab only (ticket/50): sticky preview, starter cards, stack rows --- */
 #panel-wave{display:flex;flex-direction:column;gap:10px;min-width:0}
 #panel-wave[hidden]{display:none}
-.wave-sticky{position:sticky;top:0;z-index:5;background:#15161a;border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.45)}
+.wave-sticky{position:sticky;top:56px;z-index:5;background:#15161a;border:1px solid var(--border);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;box-shadow:0 4px 18px rgba(0,0,0,.45)}
 .wave-preview-wrap{height:200px;max-height:36vh;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
 .wave-preview-wrap canvas{width:100%;height:100%;display:block}
 .wave-sticky-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}
