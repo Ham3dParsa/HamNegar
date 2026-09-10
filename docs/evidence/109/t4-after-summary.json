@@ -1,0 +1,70 @@
+{
+  "tag": "after",
+  "viewports": {
+    "360": {
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "chevron": true,
+      "tests": {
+        "titleTap": {
+          "openBefore": true,
+          "openAfter": false,
+          "toggled": true,
+          "renameInputAppeared": false
+        },
+        "chevTap": {
+          "openBefore": false,
+          "openAfter": true,
+          "toggled": true
+        },
+        "renameEsc": {
+          "inputOpened": true,
+          "escClosed": true
+        }
+      }
+    },
+    "390": {
+      "consoleErrors": [],
+      "chevron": true,
+      "tests": {
+        "titleTap": {
+          "openBefore": true,
+          "openAfter": false,
+          "toggled": true,
+          "renameInputAppeared": false
+        },
+        "chevTap": {
+          "openBefore": false,
+          "openAfter": true,
+          "toggled": true
+        },
+        "renameEsc": {
+          "inputOpened": true,
+          "escClosed": true
+        }
+      }
+    },
+    "1440": {
+      "consoleErrors": [],
+      "chevron": true,
+      "tests": {
+        "titleTap": {
+          "openBefore": true,
+          "openAfter": false,
+          "toggled": true,
+          "renameInputAppeared": false
+        },
+        "chevTap": {
+          "openBefore": false,
+          "openAfter": true,
+          "toggled": true
+        },
+        "renameEsc": {
+          "inputOpened": true,
+          "escClosed": true
+        }
+      }
+    }
+  }
+}

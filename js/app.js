@@ -1301,7 +1301,15 @@ function waveRenderList(){
     row.className = 'wave-item' + (wv.mute ? ' muted' : '');
     const det = document.createElement('details');
     det.open = waveOpenIds.has(wv.id);
-    det.addEventListener('toggle', () => { det.open ? waveOpenIds.add(wv.id) : waveOpenIds.delete(wv.id); });
+    // #109 T4: explicit chevron affordance — native summary marker stays hidden
+    // (css), this button is the visible open/collapse control.
+    const chev = document.createElement('button');
+    chev.type = 'button'; chev.className = 'wave-chev'; chev.textContent = '▾';
+    chev.title = 'باز/بسته';
+    chev.setAttribute('aria-label', 'باز/بسته ' + waveName(wv, idx));
+    chev.setAttribute('aria-expanded', String(det.open));
+    chev.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); det.open = !det.open; });
+    det.addEventListener('toggle', () => { det.open ? waveOpenIds.add(wv.id) : waveOpenIds.delete(wv.id); chev.setAttribute('aria-expanded', String(det.open)); });
     const sum = document.createElement('summary');
     const dot = document.createElement('span');
     dot.className = 'wave-dot';
@@ -1310,7 +1318,7 @@ function waveRenderList(){
     title.className = 'wave-title' + (wv.mute ? ' dim' : '');
     const paintTitle = () => {
       title.textContent = `${waveName(wv, idx)} — ${WAVE_FA.types[wv.type]} · ${WAVE_FA.colorModes[wv.colorMode]} · ${WAVE_FA.profiles[wv.profile || 'flat']}${wv.mute ? ' · بی‌صدا' : ''}`;
-      title.title = wv.mute ? 'بی‌صدا — برای فعال‌سازی روی 🔊 بزن' : 'برای تغییر نام کلیک کن یا ✎ را بزن';
+      title.title = wv.mute ? 'بی‌صدا — برای فعال‌سازی روی 🔊 بزن' : 'برای باز/بسته کلیک کن؛ تغییر نام با ✎';
     };
     paintTitle();
     const muteBtn = document.createElement('button');
@@ -1331,35 +1339,37 @@ function waveRenderList(){
       const inp = document.createElement('input');
       inp.className = 'wave-name-input'; inp.type = 'text'; inp.value = waveName(wv, idx); inp.maxLength = 24; inp.dir = 'auto';
       inp.setAttribute('aria-label', 'نام موج');
-      title.style.display = 'none'; rn.style.display = 'none';
+      title.style.display = 'none'; rn.style.display = 'none'; chev.style.display = 'none';
       sum.insertBefore(inp, tag);
       inp.focus(); inp.select();
       let done = false;
       const commit = ok => {
         if (done) return; done = true;
         if (ok) { wv.name = inp.value.trim().slice(0, 24) || ''; paintTitle(); wavePersist(); }
-        inp.remove(); title.style.display = ''; rn.style.display = '';
+        inp.remove(); title.style.display = ''; rn.style.display = ''; chev.style.display = '';
       };
       inp.addEventListener('click', ev => ev.stopPropagation());
       inp.addEventListener('pointerdown', ev => ev.stopPropagation());
       inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter'){ ev.preventDefault(); commit(true); } else if (ev.key === 'Escape'){ ev.preventDefault(); commit(false); } }); // consume: rename owns Enter/Esc (ticket/2x)
       inp.addEventListener('blur', () => commit(true));
     };
-    title.addEventListener('click', startRename);
+    // #109 T4: title tap toggles open/collapse ONLY — never starts rename.
+    // preventDefault avoids the native summary double-toggle; det.open flips once.
+    title.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); det.open = !det.open; });
     rn.addEventListener('click', startRename);
     const tag = document.createElement('span');
     tag.className = 'wave-tag' + (idx === 0 ? ' front' : '');
     tag.textContent = idx === 0 ? 'بالا · رو/جلو' : (idx === waveCfg.waves.length - 1 ? 'پایین · پشت/زیر' : 'میانی');
     const tools = document.createElement('span');
     tools.className = 'wave-tools';
-    const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'انتقال به رو (جلوتر)'; up.disabled = idx === 0;
+    const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'انتقال به رو (جلوتر)'; up.setAttribute('aria-label', 'انتقال به رو ' + waveName(wv, idx)); up.disabled = idx === 0;
     up.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx - 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx - 1]]; wavePersist(); waveRenderList(); });
-    const dn = document.createElement('button'); dn.type = 'button'; dn.textContent = '↓'; dn.title = 'انتقال به پشت (عقب‌تر)'; dn.disabled = idx === waveCfg.waves.length - 1;
+    const dn = document.createElement('button'); dn.type = 'button'; dn.textContent = '↓'; dn.title = 'انتقال به پشت (عقب‌تر)'; dn.setAttribute('aria-label', 'انتقال به پشت ' + waveName(wv, idx)); dn.disabled = idx === waveCfg.waves.length - 1;
     dn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx + 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx + 1]]; wavePersist(); waveRenderList(); });
-    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.title = 'حذف'; del.disabled = waveCfg.waves.length <= 1;
+    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.title = 'حذف'; del.setAttribute('aria-label', 'حذف ' + waveName(wv, idx)); del.disabled = waveCfg.waves.length <= 1;
     del.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); waveOpenIds.delete(wv.id); waveAdvIds.delete(wv.id); waveCfg.waves.splice(idx, 1); wavePersist(); waveRenderList(); });
     tools.append(up, dn, del);
-    sum.append(dot, title, rn, muteBtn, tag, tools);
+    sum.append(chev, dot, title, rn, muteBtn, tag, tools);
     det.appendChild(sum);
     const body = document.createElement('div');
     body.className = 'wave-body';
