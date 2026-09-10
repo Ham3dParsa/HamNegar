@@ -7,9 +7,14 @@ on:
 
 jobs:
   opencode:
+    # Bot-loop guard: bot's own review comment contains an opencode.ai link
+    # (substring "/opencode"), so explicitly skip any [bot] actor even if the
+    # body matches /oc or /opencode (seen on PR #127/#128).
     if: |-
       (contains(github.event.comment.body, '/oc') ||
         contains(github.event.comment.body, '/opencode')) &&
+      github.actor != 'opencode-agent[bot]' &&
+      !endsWith(github.actor, '[bot]') &&
       (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'COLLABORATOR' ||
         github.event.comment.author_association == 'MEMBER')

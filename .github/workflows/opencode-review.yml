@@ -17,10 +17,16 @@ permissions:
 jobs:
   review:
     # Rule 1 & 4: only ready PRs, skip bots & forks (secrets not passed on forks)
+    # Bot-loop guard: review pushes an APPROVED co-authored commit which
+    # re-triggers synchronize with actor opencode-agent[bot]; without this
+    # the 2nd run fails with "does not have write permissions" (PR #127/#128).
     if: |
       github.event.pull_request.draft == false &&
       github.actor != 'dependabot[bot]' &&
       github.actor != 'renovate[bot]' &&
+      github.actor != 'opencode-agent[bot]' &&
+      github.actor != 'kilo-code-bot[bot]' &&
+      !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
