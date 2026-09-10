@@ -1069,6 +1069,11 @@ $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainSt
 // --- wave tab (ticket/50; seam: Storage.getWave/saveWave + wave renderer; main rec strip shares the stack via mainWaveSync) ---
 let waveCfg = Storage.getWave();
 let waveRenderer = null, waveInit = false, waveFakeOn = true;
+// T3 (#109): global wave kill-switch reuses the persisted waveIdle flag (PR #113,
+// read-only get/set — no storage.js change). waveIdle=true means animation allowed,
+// so the «hide» checkbox is its inverse: checked → saveWaveIdle(false). Default
+// visible (waveIdle absent → true), reduced-motion stays independent.
+let waveHidden = !Storage.getWaveIdle();
 let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowTimer = null;
 let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
 let waveAdvIds = new Set();
@@ -1201,6 +1206,7 @@ function waveStarterVis() {
     waveStarterLive.raf = 0;
     return;
   }
+  if (waveHidden) return; // T3 (#109): kill-switch — never resume starter loops while hidden
   if (waveStarterLive.items.length && !waveStarterLive.raf &&
     !matchMedia('(prefers-reduced-motion: reduce)').matches) {
     waveStarterLive.last = performance.now();
@@ -1229,14 +1235,14 @@ function waveStarterAttach() {
     try {
       renderer = createWaveRenderer(cvs[i]);
       renderer.setFakeEnabled(true);
-      if (reduced) {
+      if (reduced || waveHidden) { // T3 (#109): hidden → static thumb, no loop (reduced-motion untouched)
         renderer.setConfig({ ...waveCfg, waves, starterId: s.id });
         renderer.renderOnce();
       }
     } catch { renderer = null; }
     return { id: s.id, waves, renderer, cv: cvs[i], visible: true };
   });
-  if (!reduced) {
+  if (!reduced && !waveHidden) {
     try {
       waveStarterLive.io = new IntersectionObserver(es => {
         es.forEach(e => {
@@ -1484,6 +1490,8 @@ function waveSync(){
   if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
   const ft = $('wave-fake-toggle');
   if (ft) ft.textContent = waveFakeOn ? '⏺ مصنوعی: روشن' : '⏺ مصنوعی: خاموش';
+  const hb = $('wave-hide');
+  if (hb) hb.checked = waveHidden; // T3 (#109): persisted kill-switch (inverse of waveIdle)
   const mt = $('wave-mic-test');
   if (mt) mt.textContent = waveMicStream ? '⏹ توقف میکروفون' : '🎤 تست با صدای من';
 }
@@ -1509,6 +1517,11 @@ function waveEnsure(){
   waveRenderer.setConfig(waveCfg);
   waveRenderer.setFakeEnabled(waveFakeOn);
   $('wave-aurora')?.addEventListener('change', e => { waveCfg.aurora.on = e.target.checked; wavePersist(); });
+  $('wave-hide')?.addEventListener('change', e => { // T3 (#109): persisted kill-switch
+    waveHidden = !!e.target.checked;
+    try { Storage.saveWaveIdle(!waveHidden); } catch {}
+    waveKillApply();
+  });
   $('wave-add')?.addEventListener('click', () => {
     if (waveCfg.waves.length >= 5) return;
     const pal = ['#8ab4f8', '#5eead4', '#c4b5fd', '#f6b17a', '#f9a8d4'];
@@ -1599,8 +1612,40 @@ function waveMicStop(){
     } catch {}
   }
 }
-function wavePrevStart(){ try { waveRenderer?.start(); } catch {} }
+function wavePrevStart(){ try { if (!waveHidden) waveRenderer?.start(); } catch {} } // T3 (#109): hidden → no preview loop
 function wavePrevStop(){ try { waveRenderer?.stop(); } catch {} }
+// T3 (#109): global kill-switch — hides #rec-strip to 0 height and stops every
+// wave loop (main strip + tab preview + starter thumbs). Reduced-motion is
+// independent (its static-frame path is untouched); borders re-assert via syncRecStrip.
+function waveKillApply(){
+  const strip = $('rec-strip');
+  if (strip) {
+    strip.classList.toggle('wave-hidden', waveHidden);
+    strip.setAttribute('aria-hidden', waveHidden ? 'true' : 'false');
+  }
+  const cb = $('wave-hide');
+  if (cb) cb.checked = waveHidden;
+  if (waveHidden) {
+    try { mainWave?.stop(); } catch {}
+    try { waveRenderer?.stop(); } catch {}
+    if (waveStarterLive.raf) { try { cancelAnimationFrame(waveStarterLive.raf); } catch {} }
+    waveStarterLive.raf = 0;
+  } else {
+    // Re-enable: restore exactly the pre-existing loop states (wave.js itself
+    // draws the static line under reduced-motion — no special-casing here).
+    try { mainWave?.start(); } catch {}
+    if (els.panelWave && !els.panelWave.hidden && els.modal?.style.display === 'flex') {
+      try { waveRenderer?.start(); } catch {}
+      if (waveStarterLive.items.length && !waveStarterLive.raf && !document.hidden &&
+        !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        document.addEventListener('visibilitychange', waveStarterVis);
+        waveStarterLive.last = performance.now();
+        waveStarterLive.raf = requestAnimationFrame(waveStarterLoop);
+      }
+    }
+  }
+  syncRecStrip();
+}
 
 let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
 loadSettings();
@@ -1949,7 +1994,7 @@ function mainWaveInit(){
     mainWave = createWaveRenderer(els.wave);
     mainWave.setConfig(Storage.getWave());
     mainWave.setFakeEnabled(true);
-    mainWave.start();
+    if (!waveHidden) mainWave.start(); // T3 (#109): hidden → strip stays stopped until re-enabled
   }catch{ mainWave = null; }
 }
 function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); }catch{} syncRecStrip(); }
@@ -2616,6 +2661,7 @@ const GUIDE = {
     { id:'g-polishchain', title:'زنجیرهٔ پالیش', body:'ترتیب ویرایشگرهای فارسی؛ اولین مدلِ دارای کلید جواب می‌دهد.', ref:'polish-chain' },
     { id:'g-keys', title:'کلیدهای ارائه‌دهنده', body:'کلید Groq (با gsk_) و Google (با AQ.) را در کارت خود بگذار و «تست» بزن.', ref:'provider-drawer' },
     { id:'g-wavehygiene', title:'تنظیمات مرده موج', body:'ضخامت فقط ۶ نوع خطی، شکل/تعداد/فاصله فقط ستون‌ها، رنگ ۲ فقط گرادیان، ته‌رنگ فقط با aurora روشن؛ حساسیت هر موج گین پیش‌نمایش است نه گیت.', ref:'panel-wave' },
+    { id:'g-wavehide', title:'پنهان‌سازی انیمیشن صدا', body:'نوار موج را به ارتفاع صفر می‌برد و همه حلقه‌های موج (نوار، پیش‌نمایش، استارترها) را می‌خواباند؛ با همان تیک برمی‌گردد و روی دیسک می‌ماند. حاشیه‌های ضبط/رونویسی جدا هستند.', ref:'wave-hide' },
   ],
   quota: [
     { id:'g-quota', title:'سهمیه امروز', body:'روی نوار «سهمیه امروز» بزن تا جزئیات هر مدل باز شود: مصرف امروز در برابر سقف روزانه.', ref:'quota-toggle' },
@@ -2916,6 +2962,7 @@ stageBarApplyVisibility();
 renderStageModelOptions();
 updateStageScope();
 mainWaveInit();
+waveKillApply(); // T3 (#109): apply persisted kill-switch on load (hide + stop, or show)
 const verEl = document.getElementById('settings-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
 Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
