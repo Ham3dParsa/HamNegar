@@ -1,0 +1,47 @@
+{
+ "360": {
+  "inPipeline": true,
+  "parentId": "panel-pipeline",
+  "rectTop": 121,
+  "rectH": 251,
+  "pipeHidden": false,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ },
+ "390": {
+  "inPipeline": true,
+  "parentId": "panel-pipeline",
+  "rectTop": 122.765625,
+  "rectH": 251,
+  "pipeHidden": false,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ },
+ "1440": {
+  "inPipeline": true,
+  "parentId": "panel-pipeline",
+  "rectTop": 127,
+  "rectH": 251,
+  "pipeHidden": false,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ }
+}
