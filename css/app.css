@@ -836,3 +836,21 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 .behavior-strip .behavior-chips--main .chip{flex:0 0 auto;width:auto;max-width:70vw;padding:4px 10px;font-size:12px;border-radius:999px;white-space:nowrap}
 .behavior-strip .behavior-chips--main .chip input{width:18px;height:18px}
 .behavior-strip .behavior-chips--main .chip span{font-size:11px}
+/* ===== ticket/behavior-collapse (#110 T1d) — behavior collapsible by actionbar (append-only) =====
+   Owner verdict: strip above stagebar was badly placed. A single ≤40px arrow button
+   inside the actionbar toggles a small popover with the SAME 4 chips (same ids/labels).
+   Default collapsed every load (no persist — seam is index/css/app.js only). */
+#behavior-toggle.behavior-toggle{width:36px;height:36px;min-width:36px;min-height:36px;font-size:20px;line-height:1}
+#behavior-toggle .beh-chev{display:block;transform:translateY(-1px)}
+.behavior-pop{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:140;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px;box-shadow:var(--glass-shadow,0 8px 30px rgba(0,0,0,.25));max-width:min(94vw,540px)}
+.behavior-pop[hidden]{display:none}
+.behavior-pop .behavior-chips--main{flex-direction:row;flex-wrap:wrap;gap:6px}
+.behavior-pop .behavior-chips--main .chip{flex:0 0 auto;width:auto;padding:4px 10px;font-size:12px;border-radius:999px;white-space:nowrap}
+.behavior-pop .behavior-chips--main .chip input{width:18px;height:18px}
+.behavior-pop .behavior-chips--main .chip span{font-size:11px}
+@media(max-width:420px){.behavior-pop{bottom:calc(132px + env(safe-area-inset-bottom,0px))}}
+@media(min-width:421px){
+  /* desktop island is capped at 540px — 8 in-flow buttons need 570px at old
+     rhythm, so tighten gap/padding just enough (570→530px, zero x-scroll) */
+  .actionbar:has(#behavior-toggle){gap:10px;padding-inline:12px}
+}
