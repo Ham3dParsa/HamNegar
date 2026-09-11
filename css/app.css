@@ -73,6 +73,10 @@ button:active{transform:scale(.97)}
 #status-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50vw;font-size:13px}
 .live-badge{display:none;align-items:center;gap:6px;background:var(--danger);color:#fff;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;animation:pulse 1s infinite}
 .live-badge.on{display:inline-flex}
+#live-preview{display:none;background:linear-gradient(135deg,#1e1f22,#26282c);border:1px dashed var(--accent);border-radius:12px;padding:10px 14px;font-size:16px;line-height:1.8;color:var(--accent2);min-height:44px}
+#live-preview.on{display:block}
+#live-preview span.final{opacity:1}
+#live-preview span.interim{opacity:.6;border-bottom:2px dotted var(--accent2)}
 #output{background:transparent;border:none;color:var(--text);padding:16px;font-size:17px;line-height:1.9;outline:none;width:100%;height:auto;min-height:120px;max-height:60vh;overflow-y:auto;resize:vertical;display:block;font-family:inherit}
 #output:focus{box-shadow:inset 0 0 0 2px rgba(26,115,232,.35)}
 .tcard{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;flex-shrink:0}
