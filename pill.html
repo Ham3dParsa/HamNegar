@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>هم‌نگار — قرص شناور</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="pill.css">
+</head>
+<body>
+<div id="file-warning" hidden>⚠️ با <code>file://</code> باز شده — روی <code>localhost</code> اجرا کن: <code>python -m http.server</code></div>
+<main id="pill-stage" aria-label="قرص شناور هم‌نگار">
+  <div id="pill-wrap">
+    <div id="pill-row">
+      <button id="pill" data-state="idle" aria-label="میکروفون — شروع ضبط" title="ضبط (M)">
+        <canvas id="pill-wave" aria-hidden="true"></canvas>
+        <svg class="mic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+        <svg class="stop-sq" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+        <span class="pulse-ring" aria-hidden="true"></span>
+      </button>
+      <button id="pill-cancel" hidden title="لغو (Esc)" aria-label="لغو ضبط">✕</button>
+    </div>
+    <div id="pill-under">
+      <span id="pill-timer" data-timer hidden>۰۰:۰۰</span>
+      <span id="pill-engine" title="موتور فعال">—</span>
+      <span id="pill-quota-dot" class="dot" title="سهمیه امروز"></span>
+    </div>
+    <section id="pill-bubble" hidden aria-live="polite" aria-label="نتیجه رونویسی">
+      <p id="pill-text" dir="auto"></p>
+      <div id="pill-bubble-row">
+        <button id="pill-copy" type="button">کپی</button>
+        <span id="pill-status" role="status"></span>
+      </div>
+    </section>
+    <p id="pill-hint">کلیک: ضبط • <b>M</b>: میک • <b>H</b>: پنهان • <b>Esc</b>: لغو • <span id="pill-shell">وب</span></p>
+  </div>
+  <button id="pill-show" hidden title="نمایش قرص (H)" aria-label="نمایش قرص">🎤</button>
+</main>
+<div id="pill-toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/modules/pill.js"></script>
+</body>
+</html>
