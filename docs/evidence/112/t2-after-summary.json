@@ -1,0 +1,740 @@
+{
+ "360": {
+  "stage": {
+   "sw": 318,
+   "cw": 318,
+   "rows": [
+    0,
+    387,
+    433
+   ],
+   "wrap": "wrap",
+   "overflowX": "visible",
+   "scopeDisplay": "none",
+   "rowH": 99
+  },
+  "stage_hidden_tail": 0,
+  "act": {
+   "sw": 326,
+   "cw": 326,
+   "wrap": "wrap",
+   "overflowX": "visible"
+  },
+  "act_hidden_tail": 0,
+  "stage_vis": {
+   "#stage-simple": {
+    "x": 286,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-advanced": {
+    "x": 237,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-grammar": {
+    "x": 188,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-quick": {
+    "x": 139,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-panel": {
+    "x": 90,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-raw": {
+    "x": 41,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-settings summary": {
+    "x": 278.765625,
+    "y": 433,
+    "w": 39.234375,
+    "h": 37,
+    "hidden": false
+   },
+   "#stage-scope": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0,
+    "hidden": true
+   }
+  },
+  "act_vis": {
+   "#btn-copy": {
+    "x": 274.578125,
+    "y": 621.59375,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-clear": {
+    "x": 228.578125,
+    "y": 621.59375,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-mic": {
+    "x": 155.78125,
+    "y": 608.203125,
+    "w": 64.796875,
+    "h": 64.796875,
+    "hidden": false
+   },
+   "#mic-timer": {
+    "x": 93.421875,
+    "y": 628.59375,
+    "w": 54.359375,
+    "h": 24,
+    "hidden": false
+   },
+   "#btn-cancel-stt": {
+    "x": 47.421875,
+    "y": 621.59375,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-undo": {
+    "x": 230,
+    "y": 681,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-redo": {
+    "x": 184,
+    "y": 681,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-settings": {
+    "x": 138,
+    "y": 681,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   },
+   "#btn-shortcuts": {
+    "x": 92,
+    "y": 681,
+    "w": 38,
+    "h": 38,
+    "hidden": false
+   }
+  },
+  "clip": {
+   "stage": {
+    "#stage-simple": {
+     "clipped": false,
+     "right": 329,
+     "rowRight": 339
+    },
+    "#stage-advanced": {
+     "clipped": false,
+     "right": 280,
+     "rowRight": 339
+    },
+    "#stage-grammar": {
+     "clipped": false,
+     "right": 231,
+     "rowRight": 339
+    },
+    "#stage-tr-quick": {
+     "clipped": false,
+     "right": 182,
+     "rowRight": 339
+    },
+    "#stage-tr-panel": {
+     "clipped": false,
+     "right": 133,
+     "rowRight": 339
+    },
+    "#stage-raw": {
+     "clipped": false,
+     "right": 84,
+     "rowRight": 339
+    },
+    "#stage-settings": {
+     "clipped": false,
+     "right": 327,
+     "rowRight": 339
+    },
+    "#stage-scope": {
+     "clipped": true,
+     "right": 0,
+     "rowRight": 339
+    }
+   },
+   "act": {
+    "#btn-copy": {
+     "clipped": false,
+     "right": 313,
+     "barRight": 344
+    },
+    "#btn-clear": {
+     "clipped": false,
+     "right": 267,
+     "barRight": 344
+    },
+    "#btn-mic": {
+     "clipped": false,
+     "right": 221,
+     "barRight": 344
+    },
+    "#mic-timer": {
+     "clipped": false,
+     "right": 148,
+     "barRight": 344
+    },
+    "#btn-cancel-stt": {
+     "clipped": false,
+     "right": 85,
+     "barRight": 344
+    },
+    "#btn-undo": {
+     "clipped": false,
+     "right": 268,
+     "barRight": 344
+    },
+    "#btn-redo": {
+     "clipped": false,
+     "right": 222,
+     "barRight": 344
+    },
+    "#btn-settings": {
+     "clipped": false,
+     "right": 176,
+     "barRight": 344
+    },
+    "#btn-shortcuts": {
+     "clipped": false,
+     "right": 130,
+     "barRight": 344
+    }
+   }
+  },
+  "taps": {
+   "#stage-simple": "ok",
+   "#stage-advanced": "ok",
+   "#stage-grammar": "ok",
+   "#stage-tr-quick": "ok",
+   "#stage-tr-panel": "ok",
+   "#stage-raw": "FAIL:Page.tap: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator(\"#stage-raw\")\n    - locator res"
+  },
+  "errors": []
+ },
+ "390": {
+  "stage": {
+   "sw": 348,
+   "cw": 348,
+   "rows": [
+    0,
+    387,
+    433
+   ],
+   "wrap": "wrap",
+   "overflowX": "visible",
+   "scopeDisplay": "none",
+   "rowH": 99
+  },
+  "stage_hidden_tail": 0,
+  "act": {
+   "sw": 356,
+   "cw": 356,
+   "wrap": "wrap",
+   "overflowX": "visible"
+  },
+  "act_hidden_tail": 0,
+  "stage_vis": {
+   "#stage-simple": {
+    "x": 316,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-advanced": {
+    "x": 267,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-grammar": {
+    "x": 218,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-quick": {
+    "x": 169,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-panel": {
+    "x": 120,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-raw": {
+    "x": 71,
+    "y": 387,
+    "w": 43,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-settings summary": {
+    "x": 308.765625,
+    "y": 433,
+    "w": 39.234375,
+    "h": 37,
+    "hidden": false
+   },
+   "#stage-scope": {
+    "x": 0,
+    "y": 0,
+    "w": 0,
+    "h": 0,
+    "hidden": true
+   }
+  },
+  "act_vis": {
+   "#btn-copy": {
+    "x": 318.21875,
+    "y": 718.5,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-clear": {
+    "x": 269.28125,
+    "y": 718.5,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-mic": {
+    "x": 191.09375,
+    "y": 703.875,
+    "w": 70.1875,
+    "h": 70.1875,
+    "hidden": false
+   },
+   "#mic-timer": {
+    "x": 128.734375,
+    "y": 726.96875,
+    "w": 54.359375,
+    "h": 24,
+    "hidden": false
+   },
+   "#btn-cancel-stt": {
+    "x": 79.796875,
+    "y": 718.5,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-undo": {
+    "x": 30.859375,
+    "y": 718.5,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-redo": {
+    "x": 223.46875,
+    "y": 782.0625,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-settings": {
+    "x": 174.53125,
+    "y": 782.0625,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   },
+   "#btn-shortcuts": {
+    "x": 125.59375,
+    "y": 782.0625,
+    "w": 40.9375,
+    "h": 40.9375,
+    "hidden": false
+   }
+  },
+  "clip": {
+   "stage": {
+    "#stage-simple": {
+     "clipped": false,
+     "right": 359,
+     "rowRight": 369
+    },
+    "#stage-advanced": {
+     "clipped": false,
+     "right": 310,
+     "rowRight": 369
+    },
+    "#stage-grammar": {
+     "clipped": false,
+     "right": 261,
+     "rowRight": 369
+    },
+    "#stage-tr-quick": {
+     "clipped": false,
+     "right": 212,
+     "rowRight": 369
+    },
+    "#stage-tr-panel": {
+     "clipped": false,
+     "right": 163,
+     "rowRight": 369
+    },
+    "#stage-raw": {
+     "clipped": false,
+     "right": 114,
+     "rowRight": 369
+    },
+    "#stage-settings": {
+     "clipped": false,
+     "right": 357,
+     "rowRight": 369
+    },
+    "#stage-scope": {
+     "clipped": true,
+     "right": 0,
+     "rowRight": 369
+    }
+   },
+   "act": {
+    "#btn-copy": {
+     "clipped": false,
+     "right": 359,
+     "barRight": 374
+    },
+    "#btn-clear": {
+     "clipped": false,
+     "right": 310,
+     "barRight": 374
+    },
+    "#btn-mic": {
+     "clipped": false,
+     "right": 261,
+     "barRight": 374
+    },
+    "#mic-timer": {
+     "clipped": false,
+     "right": 183,
+     "barRight": 374
+    },
+    "#btn-cancel-stt": {
+     "clipped": false,
+     "right": 121,
+     "barRight": 374
+    },
+    "#btn-undo": {
+     "clipped": false,
+     "right": 72,
+     "barRight": 374
+    },
+    "#btn-redo": {
+     "clipped": false,
+     "right": 264,
+     "barRight": 374
+    },
+    "#btn-settings": {
+     "clipped": false,
+     "right": 215,
+     "barRight": 374
+    },
+    "#btn-shortcuts": {
+     "clipped": false,
+     "right": 167,
+     "barRight": 374
+    }
+   }
+  },
+  "taps": {
+   "#stage-simple": "ok",
+   "#stage-advanced": "ok",
+   "#stage-grammar": "ok",
+   "#stage-tr-quick": "ok",
+   "#stage-tr-panel": "ok",
+   "#stage-raw": "FAIL:Page.tap: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator(\"#stage-raw\")\n    - locator res"
+  },
+  "errors": []
+ },
+ "1440": {
+  "stage": {
+   "sw": 1390,
+   "cw": 1390,
+   "rows": [
+    396,
+    398,
+    405
+   ],
+   "wrap": "nowrap",
+   "overflowX": "auto",
+   "scopeDisplay": "block",
+   "rowH": 56
+  },
+  "stage_hidden_tail": 0,
+  "act": {
+   "sw": 672,
+   "cw": 538,
+   "wrap": "nowrap",
+   "overflowX": "auto"
+  },
+  "act_hidden_tail": 134,
+  "stage_vis": {
+   "#stage-simple": {
+    "x": 1356,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-advanced": {
+    "x": 1301,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-grammar": {
+    "x": 1246,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-quick": {
+    "x": 1191,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-tr-panel": {
+    "x": 1136,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-raw": {
+    "x": 1081,
+    "y": 396.1875,
+    "w": 49,
+    "h": 40,
+    "hidden": false
+   },
+   "#stage-settings summary": {
+    "x": 1024.765625,
+    "y": 397.6875,
+    "w": 39.234375,
+    "h": 37,
+    "hidden": false
+   },
+   "#stage-scope": {
+    "x": 808.046875,
+    "y": 404.6875,
+    "w": 210.71875,
+    "h": 23,
+    "hidden": false
+   }
+  },
+  "act_vis": {
+   "#btn-copy": {
+    "x": 919,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-clear": {
+    "x": 853,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-mic": {
+    "x": 751,
+    "y": 789,
+    "w": 88,
+    "h": 88,
+    "hidden": false
+   },
+   "#mic-timer": {
+    "x": 664.671875,
+    "y": 817,
+    "w": 72.328125,
+    "h": 32,
+    "hidden": false
+   },
+   "#btn-cancel-stt": {
+    "x": 598.671875,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-undo": {
+    "x": 532.671875,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-redo": {
+    "x": 466.671875,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-settings": {
+    "x": 400.671875,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   },
+   "#btn-shortcuts": {
+    "x": 334.671875,
+    "y": 807,
+    "w": 52,
+    "h": 52,
+    "hidden": false
+   }
+  },
+  "clip": {
+   "stage": {
+    "#stage-simple": {
+     "clipped": false,
+     "right": 1405,
+     "rowRight": 1415
+    },
+    "#stage-advanced": {
+     "clipped": false,
+     "right": 1350,
+     "rowRight": 1415
+    },
+    "#stage-grammar": {
+     "clipped": false,
+     "right": 1295,
+     "rowRight": 1415
+    },
+    "#stage-tr-quick": {
+     "clipped": false,
+     "right": 1240,
+     "rowRight": 1415
+    },
+    "#stage-tr-panel": {
+     "clipped": false,
+     "right": 1185,
+     "rowRight": 1415
+    },
+    "#stage-raw": {
+     "clipped": false,
+     "right": 1130,
+     "rowRight": 1415
+    },
+    "#stage-settings": {
+     "clipped": false,
+     "right": 1073,
+     "rowRight": 1415
+    },
+    "#stage-scope": {
+     "clipped": false,
+     "right": 1019,
+     "rowRight": 1415
+    }
+   },
+   "act": {
+    "#btn-copy": {
+     "clipped": false,
+     "right": 971,
+     "barRight": 990
+    },
+    "#btn-clear": {
+     "clipped": false,
+     "right": 905,
+     "barRight": 990
+    },
+    "#btn-mic": {
+     "clipped": false,
+     "right": 839,
+     "barRight": 990
+    },
+    "#mic-timer": {
+     "clipped": false,
+     "right": 737,
+     "barRight": 990
+    },
+    "#btn-cancel-stt": {
+     "clipped": false,
+     "right": 651,
+     "barRight": 990
+    },
+    "#btn-undo": {
+     "clipped": false,
+     "right": 585,
+     "barRight": 990
+    },
+    "#btn-redo": {
+     "clipped": false,
+     "right": 519,
+     "barRight": 990
+    },
+    "#btn-settings": {
+     "clipped": true,
+     "right": 453,
+     "barRight": 990
+    },
+    "#btn-shortcuts": {
+     "clipped": true,
+     "right": 387,
+     "barRight": 990
+    }
+   }
+  },
+  "taps": {
+   "#stage-simple": "ok",
+   "#stage-advanced": "ok",
+   "#stage-grammar": "ok",
+   "#stage-tr-quick": "ok",
+   "#stage-tr-panel": "ok",
+   "#stage-raw": "FAIL:Page.click: Timeout 3000ms exceeded.\nCall log:\n  - waiting for locator(\"#stage-raw\")\n    - locator r"
+  },
+  "errors": []
+ }
+}
