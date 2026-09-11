@@ -760,6 +760,9 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
 /* ===== ticket/transcript-touch (issue #93) — transcript touch resize (append-only) ===== */
 /* coarse pointers get grip-drag only: kill the native textarea handle there; desktop keeps resize:vertical */
 @media(pointer:coarse){#output{resize:none}}
+/* ===== issue #112 T1 — keyboard cap (append-only, textarea only) ===== */
+/* narrow phones: hard 280px ceiling so a keyboard-shrunken 60vh can never bury #stagebar; the 40vh shrink cap lives in autogrowOutput (JS reads visualViewport) */
+@media(max-width:420px){#output{max-height:280px}}
 /* ===== issue #94 — guide bottom sheet on mobile (mirrors #diff-sheet precedent) ===== */
 @media(max-width:640px){
   #shortcuts-backdrop{align-items:flex-end;justify-content:center;padding:0}
