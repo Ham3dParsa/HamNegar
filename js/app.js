@@ -1,6 +1,6 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, defaultWaveConfig, WAVE_TYPES } from './modules/storage.js';
-import { createWaveRenderer, STARTERS, starterById, randomStack, WAVE_FA } from './modules/wave.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS } from './modules/storage.js';
+import { createWaveRenderer } from './modules/wave.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
 import { Dashboard } from './modules/dashboard.js';

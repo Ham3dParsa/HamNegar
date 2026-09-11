@@ -742,7 +742,6 @@ export function setChainPanel(target, open, focusSearch){
   }
 }
 function toggleChainPanel(target){ setChainPanel(target, !chainPanelOpen(target), true); }
-function syncRailAria(){ document.querySelectorAll('#prov-rail button').forEach(x=>x.setAttribute('aria-selected', String(x.classList.contains('active')))); }
 
 // Thin wiring entry: assigns injected collaborators, then registers listeners in
 // the original relative order (models-flow block, then inline-panel block).
@@ -758,17 +757,7 @@ export function mountChains(deps){
   els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
   els.btnZenModels?.addEventListener('click', ()=> fetchAndShowModels('zenspark'));
 
-  // --- models flow card wiring: rail → key card filter + ONE search + ONE chip row + manual Gemini id ---
-  document.querySelectorAll('#prov-rail button').forEach(b => b.addEventListener('click', ()=>{
-    document.querySelectorAll('#prov-rail button').forEach(x => x.classList.remove('active'));
-    b.classList.add('active');
-    syncRailAria();
-    flowProv = b.dataset.prov || 'all';
-    const openCard = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'openrouter' ? $('provider-card-openrouter') : flowProv === 'zenspark' ? $('provider-card-zenspark') : flowProv === 'custom' ? $('custom-add-card') : null;
-    if(openCard && 'open' in openCard) openCard.open = true;
-    renderFlowList();
-  }));
-  syncRailAria();
+  // --- models flow card wiring: ONE search + ONE chip row + manual Gemini id ---
   $('m-q')?.addEventListener('input', renderFlowListSoon);
   document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
     const cap = c.dataset.cap;
