@@ -1,5 +1,5 @@
 // Entry: wires deep modules together. Keeps orchestration thin; all heavy work stays behind module interfaces.
-import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT, defaultWaveConfig, WAVE_TYPES } from './modules/storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, defaultWaveConfig, WAVE_TYPES } from './modules/storage.js';
 import { createWaveRenderer, STARTERS, starterById, randomStack, WAVE_FA } from './modules/wave.js';
 import { Logger } from './modules/logger.js';
 import { Quota } from './modules/quota.js';
@@ -9,6 +9,7 @@ import { Realtime } from './modules/realtime.js';
 import { Transcription } from './modules/transcription.js';
 import { VERSION, BUILD } from './modules/version.js';
 import { mountStagebar } from './modules/stagebar.js';
+import { mountSettingsModal } from './modules/settingsModal.js';
 import {
   mountChains, getSttChain, setSttChain, getPolishChain, setPolishChain,
   renderAllChains, renderFlowListSoon, renderCustomProviders, flowInit, persistChains,
@@ -184,6 +185,24 @@ els.logBody?.addEventListener('keydown', (e) => {
 
 if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
 
+// --- settings wiring + tabs + modal live in js/modules/settingsModal.js (ticket 31) ---
+// Mounted FIRST so mountChains below can reuse its handles (updateBadge/
+// saveSettings/renderProvidersStatus were hoisted functions before; now thin
+// handles). No shared element-event targets between the two mounts (verified by
+// grep: chains listens on models-flow/custom/easy/expand/add-search nodes;
+// settings listens on keys/base-urls/toggles/tabs/modal nodes), so listener
+// order is semantically unchanged. Wave collaborators are hoisted function
+// declarations; mic state arrives via live isWaveMicActive() (never a snapshot).
+const Settings = mountSettingsModal({
+  els, getStagebar: () => Stagebar,
+  hasKeyFor, providerIdOf, getSttChain, setSttChain, getPolishChain, setPolishChain,
+  renderAllChains, renderFlowListSoon, renderCustomProviders, flowInit, persistChains,
+  chainPanelOpen, setChainPanel, chainPanelEls, STT_DEFAULTS, POLISH_DEFAULTS,
+  waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, mainWaveSync,
+  isWaveMicActive: () => !!waveMicStream || !!waveMicCtx,
+});
+const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal } = Settings;
+
 // --- preference chains UI + models flow + inline add panels live in js/modules/chains.js (ticket 30) ---
 // Mounted here (original region-1 slot) so listener registration order is unchanged;
 // chains.js owns labels, chain state, flow cache/filters and all row/panel behavior verbatim.
@@ -192,126 +211,7 @@ mountChains({
   onChainsRendered: () => { try { Stagebar.renderStageModelOptions(); } catch {} },
 });
 
-// --- settings wiring ---
-// Header removed (ticket header-polish-drawer): engine readout lives in the
-// #stage-scope pill. engineInfo() is the single chain-head reader; updateBadge()
-// just refreshes the pill via the mounted stagebar module (js/modules/stagebar.js).
-function engineInfo(){
-  const s=Storage.getSettings();
-  const raw = s.sttChain?.[0] || s.primary || 'groq';
-  const firstId = typeof raw==='object' ? raw.id : raw;
-  const label = firstId==='groq' ? 'Groq' : firstId;
-  const pol = s.polishEnabled ? ' • پالیش روشن' : ' • پالیش خاموش';
-  return { text: `موتور: ${label}${pol}`, hasKey: hasKeyFor(raw) };
-}
-function updateBadge(){
-  Stagebar?.updateStageScope(); // no-op until mountStagebar() runs at file end (sync eval: converged then)
-}
-function validate(){
-  const g=els.keyGroq.value.trim(), gm=els.keyGemini.value.trim(), or=els.keyOpenrouter?.value.trim()||'';
-  const hg=$('hint-groq'), hgm=$('hint-gemini'), hor=$('hint-openrouter');
-  hg.className='hint'+(g&&!g.startsWith('gsk_')?' err':'');
-  hg.innerHTML=g&&!g.startsWith('gsk_')?'⚠️ Groq باید با gsk_ شروع شود':'با <code>gsk_</code> شروع می‌شود. از console.groq.com بگیر.';
-  const ok=gm.startsWith('AQ.')||gm.startsWith('AIza');
-  hgm.className='hint'+(gm&&!ok?' err':'');
-  hgm.innerHTML=gm&&!ok?'⚠️ باید با AQ. یا AIza شروع شود':'کلید جدید با <code>AQ.</code> شروع می‌شود. از aistudio.google.com بگیر.';
-  if(hor){
-    const okOr = !or || or.startsWith('sk-or-');
-    hor.className='hint'+(or&&!okOr?' err':'');
-    hor.innerHTML= or&&!okOr ? '⚠️ معمولا با sk-or-v1- شروع می‌شود' : 'از openrouter.ai/keys بگیر. اگر خالی باشد پالیش با Groq انجام می‌شود.';
-  }
-  // validate BaseURLs https
-  const hgBase=$('hint-groq'), horBase=$('hint-openrouter');
-  // reuse hint area for base validation
-  if(els.groqBaseUrl){
-    const v=els.groqBaseUrl.value.trim();
-    if(v){ try{ const u=new URL(v); if(u.protocol!=='https:') throw 0; els.groqBaseUrl.style.borderColor=''; }catch{ els.groqBaseUrl.style.borderColor='var(--danger)'; } } else els.groqBaseUrl.style.borderColor='';
-  }
-  if(els.openrouterBaseUrl){
-    const v=els.openrouterBaseUrl.value.trim();
-    if(v){ try{ const u=new URL(v); if(u.protocol!=='https:') throw 0; els.openrouterBaseUrl.style.borderColor=''; }catch{ els.openrouterBaseUrl.style.borderColor='var(--danger)'; } } else els.openrouterBaseUrl.style.borderColor='';
-  }
-  // re-render badges live + provider status pills (keys editable ONLY in models tab)
-  renderProvidersStatus();
-  renderAllChains();
-  try{ renderFlowListSoon(); }catch{}
-}
-function renderProvidersStatus(){
-  let providers = [];
-  try{ providers = Storage.getProviders(); }catch{ return; }
-  for(const p of providers){
-    const pill = document.getElementById('pill-' + p.id);
-    if(pill){
-      pill.className = 'chain-badge ' + (p.hasKey ? 'ok' : 'missing');
-      pill.textContent = p.hasKey ? '✓ کلید' : '⚠ بی‌کلید';
-    }
-  }
-}
-function loadSettings(){
-  const s=Storage.getSettings();
-  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey;   if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey; if(els.keyZen) els.keyZen.value=s.zenKey;
-  if(els.groqBaseUrl) els.groqBaseUrl.value=s.groqBaseURL || GROQ_BASE_DEFAULT;
-  if(els.openrouterBaseUrl) els.openrouterBaseUrl.value=s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT;
-  setSttChain([...s.sttChain]);
-  setPolishChain(s.polishChain.map(e=>({ ...e })));
-  if(els.togglePolish) els.togglePolish.checked=s.polishEnabled;
-  els.toggleRealtime.checked=s.realtime; els.toggleVad.checked=s.vad; els.toggleAutocopy.checked=s.autocopy;
-  renderCustomProviders();
-  flowInit();
-  renderAllChains();
-  updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ نوار پایین را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
-}
-function saveSettings(){
-  try{
-    Storage.saveSettings({
-      groqKey: els.keyGroq.value,
-      geminiKey: els.keyGemini.value,
-      openrouterKey: els.keyOpenrouter?.value||'',
-      zenKey: els.keyZen?.value||'',
-      groqBaseURL: els.groqBaseUrl?.value||'',
-      openrouterBaseURL: els.openrouterBaseUrl?.value||'',
-      realtime: els.toggleRealtime.checked,
-      vad: els.toggleVad.checked,
-      autocopy: els.toggleAutocopy.checked,
-      sttChain: getSttChain(),
-      polishChain: getPolishChain(),
-      polishEnabled: els.togglePolish?.checked ?? true,
-    });
-  }catch(e){
-    Logger.log('error','saveSettings failed',{msg:e.message, field:e.field});
-    Logger.toast(e.message || 'BaseURL نامعتبر');
-    if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)';
-    else if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)';
-    else {
-      if(els.groqBaseUrl) els.groqBaseUrl.style.borderColor='';
-      if(els.openrouterBaseUrl) els.openrouterBaseUrl.style.borderColor='';
-    }
-    throw e;
-  }
-  updateBadge(); validate(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-}
-els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
-if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
-if(els.keyZen) els.keyZen.addEventListener('input',validate);
-if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
-if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
-if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
-
-// --- settings tabs (pipeline | wave) ---
-function switchTab(name){
-  const tabs = { pipeline: els.tabPipeline, wave: els.tabWave };
-  const panels = { pipeline: els.panelPipeline, wave: els.panelWave };
-  for(const k of Object.keys(tabs)){
-    const active = k === name;
-    tabs[k]?.classList.toggle('active', active);
-    tabs[k]?.setAttribute('aria-selected', active ? 'true' : 'false');
-    if(panels[k]) panels[k].hidden = !active;
-  }
-  if(name === 'wave'){ waveEnsure(); wavePrevStart(); } else { wavePrevStop(); waveStarterPause(); waveFollowStop(); const hadMic = !!waveMicStream || !!waveMicCtx; waveMicStop(); if (hadMic) { waveSync(); } }
-}
-els.tabPipeline?.addEventListener('click', ()=> switchTab('pipeline'));
-els.tabWave?.addEventListener('click', ()=> switchTab('wave'));
+// --- settings wiring + tabs live in js/modules/settingsModal.js (ticket 31; mounted above) ---
 
 // --- models flow card + custom providers + manual id live in js/modules/chains.js (ticket 30; wired by mountChains above) ---
 
@@ -906,58 +806,11 @@ function waveKillApply(){
   syncRecStrip();
 }
 
-let lastModalFocus = null; // hoisted above loadSettings(): openModal() assigns it on manual open
+// --- settings modal block lives in js/modules/settingsModal.js (ticket 31; mounted above) ---
+// Original slot preserved: initial loadSettings() runs here, after wave lets
+// exist and before log-panel wiring — same order as before the extraction.
 loadSettings();
 // --- per-chain inline add panels live in js/modules/chains.js (ticket 30; wired by mountChains above) ---
-// --- settings modal: focus trap + Esc closes without saving + focus returns to settings button ---
-function modalFocusables(){
-  const box = els.modal.querySelector('.modal-box');
-  if(!box) return [];
-  return [...box.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')]
-    .filter(el=> !el.disabled && el.getClientRects().length > 0);
-}
-function openModal(){
-  lastModalFocus = document.activeElement;
-  els.modal.style.display = 'flex';
-  try{ if(Storage.getProviders().every(p => !p.hasKey) && els.providerDrawer) els.providerDrawer.open = true; }catch{}
-  if(els.panelWave && !els.panelWave.hidden){ waveEnsure(); wavePrevStart(); }
-  const box = els.modal.querySelector('.modal-box');
-  if(box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
-  const f = modalFocusables();
-  (f[0] || box)?.focus?.();
-}
-function closeModal(){
-  els.modal.style.display = 'none';
-  mainWaveSync(); // wave tab edits persist live; main strip picks them up here
-  wavePrevStop();
-  waveStarterPause();
-  waveFollowStop();
-  const hadMic = !!waveMicStream || !!waveMicCtx;
-  waveMicStop();
-  if (hadMic) { waveSync(); }
-  if(lastModalFocus?.focus) lastModalFocus.focus();
-  else els.btnSettings.focus();
-}
-els.modal.addEventListener('keydown', (e)=>{
-  if(els.modal.style.display !== 'flex') return;
-  if(e.defaultPrevented) return; // inner layer (chain ⋮ menu, wave rename) already consumed it (ticket/2x)
-  if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); const openPanel = ['stt','polish'].find(t => chainPanelOpen(t)); if(openPanel){ setChainPanel(openPanel, false); chainPanelEls(openPanel).btn?.focus?.(); return; } closeModal(); return; } // Esc: open inline add-panel first, else close WITHOUT saving; consumed so recording-cancel never fires
-  if(e.key !== 'Tab') return;
-  const f = modalFocusables();
-  if(!f.length) return;
-  const first = f[0], last = f[f.length - 1];
-  if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
-  else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
-});
-els.btnSettings.onclick=()=> openModal();
-$('btn-close-modal').onclick=()=> closeModal();
-$('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } closeModal(); Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
-$('btn-reset-stt')?.addEventListener('click', ()=>{ setSttChain(STT_DEFAULTS.map(id=>({id, providerId:providerIdOf(id,'gemini'), enabled:true}))); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
-$('btn-reset-polish')?.addEventListener('click', ()=>{ setPolishChain(POLISH_DEFAULTS.map(e=>({...e}))); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
-els.modal.addEventListener('click',e=>{ if(e.target===els.modal) closeModal(); });
-els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
-els.toggleVad.addEventListener('change',()=> Storage.saveSettings({vad: els.toggleVad.checked}));
-els.toggleAutocopy.addEventListener('change',()=> Storage.saveSettings({autocopy: els.toggleAutocopy.checked}));
 
 // log panel toggle + manual splitter (not resize:vertical on flex)
 $('btn-clear-log').onclick=()=> els.logBody.innerHTML='';
