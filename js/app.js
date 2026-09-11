@@ -656,10 +656,16 @@ async function startRecording(){
   discardRecording = false; // defensive: a missed onStop must never discard a later recording
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
-  const s=Storage.getSettings(); if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید نداری — ⚙️ نوار پایین را بزن','error'); openModal(); return; }
+  const s=Storage.getSettings();
+  const hasBatchKey = !!(s.groqKey||s.geminiKey||s.openrouterKey);
+  // ticket/105: live preview is keyless — only the batch key gate stays. Keyless
+  // recording is allowed when realtime can actually preview (realtime=1 + SR
+  // supported); otherwise the old key prompt stands (nothing could preview).
+  const keylessPreview = !hasBatchKey && s.realtime && Realtime.isSupported();
+  if(!hasBatchKey && !keylessPreview){ Logger.setStatus('کلید نداری — ⚙️ نوار پایین را بزن','error'); openModal(); return; }
   let snap=null;
   try{
-    snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'' };
+    snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'', keyless: keylessPreview };
     rtSnap = snap;
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
@@ -669,7 +675,8 @@ async function startRecording(){
     recTimerStart();
     if(s.realtime) els.btnMic.classList.add('realtime-active');
     syncActionbar();
-    Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
+    Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':'')+(snap.keyless?' — پیش‌نمایش زنده بدون کلید؛ ثبت نهایی نیاز به کلید':''),'rec');
+    if(snap.keyless){ Logger.toast('پیش‌نمایش زنده بدون کلید؛ ثبت نهایی نیاز به کلید', 3500); Logger.log('warn','keyless realtime preview',{snapId: snap.id}); }
     mainWaveLive();
     if(s.realtime){
       if(!Realtime.isSupported()){
@@ -761,6 +768,24 @@ async function handleTranscription(blob, snap){
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
+  }
+  // ticket/105: keyless preview session — the interim text is already live in
+  // the output; there is no batch key to transcribe with, so prompt for a key
+  // instead of surfacing a 401 traceback. (Keys added mid-recording fall
+  // through to the normal batch path below.)
+  { const sNow = Storage.getSettings();
+    if(snap?.keyless && !sNow.groqKey && !sNow.geminiKey && !sNow.openrouterKey){
+      Logger.log('info','keyless stop — key prompt instead of batch',{snapId: snapId||null});
+      Logger.dismissProgress(0);
+      setMicBusy(false); transcribingAbort = null;
+      recTimerReset(); syncActionbar(); mainWaveIdle();
+      if(!snap || snapId===rtVersion){ rtSnap=null; }
+      if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
+      Logger.setStatus('برای ثبت نهایی، کلید را در ⚙️ وارد کن','warn');
+      Logger.toast('برای ثبت نهایی کلید لازم است', 3500);
+      openModal();
+      return;
+    }
   }
   try{
     const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
