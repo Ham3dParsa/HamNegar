@@ -827,3 +827,12 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
   .actionbar{border-radius:28px}
   .demo-actionbar{flex-wrap:wrap;overflow-x:visible;justify-content:center}
 }
+/* ===== ticket/behavior-main (#110 T1c) — behavior strip on main page, slim single row above stagebar (append-only) =====
+   4 chips keep SAME ids/labels; getElementById wiring untouched. Strip is one
+   compact row (horizontal swipe fallback) so stagebar + actionbar stay put. */
+.behavior-strip{flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px 6px;min-width:0}
+.behavior-strip .behavior-chips--main{flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;padding:0}
+.behavior-strip .behavior-chips--main::-webkit-scrollbar{display:none}
+.behavior-strip .behavior-chips--main .chip{flex:0 0 auto;width:auto;max-width:70vw;padding:4px 10px;font-size:12px;border-radius:999px;white-space:nowrap}
+.behavior-strip .behavior-chips--main .chip input{width:18px;height:18px}
+.behavior-strip .behavior-chips--main .chip span{font-size:11px}
