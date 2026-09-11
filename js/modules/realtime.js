@@ -1,5 +1,5 @@
 // Module: realtime
-// Interface: start(basePos, {onInterim, onFinal}, snapId?), stop(), isSupported()
+// Interface: start(basePos, {onInterim, onFinal, onError, onEnd}, snapId?), stop(), isSupported()
 // Depth: hides SpeechRecognition vendor prefix, lang, continuous/interim setup, and error mapping + stale-id guard.
 let recognition = null;
 let activeId = null;
@@ -30,7 +30,10 @@ export const Realtime = {
       if (inter || fin) handlers.onInterim?.(fin + inter, fin);
     };
     recognition.onerror = e => { if (activeId !== myId) return; handlers.onError?.(e.error || e.message); };
-    recognition.onend = () => { if (recognition && activeId !== myId) { try{ recognition.stop(); }catch{} } };
+    recognition.onend = () => {
+      if (activeId !== myId) { if (recognition) { try{ recognition.stop(); }catch{} } return; } // stale race — never notify
+      handlers.onEnd?.(); // ticket/106: owner (app.js) decides restart while recording
+    };
     try { recognition.start(); return true; } catch { return false; }
   },
   stop() {
