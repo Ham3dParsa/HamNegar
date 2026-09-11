@@ -1,0 +1,68 @@
+{
+ "360": {
+  "inPipeline": false,
+  "parentId": "modal-box modal-wide",
+  "parentTag": "DIV",
+  "abovePipeline": true,
+  "visibleOnWaveTab": true,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ },
+ "390": {
+  "inPipeline": false,
+  "parentId": "modal-box modal-wide",
+  "parentTag": "DIV",
+  "abovePipeline": true,
+  "visibleOnWaveTab": true,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ },
+ "1440": {
+  "inPipeline": false,
+  "parentId": "modal-box modal-wide",
+  "parentTag": "DIV",
+  "abovePipeline": true,
+  "visibleOnWaveTab": true,
+  "toggles": [
+   "toggle-realtime:false",
+   "toggle-vad:true",
+   "toggle-autocopy:false",
+   "toggle-polish:true"
+  ],
+  "overflowX": 0,
+  "console_errors": []
+ },
+ "toggles": {
+  "localStorage_after_flip": {
+   "REALTIME": "1",
+   "VAD": "0",
+   "AUTOCOPY": "1",
+   "POLISH_ENABLED": "0"
+  },
+  "polish_hint_while_off": "none",
+  "after_reload": {
+   "toggles": [
+    "toggle-realtime:true",
+    "toggle-vad:false",
+    "toggle-autocopy:true",
+    "toggle-polish:false"
+   ],
+   "hint": "block"
+  },
+  "console_errors": [],
+  "persist_ok": false,
+  "polish_gate_ok": false
+ }
+}
