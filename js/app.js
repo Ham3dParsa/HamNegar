@@ -1030,21 +1030,49 @@ const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' ک�
 // transcript autogrow (ticket/51): grow with content, cap ~60vh, then internal scroll; native resize:vertical kept for manual override
 // transcript touch resize (#93): a grip drag sets a manual-override flag — input may
 // grow a user-enlarged box, never shrink it; double-tap on #output resets the flag.
+// keyboard cap (#112 T1): a keyboard-open fires window/visualViewport resize with a
+// shrunken viewport — that path is shrink-only and uses a tight cap (40vh of the
+// shrunken viewport, 280px on narrow phones) so #stagebar stays above the fold.
+// select/focus handlers above only saveCursor — they never autogrow (delta 0px).
 let outManual=false;
-function autogrowOutput(){
-  if(!els.output) return;
-  const cap = Math.round(window.innerHeight * 0.6);
-  const need = Math.min(els.output.scrollHeight, cap);
-  if(outManual){
-    if(need > els.output.offsetHeight) els.output.style.height = need + 'px';
-    else els.output.style.height = Math.max(120, Math.min(els.output.offsetHeight, cap)) + 'px';
-  } else {
-    els.output.style.height = 'auto';
-    els.output.style.height = need + 'px';
-  }
-  els.output.style.overflowY = els.output.scrollHeight > cap + 1 ? 'auto' : 'hidden';
+let vpPeak=Math.max(window.innerHeight, window.visualViewport ? window.visualViewport.height : 0);
+let kbCapOn=false, lastVpH=window.innerHeight;
+function outputCap(){
+  const vv=window.visualViewport;
+  const vh=Math.round(Math.min(vv ? vv.height : window.innerHeight, window.innerHeight));
+  const vw=Math.round(vv ? vv.width : window.innerWidth);
+  let cap=Math.round(vh * (kbCapOn ? 0.4 : 0.6));
+  if(vw <= 420) cap=Math.min(cap, 280);
+  return Math.max(cap, 96);
 }
-window.addEventListener('resize', ()=> autogrowOutput());
+function autogrowOutput(opts){
+  if(!els.output) return;
+  const shrinkOnly=!!(opts && opts.shrinkOnly);
+  const cap=outputCap();
+  const need=Math.min(els.output.scrollHeight, cap);
+  let target;
+  if(outManual){
+    if(need > els.output.offsetHeight) target=need;
+    else target=Math.max(120, Math.min(els.output.offsetHeight, cap));
+  } else {
+    els.output.style.height='auto';
+    target=Math.min(els.output.scrollHeight, cap);
+  }
+  if(shrinkOnly && target > els.output.offsetHeight) target=els.output.offsetHeight;
+  els.output.style.height=target+'px';
+  els.output.style.overflowY=els.output.scrollHeight > cap+1 ? 'auto' : 'hidden';
+}
+function onViewportResize(){
+  const vv=window.visualViewport;
+  const h=Math.round(Math.min(vv ? vv.height : window.innerHeight, window.innerHeight));
+  const shrinking=h < lastVpH-2;
+  if(h > vpPeak) vpPeak=h;
+  kbCapOn=h < vpPeak-120;
+  lastVpH=h;
+  autogrowOutput(shrinking ? {shrinkOnly:true} : undefined);
+}
+window.addEventListener('resize', onViewportResize);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', onViewportResize);
 let draftTimer=null;
 const editorHistory={stack:[], index:-1, max:50, pushing:false, push(v){ if(this.pushing) return; if(this.stack[this.index]===v) return; this.stack=this.stack.slice(0,this.index+1); this.stack.push(v); if(this.stack.length>this.max){ this.stack.shift(); } else { this.index++; } this.index=Math.min(this.index,this.stack.length-1); updateHistoryButtons(); }, undo(){ if(this.index<=0) return null; this.index--; updateHistoryButtons(); return this.stack[this.index]; }, redo(){ if(this.index>=this.stack.length-1) return null; this.index++; updateHistoryButtons(); return this.stack[this.index]; }, canUndo(){return this.index>0}, canRedo(){return this.index<this.stack.length-1}};
 function updateHistoryButtons(){ const u=document.getElementById('btn-undo'), r=document.getElementById('btn-redo'); if(u) u.disabled=!editorHistory.canUndo(); if(r) r.disabled=!editorHistory.canRedo(); }
@@ -1129,7 +1157,7 @@ function resetOutputHeight(){
   outManual=false;
   saveCursor();
   els.output.style.height='auto';
-  const nh=Math.min(els.output.scrollHeight, window.innerHeight*0.5)+'px';
+  const nh=Math.min(els.output.scrollHeight, window.innerHeight*0.5, outputCap())+'px';
   els.output.style.height=nh;
   Storage.saveHeights({ out: nh });
 }
@@ -1150,7 +1178,7 @@ els.output.addEventListener('dblclick', resetOutputHeight);
   const grip = document.getElementById('grip');
   if(!grip || !els.output) return;
   let drag=false, y0=0, h0=0;
-  const clampH = v => Math.max(120, Math.min(v, Math.round(window.innerHeight * 0.6)));
+  const clampH = v => Math.max(120, Math.min(v, outputCap()));
   const begin = (y)=>{ drag=true; y0=y; h0=els.output.offsetHeight; };
   const move = (y, prevent)=>{ if(!drag) return; outManual=true; els.output.style.height = clampH(h0 + (y - y0)) + 'px'; els.output.style.overflowY = 'auto'; if(prevent) prevent(); };
   const end = ()=>{ if(!drag) return; drag=false; try{ Storage.saveHeights({ out: getComputedStyle(els.output).height }); }catch{} };
