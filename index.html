@@ -31,14 +31,6 @@
     <div class="tfoot"><span>💡 پیش‌نویس خودکار ذخیره می‌شود</span><span class="grip" id="grip" title="بکش تا اندازه عوض شود">↕ بکش</span></div>
   </section>
   <div class="output-meta"><span class="hint-inline">تاریخچه واگرد/ازنو در نوار اقدام پایین است</span></div>
-  <section id="behavior-strip" class="behavior-strip" aria-label="رفتار">
-    <div class="behavior-chips behavior-chips--main">
-      <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
-      <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
-      <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
-      <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
-    </div>
-  </section>
   <section id="stagebar" aria-label="نوار مراحل پالایش و ترجمه">
     <div class="stage-row" role="toolbar" aria-label="مراحل پالایش">
       <button type="button" id="stage-simple" class="sbtn" title="پالایش ساده" aria-label="پالایش ساده"><span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span></button>
@@ -84,7 +76,16 @@
   <button id="btn-redo" class="cbtn sat" data-act="redo" title="ازنو" aria-label="ازنو" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 14l5-5-5-5M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
   <button id="btn-settings" class="cbtn sat" data-act="settings" title="تنظیمات" aria-label="تنظیمات">⚙️</button>
   <button id="btn-shortcuts" class="cbtn sat" data-act="shortcuts" title="راهنمای میانبرها" aria-label="راهنمای میانبرها">؟</button>
+  <button id="behavior-toggle" class="cbtn sat behavior-toggle" aria-expanded="false" aria-controls="behavior-pop" title="رفتار" aria-label="نمایش رفتار"><span class="beh-chev" aria-hidden="true">‹</span></button>
 </footer>
+<div id="behavior-pop" class="behavior-pop" hidden>
+  <div class="behavior-chips behavior-chips--main">
+    <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
+    <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
+    <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+    <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
+  </div>
+</div>
 <div id="settings-modal" role="dialog" aria-modal="true" aria-label="تنظیمات">
   <div class="modal-box modal-wide">
     <h3>⚙️ تنظیمات</h3>

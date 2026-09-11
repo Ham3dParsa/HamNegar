@@ -1282,6 +1282,21 @@ document.addEventListener('keydown', (e) => {
   openShortcuts();
 });
 applyShortcutHints();
+// ticket/behavior-collapse (#110 T1d): single arrow by the actionbar toggles the
+// behavior popover; default collapsed every load (no persist — seam is app.js only,
+// toggle persist + chain-gate untouched).
+const behaviorToggle = $('behavior-toggle'), behaviorPop = $('behavior-pop');
+if (behaviorToggle && behaviorPop) {
+  const setBehaviorOpen = (open) => {
+    behaviorPop.hidden = !open;
+    behaviorToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    behaviorToggle.setAttribute('aria-label', open ? 'پنهان‌کردن رفتار' : 'نمایش رفتار');
+    const chev = behaviorToggle.querySelector('.beh-chev');
+    if (chev) chev.textContent = open ? '›' : '‹';
+  };
+  behaviorToggle.addEventListener('click', () => setBehaviorOpen(behaviorPop.hidden));
+  setBehaviorOpen(false);
+}
 // stagebar run/wiring lives in js/modules/stagebar.js (mounted below) — see ticket 29.
 // (ticket 30: renderAllChains→stage-model refresh now rides the chains.js onChainsRendered hook.)
 Stagebar = mountStagebar({
