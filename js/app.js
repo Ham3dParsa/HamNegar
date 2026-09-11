@@ -464,19 +464,19 @@ els.output.addEventListener('dblclick', resetOutputHeight);
   grip.addEventListener('touchcancel', end);
 })();
 
-// main rec strip (ticket/51 + mainwave T1): wave.js renderer on the user's saved stack; idle breathes via fake (until analyser attaches), live via Audio.getAnalyser()
+// main rec strip (#91 T3 static-unless-live): wave.js renderer on the user's saved stack; idle is a static line (fake OFF on this instance only — settings preview/starters keep their own fake demo), live motion only via Audio.getAnalyser()
 let mainWave = null;
 function mainWaveInit(){
   if(!els.wave) return;
   try{
     mainWave = createWaveRenderer(els.wave);
     mainWave.setConfig(Storage.getWave());
-    mainWave.setFakeEnabled(true);
+    mainWave.setFakeEnabled(false); // main strip only: never dance without real voice
     if (!isWaveHidden()) mainWave.start(); // T3 (#109): hidden → strip stays stopped until re-enabled
   }catch{ mainWave = null; }
 }
 function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); }catch{} syncRecStrip(); }
-function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); }catch{} syncRecStrip(); }
+function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); }catch{} syncRecStrip(); } // detach → static line (fake stays OFF)
 function mainWaveSync(){ try{ mainWave?.setConfig(Storage.getWave()); }catch{} }
 function syncRecStrip(){
   const strip = $('rec-strip');

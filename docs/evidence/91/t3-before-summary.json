@@ -1,0 +1,59 @@
+{
+  "base": "http://localhost:8050/index.html",
+  "phase": "BEFORE-fix (bug: main idle dances)",
+  "viewports": {
+    "360": {
+      "mean_abs_diff": 10.71,
+      "nonzero_frac": 0.2563,
+      "strip_box": {
+        "x": 7.1875,
+        "y": 6,
+        "width": 345.625,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 343.625,
+        "h": 66
+      },
+      "a": "t3-before-idle-360-a.png",
+      "b": "t3-before-idle-360-b.png"
+    },
+    "390": {
+      "mean_abs_diff": 7.54,
+      "nonzero_frac": 0.2158,
+      "strip_box": {
+        "x": 7.796875,
+        "y": 6,
+        "width": 374.40625,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 372.40625,
+        "h": 66
+      },
+      "a": "t3-before-idle-390-a.png",
+      "b": "t3-before-idle-390-b.png"
+    },
+    "1440": {
+      "mean_abs_diff": 10.155,
+      "nonzero_frac": 0.2455,
+      "strip_box": {
+        "x": 14,
+        "y": 8,
+        "width": 1412,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 1410,
+        "h": 66
+      },
+      "a": "t3-before-idle-1440-a.png",
+      "b": "t3-before-idle-1440-b.png"
+    }
+  },
+  "console_errors": [],
+  "settings_preview": {
+    "mean_abs_diff": 8.143,
+    "nonzero_frac": 0.2005
+  }
+}
