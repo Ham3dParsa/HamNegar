@@ -809,3 +809,17 @@ button:active,.cbtn:active,.fchip:active{transform:scale(.96);transition:transfo
    Emoji removed from 6x .sbtn; each action has its own stroke=currentColor metaphor
    (simple=sparkle, advanced=sparkle+sliders, grammar=text+check, tr-quick=swap-arrows,
    tr-panel=window+lines, raw=return+dot). Tap height still >=40px via base .sbtn. */
+/* ===== issue #112 T2 — mobile two-row toolbars (append-only; CSS-only, no JS) =====
+   <=420px: stage-row wraps to 2 rows with zero x-scroll (overrides the 390px
+   overflow-x:auto rule above by source order — that rule is kept, not deleted);
+   scope stays hidden; DOM order already primary-first, explicit order locks it.
+   Actionbar worst-case (timer+cancel) wraps to 2 centered rows, island->sheet. */
+@media(max-width:420px){
+  #stagebar .stage-row{flex-wrap:wrap;overflow-x:visible;overflow-y:visible}
+  #stagebar .scope{display:none}
+  #stage-simple{order:1}#stage-advanced{order:2}#stage-grammar{order:3}
+  #stage-tr-quick{order:4}#stage-tr-panel{order:5}#stage-raw{order:6}
+  #stage-settings{order:7}
+  .actionbar{border-radius:28px}
+  .demo-actionbar{flex-wrap:wrap;overflow-x:visible;justify-content:center}
+}
