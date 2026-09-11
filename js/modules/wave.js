@@ -402,6 +402,15 @@ export function createWaveRenderer(canvas) {
       raf = requestAnimationFrame(frame);
       return;
     }
+    if (!analyser && !fakeOn) {
+      // #91 T3 static-unless-live: this instance has no fake demo and no live
+      // mic — flat line, no clock-driven wobble. Only hits fake-OFF instances
+      // (main strip); fake-ON paths (settings preview/starters) never land here.
+      g.fillStyle = '#333439';
+      g.fillRect(0, H / 2 - 1, Wd, 2);
+      raf = requestAnimationFrame(frame);
+      return;
+    }
     stepLevel(t, dt);
     drawStack(t, dt, bandLevels());
     raf = requestAnimationFrame(frame);
@@ -429,6 +438,12 @@ export function createWaveRenderer(canvas) {
       if (Math.abs(r.width - Wd) > 1 || Math.abs(r.height - H) > 1) fit();
       g.clearRect(0, 0, Wd, H);
       if (reduced) {
+        g.fillStyle = '#333439';
+        g.fillRect(0, H / 2 - 1, Wd, 2);
+        return;
+      }
+      if (!analyser && !fakeOn) {
+        // #91 T3 static-unless-live (externally-driven twin of the frame() gate).
         g.fillStyle = '#333439';
         g.fillRect(0, H / 2 - 1, Wd, 2);
         return;

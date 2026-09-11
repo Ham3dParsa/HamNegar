@@ -1,0 +1,67 @@
+{
+  "base": "http://localhost:8050/index.html",
+  "phase": "AFTER-fix (main static-unless-live)",
+  "viewports": {
+    "360": {
+      "mean_abs_diff": 0.0,
+      "nonzero_frac": 0.0,
+      "strip_box": {
+        "x": 7.1875,
+        "y": 6,
+        "width": 345.625,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 344,
+        "h": 66
+      }
+    },
+    "390": {
+      "mean_abs_diff": 0.0,
+      "nonzero_frac": 0.0,
+      "strip_box": {
+        "x": 7.796875,
+        "y": 6,
+        "width": 374.40625,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 372,
+        "h": 66
+      }
+    },
+    "1440": {
+      "mean_abs_diff": 0.0,
+      "nonzero_frac": 0.0,
+      "strip_box": {
+        "x": 14,
+        "y": 8,
+        "width": 1412,
+        "height": 68
+      },
+      "canvas_rect": {
+        "w": 1410,
+        "h": 66
+      }
+    }
+  },
+  "console_errors": [],
+  "settings_preview": {
+    "mean_abs_diff": 10.455,
+    "nonzero_frac": 0.2311
+  },
+  "engine_simulated": {
+    "t3-live-idle": {
+      "mean_abs_diff": 0.0,
+      "nonzero_frac": 0.0
+    },
+    "t3-live-on": {
+      "mean_abs_diff": 2.881,
+      "nonzero_frac": 0.0294
+    },
+    "t3-live-stop": {
+      "mean_abs_diff": 0.0,
+      "nonzero_frac": 0.0
+    }
+  }
+}
