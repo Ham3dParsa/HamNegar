@@ -1100,6 +1100,78 @@ function makeOnInterim(snap){
 }
 
 let isRecording=false, vadTimer=null;
+// ticket/106 — realtime failure surfaces (additive; engine untouched).
+// Every realtime failure lands here: unsupported browser, start()==false,
+// SR onError codes, onend while recording. Recording (Audio path) always
+// continues; only the live layer degrades with a visible hint.
+const RT_MAX_RESTARTS = 5; // guard: onend auto-restart never loops forever
+const RT_RESTART_BASE_MS = 800; // linear backoff × attempt (800…4000ms)
+let rtRestarts = 0, rtRestartTimer = 0, rtFatal = false;
+function rtClearRestart(){ if (rtRestartTimer) { clearTimeout(rtRestartTimer); rtRestartTimer = 0; } }
+function realtimeHint(code){
+  switch (String(code || '')) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return 'دسترسی به میکروفون برای حالت آنی رد شد — از نوار آدرس اجازه بده؛ ضبط بدون متن زنده ادامه دارد';
+    case 'network':
+      return 'خطای شبکه در حالت آنی — اتصال را چک کن؛ ضبط ادامه دارد';
+    case 'audio-capture':
+      return 'میکروفون برای حالت آنی پیدا نشد — دستگاه را چک کن؛ ضبط ادامه دارد';
+    case 'no-speech':
+      return 'صدایی شنیده نشد — بلندتر بگو';
+    case 'aborted':
+      return 'حالت آنی متوقف شد';
+    default:
+      return 'خطای حالت آنی (' + String(code || 'نامشخص') + ') — ضبط بدون متن زنده ادامه دارد';
+  }
+}
+function rtHandlers(snap, onInterim){
+  return {
+    onInterim: (p, f) => onInterim(p, f),
+    onFinal: f => Logger.log('debug', 'final', f),
+    onError: e => handleRealtimeError(e, snap),
+    onEnd: () => handleRealtimeEnd(snap, onInterim),
+  };
+}
+function rtStartOrSurface(snap, onInterim){
+  // start() false = engine refused (unsupported/exception) — visible, not silent
+  let ok = false;
+  try { ok = Realtime.start(snap.basePos, rtHandlers(snap, onInterim), snap.id); } catch { ok = false; }
+  if (!ok) {
+    Logger.setStatus('⚠️ حالت آنی شروع نشد — ضبط بدون متن زنده ادامه دارد', 'warn');
+    Logger.toast('حالت آنی شروع نشد — ضبط ادامه دارد');
+    Logger.log('warn', 'WebSpeech', 'start-failed');
+    els.btnMic.classList.remove('realtime-active');
+  }
+  return ok;
+}
+function handleRealtimeError(code, snap){
+  if (!snap || rtSnap?.id !== snap.id) return; // stale race — never surface
+  const c = String(code || '');
+  Logger.log('warn', 'WebSpeech', c);
+  if (c === 'aborted' || c === 'no-speech' || c === '') return; // transient — log only
+  if (c === 'not-allowed' || c === 'service-not-allowed' || c === 'audio-capture') rtFatal = true; // retry is pointless — onend must not restart
+  Logger.setStatus('⚠️ ' + realtimeHint(c), 'error');
+  Logger.toast(realtimeHint(c));
+}
+function handleRealtimeEnd(snap, onInterim){
+  if (!isRecording || !snap || rtSnap?.id !== snap.id || rtFatal) return;
+  if (rtRestarts >= RT_MAX_RESTARTS) {
+    Logger.setStatus('⚠️ حالت آنی قطع شد — ضبط بدون متن زنده ادامه دارد', 'warn');
+    Logger.toast('حالت آنی قطع شد — ضبط ادامه دارد');
+    Logger.log('warn', 'WebSpeech', 'restart-budget-exhausted');
+    els.btnMic.classList.remove('realtime-active');
+    return;
+  }
+  rtRestarts++;
+  Logger.log('info', 'تلاش مجدد حالت آنی', { attempt: rtRestarts, of: RT_MAX_RESTARTS });
+  rtClearRestart();
+  rtRestartTimer = setTimeout(() => {
+    rtRestartTimer = 0;
+    if (!isRecording || rtSnap?.id !== snap.id || rtFatal) return;
+    rtStartOrSurface(snap, onInterim);
+  }, RT_RESTART_BASE_MS * rtRestarts);
+}
 let isTranscribing=false;
 let transcribingAbort=null;
 let discardRecording=false; // cancel during rec: drop the blob instead of transcribing
@@ -1175,16 +1247,27 @@ async function startRecording(){
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
     snap.startMs = performance.now();
     isRecording=true;
+    rtRestarts = 0; rtFatal = false; rtClearRestart(); // ticket/106: fresh restart budget per recording
     recTimerStart();
     if(s.realtime) els.btnMic.classList.add('realtime-active');
     syncActionbar();
     Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':''),'rec');
     mainWaveLive();
-    if(s.realtime && Realtime.isSupported()){
-      if(els.livePreview) els.livePreview.classList.add('on'); if(els.liveBadge) els.liveBadge.classList.add('on'); if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent='';
-      const onInterim = makeOnInterim(snap);
-      Realtime.start(snap.basePos, { onInterim:(p,f)=> onInterim(p,f), onFinal: f=> Logger.log('debug','final',f), onError:e=>Logger.log('warn','WebSpeech',e)}, snap.id);
-      Logger.log('info','حالت آنی روشن',{snapId: snap.id, basePos: snap.basePos, beforeLen: snap.before.length, afterLen: snap.after.length});
+    if(s.realtime){
+      if(!Realtime.isSupported()){
+        // ticket/106 else-branch: unsupported browser — persistent hint + auto-untoggle
+        if (els.toggleRealtime) els.toggleRealtime.checked = false;
+        try { Storage.saveSettings({ realtime: false }); } catch {}
+        els.btnMic.classList.remove('realtime-active');
+        Logger.setStatus('⚠️ مرورگر از حالت آنی پشتیبانی نمی‌کند — ضبط بدون متن زنده ادامه دارد', 'warn');
+        Logger.toast('مرورگر حالت آنی ندارد — ضبط ادامه دارد');
+        Logger.log('warn', 'realtime-unsupported');
+      } else {
+        if(els.livePreview) els.livePreview.classList.add('on'); if(els.liveBadge) els.liveBadge.classList.add('on'); if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent='';
+        const onInterim = makeOnInterim(snap);
+        rtStartOrSurface(snap, onInterim);
+        Logger.log('info','حالت آنی روشن',{snapId: snap.id, basePos: snap.basePos, beforeLen: snap.before.length, afterLen: snap.after.length});
+      }
     }
     if(s.vad) startVAD();
     Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad, snapId: snap.id});
@@ -1200,6 +1283,7 @@ function stopRecording(){
   els.btnMic.classList.remove('realtime-active');
   syncActionbar();
   stopVAD(); mainWaveIdle(); Realtime.stop();
+  rtClearRestart(); rtRestarts = 0; rtFatal = false; // ticket/106: user stopped — no restart after onend
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
   if(snap && (snap.committed+snap.pending)){
     const cursor = snap.basePos + (snap.committed+snap.pending).length;
