@@ -85,19 +85,6 @@
       <button type="button" class="settings-tab" id="tab-wave" role="tab" aria-selected="false" aria-controls="panel-wave">موج صدا</button>
     </div>
 
-    <!-- behavior: global toggles, independent of pipeline/wave panels (#110 T1) -->
-    <section class="pref-section" aria-labelledby="behavior-title">
-      <div class="pref-head">
-        <h4 id="behavior-title">🎚️ رفتار</h4>
-      </div>
-      <div class="behavior-chips">
-        <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
-        <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
-        <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
-        <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
-      </div>
-    </section>
-
     <section id="panel-pipeline" role="tabpanel" aria-labelledby="tab-pipeline">
       <section class="pref-section" aria-labelledby="stt-title">
         <div class="pref-head">
@@ -312,6 +299,19 @@
         </div>
       </div>
 
+    </section>
+
+    <!-- behavior: global toggles at modal bottom, independent of pipeline/wave panels (#110 T1b) -->
+    <section class="pref-section" aria-labelledby="behavior-title">
+      <div class="pref-head">
+        <h4 id="behavior-title">🎚️ رفتار</h4>
+      </div>
+      <div class="behavior-chips">
+        <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
+        <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
+        <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+        <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
+      </div>
     </section>
 
     <div class="hint">ترتیب را ذخیره کن — هر ماژول یک وظیفه دارد.</div>
