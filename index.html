@@ -31,6 +31,14 @@
     <div class="tfoot"><span>💡 پیش‌نویس خودکار ذخیره می‌شود</span><span class="grip" id="grip" title="بکش تا اندازه عوض شود">↕ بکش</span></div>
   </section>
   <div class="output-meta"><span class="hint-inline">تاریخچه واگرد/ازنو در نوار اقدام پایین است</span></div>
+  <section id="behavior-strip" class="behavior-strip" aria-label="رفتار">
+    <div class="behavior-chips behavior-chips--main">
+      <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
+      <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
+      <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
+      <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
+    </div>
+  </section>
   <section id="stagebar" aria-label="نوار مراحل پالایش و ترجمه">
     <div class="stage-row" role="toolbar" aria-label="مراحل پالایش">
       <button type="button" id="stage-simple" class="sbtn" title="پالایش ساده" aria-label="پالایش ساده"><span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span></button>
@@ -299,19 +307,6 @@
         </div>
       </div>
 
-    </section>
-
-    <!-- behavior: global toggles at modal bottom, independent of pipeline/wave panels (#110 T1b) -->
-    <section class="pref-section" aria-labelledby="behavior-title">
-      <div class="pref-head">
-        <h4 id="behavior-title">🎚️ رفتار</h4>
-      </div>
-      <div class="behavior-chips">
-        <label class="chip"><input type="checkbox" id="toggle-realtime"> <strong>حالت آنی</strong> <span style="font-size:12px">(پیش‌نمایش زنده)</span></label>
-        <label class="chip"><input type="checkbox" id="toggle-vad" checked> <strong>VAD</strong> <span style="font-size:12px">ارسال پس از سکوت</span></label>
-        <label class="chip"><input type="checkbox" id="toggle-autocopy"> کپی خودکار</label>
-        <label class="chip"><input type="checkbox" id="toggle-polish" checked> <strong>پالیش نهایی</strong></label>
-      </div>
     </section>
 
     <div class="hint">ترتیب را ذخیره کن — هر ماژول یک وظیفه دارد.</div>

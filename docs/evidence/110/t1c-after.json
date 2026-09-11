@@ -1,0 +1,248 @@
+{
+ "360": {
+  "persist_on": {
+   "before": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ],
+   "after": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ]
+  },
+  "persist_off": {
+   "before": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ],
+   "after": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ]
+  },
+  "state": {
+   "loc": {
+    "toggle-realtime": "outside-modal",
+    "toggle-vad": "outside-modal",
+    "toggle-autocopy": "outside-modal",
+    "toggle-polish": "outside-modal"
+   },
+   "behSectionInModal": false,
+   "behTitleAnywhere": false,
+   "strip": {
+    "top": 345,
+    "bottom": 383,
+    "mainTop": 74,
+    "mainBottom": 659,
+    "visibleNoScroll": true
+   },
+   "stage": {
+    "top": 416,
+    "bottom": 533,
+    "mainTop": 74,
+    "mainBottom": 659,
+    "visibleNoScroll": true
+   },
+   "actionbarVisible": true,
+   "stripHeight": 38,
+   "overflowX": 0,
+   "labels": [
+    "حالت آنی (پیش‌نمایش زنده)",
+    "VAD ارسال پس از سکوت",
+    "کپی خودکار",
+    "پالیش نهایی"
+   ]
+  },
+  "modal_pipe": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "modal_wave": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "console_errors": []
+ },
+ "390": {
+  "persist_on": {
+   "before": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ],
+   "after": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ]
+  },
+  "persist_off": {
+   "before": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ],
+   "after": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ]
+  },
+  "state": {
+   "loc": {
+    "toggle-realtime": "outside-modal",
+    "toggle-vad": "outside-modal",
+    "toggle-autocopy": "outside-modal",
+    "toggle-polish": "outside-modal"
+   },
+   "behSectionInModal": false,
+   "behTitleAnywhere": false,
+   "strip": {
+    "top": 345,
+    "bottom": 383,
+    "mainTop": 74,
+    "mainBottom": 695,
+    "visibleNoScroll": true
+   },
+   "stage": {
+    "top": 416,
+    "bottom": 533,
+    "mainTop": 74,
+    "mainBottom": 695,
+    "visibleNoScroll": true
+   },
+   "actionbarVisible": true,
+   "stripHeight": 38,
+   "overflowX": 0,
+   "labels": [
+    "حالت آنی (پیش‌نمایش زنده)",
+    "VAD ارسال پس از سکوت",
+    "کپی خودکار",
+    "پالیش نهایی"
+   ]
+  },
+  "modal_pipe": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "modal_wave": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "console_errors": []
+ },
+ "1440": {
+  "persist_on": {
+   "before": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ],
+   "after": [
+    "toggle-realtime:true",
+    "toggle-vad:true",
+    "toggle-autocopy:true",
+    "toggle-polish:true"
+   ]
+  },
+  "persist_off": {
+   "before": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ],
+   "after": [
+    "toggle-realtime:false",
+    "toggle-vad:false",
+    "toggle-autocopy:false",
+    "toggle-polish:false"
+   ]
+  },
+  "state": {
+   "loc": {
+    "toggle-realtime": "outside-modal",
+    "toggle-vad": "outside-modal",
+    "toggle-autocopy": "outside-modal",
+    "toggle-polish": "outside-modal"
+   },
+   "behSectionInModal": false,
+   "behTitleAnywhere": false,
+   "strip": {
+    "top": 354,
+    "bottom": 392,
+    "mainTop": 76,
+    "mainBottom": 778,
+    "visibleNoScroll": true
+   },
+   "stage": {
+    "top": 425,
+    "bottom": 499,
+    "mainTop": 76,
+    "mainBottom": 778,
+    "visibleNoScroll": true
+   },
+   "actionbarVisible": true,
+   "stripHeight": 38,
+   "overflowX": 0,
+   "labels": [
+    "حالت آنی (پیش‌نمایش زنده)",
+    "VAD ارسال پس از سکوت",
+    "کپی خودکار",
+    "پالیش نهایی"
+   ]
+  },
+  "modal_pipe": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "modal_wave": {
+   "beh": false,
+   "toggles": [
+    false,
+    false,
+    false,
+    false
+   ]
+  },
+  "console_errors": []
+ }
+}
