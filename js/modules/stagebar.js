@@ -37,9 +37,34 @@ const STAGE_LANGS = [
   ['🇪🇸 Español', 'es'], ['🇮🇹 Italiano', 'it'], ['🇹🇷 Türkçe', 'tr'], ['🇸🇦 العربية', 'ar'],
   ['🇷🇺 Русский', 'ru'], ['🇨🇳 中文', 'zh'],
 ];
-const SYS_SIMPLE = 'You are a proofreader. Fix only spelling, orthography and punctuation in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
-const SYS_ADV = 'You are a proofreader. Fix spelling, punctuation and grammar together in the SAME language as the input text; preserve meaning, numbers and names, never change the language or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
-const SYS_GRAMMAR = 'Fix only grammar and word inflection in the SAME language as the input text. Do not change spelling, style or punctuation, do not rewrite, never change the language. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
+const SYS_SIMPLE = 'You are a proofreader. Fix only spelling, orthography and punctuation in the SAME language as the input text; never change the language, meaning or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+const SYS_ADV = 'You are a proofreader. Fix spelling, punctuation and grammar together in the SAME language as the input text; preserve meaning, numbers and names, never change the language or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+const SYS_GRAMMAR = 'Fix only grammar and word inflection in the SAME language as the input text. Do not change spelling, style or punctuation, do not rewrite, never change the language. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
+// --- phantom-timestamp guard (#144, app-side column): STT rarely leaks lone
+// timecodes (۰:۲۴، 12:34، ۰۱:۱۵) that polish would otherwise pass through to
+// display/apply. Strip standalone mm:ss tokens; colon-less numbers (ورژن ۱۳،
+// ۱۰۰ کارت، ۱۲ نسخه، years) never match, and real clock times after «ساعت»
+// are kept. Pure (DOM-free; verified under node by slicing
+// __TS_GUARD_START__..__TS_GUARD_END__).
+// __TS_GUARD_START__
+function stripLoneTimecodes(text){
+  const s0 = String(text ?? '');
+  if(!s0 || (s0.indexOf(':') < 0 && s0.indexOf('：') < 0)) return s0;
+  const D = '[0-9۰-۹٠-٩]';
+  const E = '[\\s\\u200C()\\[\\]{}«»"\'“”‘’،,;.!؟?—–\\-…/\\\\|]';
+  // Protect real clock times («ساعت ۱۲:۳۰») with placeholders first.
+  const kept = [];
+  let s = s0.replace(new RegExp('ساعت\\s+' + D + '{1,2}[:：]' + D + '{2}', 'g'), (m) => {
+    kept.push(m);
+    return '\u0000' + (kept.length - 1) + '\u0000';
+  });
+  const loneRe = new RegExp('(^|' + E + ')' + D + '{1,2}[:：]' + D + '{2}[،,]?((?=' + E + ')|$)', 'g');
+  s = s.replace(loneRe, '$1');
+  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => kept[+i]);
+  s = s.replace(/[ \t]{2,}/g, ' ').trim();
+  return s;
+}
+// __TS_GUARD_END__
 let stageRawStack = [];
 const STAGE_RAW_MAX = 25;
 // Slice-scoped undo: push the pre-stage scope slice (not the whole doc) so خام
@@ -163,10 +188,14 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
+    // phantom-timestamp guard (#144, app-side column): strip lone STT timecodes
+    // from the polish output before display/apply (sibling column owns the STT half).
+    const cleanText = stripLoneTimecodes(out.text);
+    if(cleanText !== out.text) Logger.log('info','phantom timecode stripped',{before:out.text.length, after:cleanText.length});
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     // apply-diff-confirm (#49): gate the result behind the bottom sheet instead of
     // direct-apply — Apply replays stagePushRaw+stageApply verbatim; quota fires there.
-    fillDiffSheet({ kind: 'polish', scope, text: out.text, model: out.model, faLabel, logTitle,
+    fillDiffSheet({ kind: 'polish', scope, text: cleanText, model: out.model, faLabel, logTitle,
       okStatus: '✅ ' + faLabel + ' نشست',
       okToast: faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'),
       okLog: `${logTitle} نشست — دامنه: ${scope.kind === 'selection' ? 'انتخاب' : 'کل'} — مدل: ${out.model} (${out.providerId})`,
