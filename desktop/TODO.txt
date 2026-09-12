@@ -1,0 +1,299 @@
+OWNER VERIFY — instant single-shot + human chain progress + cancel + failed-audio retention:
+1. Instant single-shot feel (200-char text): focus Notepad (cursor in field) →
+   hotkey → speak ~200 chars → hotkey → the whole text must appear TYPED at
+   once (no animated batch rendering); pill status ends with the human line
+   "نشست با گوگل" (verbose OFF shows ONLY this; gear → Settings → Options →
+   check "نمایش جزئیات فنی" → Save → next inject appends the old technical
+   line "hwnd 0x… restored:… fg:… mode:instant typed N/N chars" AFTER the
+   human line; uncheck → human-only again; pill.settings.json key
+   "verboseStatus", missing/corrupt → OFF).
+2. Human progress lines: during "در حال ارسال…" the status walks the chain in
+   Persian — "تلاش ۱: گوگل ✗ ← بعدی…" per failed attempt, "تلاش ۲: گوگل ✓"
+   on the winner, final "نشست با گوگل" (گروک shows as "گروک"). Animated
+   injectMode path untouched (focus-guard + "توقف: فوکوس عوض شد" intact).
+3. Cancel button in both states: a visible ✕ (E711) button sits under the
+   status. While RECORDING (red mic) → ✕ discards via the existing path
+   (status "لغو شد."). While SENDING ("در حال ارسال…/در حال تبدیل…") → ✕
+   aborts the in-flight request, status "لغو شد — صدا نگه داشته شد، تلاش
+   مجدد؟" with Retry (E72C ↻) + Discard (E74D) buttons visible. Cancel hotkey
+   + Esc do the same in both states.
+4. Kill-network test → Retry works, Discard clears: unplug/disable network →
+   record → stop → request fails → status "ناموفق بود — صدا نگه داشته شد،
+   تلاش مجدد؟" + Retry/Discard buttons appear (wav NOT deleted; nothing
+   persisted across restarts — session-only). Re-enable network → Retry (↻)
+   re-runs transcription from the saved wav → success types + deletes the
+   wav + hides the buttons. Discard deletes the file + clears the buttons +
+   status "دور ریخته شد.". Very-short blip recordings still show "صدا خیلی
+   کوتاه بود — چیزی ارسال نشد." with NO Retry buttons (empty-audio guard).
+Build: dotnet build clean, 0 warnings 0 errors; exe stayed alive 8s headless then killed.
+
+OWNER VERIFY — compact pill minimum 250x260 (markup-only, MainWindow.xaml):
+1. Launch pill → drag-resize down to the minimum → nothing clipped: title
+   "HamNegar (proto)" + all 4 title buttons (history E81C, settings E713,
+   hide E921, close E8BB) on one row, 60px mic button centered in its ring,
+   status text + engine chip fully visible.
+2. At minimum width the status wraps to two lines — both lines AND the engine
+   chip below it must be visible (no bottom cut-off).
+3. Regression: triggers/animations/tooltips unchanged (pulse storyboard,
+   IsMouseOver/IsPressed, all Click handlers + tooltips identical); only
+   geometry changed (fonts 12→11 title/status, paddings/margins, mic 72→60,
+   grid 96→80). Build: dotnet build clean, 0 warnings 0 errors; exe stayed
+   alive 8s headless then killed.
+CONTENT MATH (96dpi, 1 DIP = 1px; root chrome = Margin 6x2 + Padding 8x2 +
+BorderThickness 1x2 = 30px per axis; inner at 250x260 = 220x230):
+- WIDTH driver = title row: 4x28px buttons + 3x4px gaps = 124px, plus title
+  text ~90px at 11px Segoe UI = ~214px inner needed → 214 + 30 = 244 →
+  MinWidth 250 (6px slack). (Mic 60 / grid 80, wrapping status, small chip
+  all fit easily in 220px inner.) The ~230 estimate clips ~14px of the title
+  row, so 250 is the tightest clip-free width.
+- HEIGHT: title row 28 + mic grid 80 + margin 8 + status 2 lines ~30 +
+  margin 6 + chip ~17 (10px font + 7,2 padding) + margin 4 = ~173 content +
+  30 chrome = ~203 → MinHeight 260 (slack for shadow BlurRadius 18, resize
+  grip, ClearType variance).
+- NAMED-ELEMENT room: HistoryButton/SettingsButton/HideButton/CloseButton
+  28px each (124px total, right-docked, untouched); PulseRing 72px in 80px
+  grid (4px slack/side; 1.08x pulse peak ~= 78 < 80, no clip); MicButton 60px
+  centered; StatusText wraps with ~30px reserved for 2 lines; EngineText
+  MaxWidth 220 = inner width, CharacterEllipsis guards longer strings.
+- Proportional geometry keeps (not behavior): mic template CornerRadius
+  36→30 (circle at 60px), PulseRing 84→72 / CornerRadius 42→36 (fits 80 grid).
+
+OWNER VERIFY — Settings missing controls (SettingsWindow track: cancel box + inject combo + pill checkbox):
+1. Cancel box records + persists: gear → Settings → Shortcuts → "Cancel recording"
+   shows Ctrl+Shift+X (fresh default) → click it → press e.g. Ctrl+Shift+Q →
+   box shows Ctrl+Shift+Q → Save → close → reopen Settings → still Ctrl+Shift+Q;
+   pill.settings.json has "CancelHotkey": "Ctrl+Shift+Q". Reset defaults restores
+   Ctrl+Shift+Space / Ctrl+Shift+H / Ctrl+Shift+X.
+2. Inject combo switches + persists: gear → Settings → Options → Inject mode shows
+   Instant (fresh default = "instant") → pick Animated → Save → pill.settings.json
+   has "injectMode": "animated" → reopen Settings → Animated still selected.
+   Set back to Instant afterwards (default, safe).
+3. Checkbox persists: gear → Settings → Options → "Hotkey shows pill when hidden"
+   checked (fresh default true) → uncheck → Save → pill.settings.json has
+   "hotkeyShowsPill": false → reopen Settings → still unchecked. Re-check →
+   Save → true again. (Persistence only: the MainWindow honoring — headless
+   recording with toasts when false — comes from the other track; key contract
+   in §7 below.)
+
+OWNER VERIFY — injectMode (instant default + animated focus-guard):
+1. Instant default (safe): ensure %AppData%/HamNegar/pill.settings.json has NO
+   "injectMode" key (or "injectMode": "instant") → Notepad focused (cursor in
+   field) → Ctrl+Shift+Space → speak short Persian → Ctrl+Shift+Space → whole
+   text must appear TYPED at once in Notepad; pill status ends with
+   "mode:instant typed N/N chars".
+2. Animated focus-change: set "injectMode": "animated" in pill.settings.json
+   (same file, additive key — no checkbox yet) → focus Notepad (cursor in
+   field) → hotkey → speak a LONG sentence → hotkey → while text is still
+   typing click into another window → typing must STOP immediately (no stray
+   chars in the wrong window); pill status shows "توقف: فوکوس عوض شد — بقیه
+   در تاریخچه (typed M/N …)"; full text still in the history window. Set back
+   to "instant" afterwards (default, safe).
+
+OWNER VERIFY — dark title bars + light/dark theme (Settings/History track):
+1. Fresh launch (no `theme` key in %AppData%/HamNegar/pill.settings.json):
+   pill + gear → Settings + pill history button → History ALL open dark,
+   INCLUDING the Settings/History OS title bars (white title bar = fail).
+2. Gear → Settings → Options → Theme → Light: the instant you pick it, the
+   Settings window goes light INCLUDING its title bar (no Save needed).
+   Save → Close → pill history button → History opens light, light title bar.
+3. Restart the pill: light persists (pill.settings.json now has "theme":"light").
+   Gear → Theme → Dark → Save → restart: dark everywhere again, dark title bars.
+4. Corrupt-proof: set "theme":"banana" (or delete the key) → launch → dark,
+   no crash, no popup.
+KNOWN GAP (MainWindow track, not this one): the pill body chrome is hardcoded
+in MainWindow.xaml (Background #0F0F10 line 52, muted #9AA0A6 lines 58/102,
+text #E8EAED line 103, badge #2A2B2E/#8AB4F8 lines 105-108, badges #EA4335/
+#1A73E8/#438DF0 lines 15/40/69/148/153/168/171/194) and its shared-style refs
+are StaticResource (IconButtonStyle lines 60-63, IconFont line 17), so the
+pill body follows the theme only for the 4 ghost buttons at startup and does
+NOT live-switch. Full pill theming needs the MainWindow agent to key that
+chrome (BgBrush/LineBrush/TextBrush/MutedBrush/AccentSoftBrush/HoverBrush)
+and switch its refs to DynamicResource. Settings + History already do both.
+
+OWNER VERIFY — local history clipboard (AutoCopy now defaults OFF):
+1. Record: first copy a marker word (e.g. MARKER) so the clipboard holds it →
+   Notepad focused (cursor in field) → Ctrl+Shift+Space → speak Persian →
+   Ctrl+Shift+Space → text must be TYPED into Notepad AND appear in history
+   (pill title-bar history button, E81C glyph). Clipboard must be UNTOUCHED:
+   paste somewhere → MARKER must still paste (transcript NOT on clipboard).
+   Pill status ends with "saved in history." (not "backup on clipboard.").
+2. History window: pill → history button → newest entry on top (time + engine
+   + text preview). Copy button → that entry pastes via Ctrl+V. Delete removes
+   one row. Clear-all empties the list (%AppData%/HamNegar/pill.history.json
+   → []). Restart pill → history still listed (≤100 entries, plain JSON).
+3. Re-inject: focus Notepad (cursor in field) → in history window click the
+   paste glyph (E77F) on an entry → text must be TYPED into Notepad via the
+   same restore + SendInput path (pill status shows typed N/N). History window
+   stays open; the result is on the pill status line.
+4. Opt-in backup: gear → check "Copy transcript to clipboard" → Save → next
+   transcription DOES land on the clipboard again. Uncheck → untouched.
+   (Existing pill.settings.json files keep their saved AutoCopy value; only
+   fresh installs default to OFF.)
+5. Target gone: close Notepad mid-record → status says "kept in history."
+   (AutoCopy off) or "copied, paste manually." (AutoCopy on).
+
+OWNER VERIFY — text-injection fix (read pill status line after each stop):
+1. Notepad insert: open Notepad, click in the field (blinking cursor, NO
+   selection) → Ctrl+Shift+Space → speak → Ctrl+Shift+Space → text must be
+   TYPED into Notepad. Pill status must read: hwnd 0x… restored:True fg:True
+   typed N/N chars. (Clipboard holds the same text as backup.)
+2. Selection-replace: in Notepad select a word → hotkey → speak → hotkey →
+   the selection must be REPLACED by the new text (native SendInput typing,
+   not paste). Status again: restored:True fg:True typed N/N.
+3. Report-back decoder (copy the status line, lengths/HWND only — no content):
+   - "hwnd 0x0 … gone" → target HWND was never captured (report which app).
+   - "restored:False" → SetForegroundWindow + AttachThreadInput fallback both
+     failed (report app, e.g. elevated Telegram blocks non-elevated typing).
+   - "restored:True fg:False" → window restored but focus landed elsewhere.
+   - "typed 0/N err=…" → SendInput rejected (report err code + app).
+   - "typed M/N (M<N)" → partial injection (report M/N + err).
+   - Any case still leaves the full text on the clipboard: Ctrl+V pastes it.
+4. Telegram/elevated apps: if restored:False there but True in Notepad, it is
+   UIPI integrity (run pill elevated or type into a non-elevated app).
+
+OWNER TEST (headless cannot test mic/injection — run on a real desktop):
+1. Notepad direct-injection: open Notepad, click into a text field so it has
+   focus (cursor in field = insert; select some text = that selection is replaced).
+2. Press Ctrl+Shift+Space (pill shows, starts recording), speak Persian, press
+   Ctrl+Shift+Space again → transcribed text must appear TYPED directly IN
+   NOTEPAD (not in the pill), replacing the selection if one was active.
+3. Settings via gear only: main page has no key boxes; click the gear on the
+    pill → modal SettingsWindow (API keys + Shortcuts + Chain + Options +
+    Save/Cancel) → Save writes %AppData%/HamNegar/pill.settings.json
+    (same file; old files keep working — new keys are additive).
+4. Empty transcript → nothing typed; target window closed mid-record → text is
+   on the clipboard with a "paste manually" status note.
+
+HamNegar.Native PROTOTYPE TODO (throwaway — not production)
+=====================================================
+
+1. Secrets → Windows Credential Manager
+   - Now: Google/Groq keys persist as PLAIN JSON at
+     %AppData%/HamNegar/pill.settings.json (prototype-only).
+   - Production: store keys in Windows Credential Manager
+     (Credential Locker / DPAPI), keep only non-secret prefs in JSON.
+     Never log key material (presence only: set/missing).
+
+2. Panel C — tools / favorites / cancel (per locked pill decision)
+   - Prototype has: mic toggle, status, engine label, key boxes, hide, close.
+   - Still missing: tools row, favorites strip, in-recording cancel affordance
+     (Esc cancels today, but no visible cancel button), per the locked pill spec.
+
+3. Push-to-talk hold mode
+   - Now: Ctrl+Shift+Space TOGGLES record (press to start, press to stop).
+   - Add: hold-to-talk (record while held, release to transcribe) as an option.
+
+4. MSIX packaging + signing
+   - Prototype runs as loose exe. Production: MSIX package, code signing
+     cert, auto-update story, AppData migration path.
+
+5. Documented prototype deviations
+    - Hide button = Hide() only, NO tray icon (no new packages allowed;
+      no WinForms NotifyIcon / Hardcodet). Global hotkey (Ctrl+Shift+Space)
+      shows the window again.
+    - Mic/headless testing impossible in CI: owner tests manually
+      (Notepad focus → hotkey → speak → hotkey → text appears).
+
+ 6. Fonts (pillule restyle note)
+     - Pill visuals use Segoe UI for now (system font, zero packaging cost).
+     - Vazirmatn bundling (font file + App.xaml FontFamily + RTL polish)
+       comes later as its own ticket; no font files added in the restyle.
+
+ 7. HANDOFF — theme/settings track → MainWindow track (paste-ready patches)
+    LIVE already (theme/settings track, no MainWindow.xaml.cs touched):
+    - All XAML markup icons are Segoe Fluent/MDL2 vector glyphs (codes verified
+      in the MS Segoe MDL2 table): settings E713, hide/minimize E921,
+      close E8BB, mic E720. MicButtonStyle + title buttons use the IconFont.
+    - One shared theme in App.xaml: IconButtonStyle / PrimaryButtonStyle /
+      SecondaryButtonStyle / RecordHotkeyStyle / CardStyle / SectionTitle /
+      FieldLabel / Hint + app-wide TextBox/PasswordBox/CheckBox styles.
+    - SettingsWindow has KEYS (same names/keys) + SHORTCUTS (click-to-record
+      boxes, persisted) + CHAIN (read-only, from ChainSpec.cs) + OPTIONS
+      (AutoCopy, ShowEngineLabel, persisted). Save path: SettingsExtras.Save
+      merges into pill.settings.json; old files keep loading.
+    STILL YOURS (MainWindow.xaml.cs — adapt names to your current revision):
+    (a) Runtime mic-button literals still set emoji in code. MicButtonStyle
+        already sets the MDL2 IconFont, so plain string assignment renders.
+        Replace every occurrence:
+            "⏹" → "\uE71A"   // Stop (recording)
+            "⏳" → "\uE72C"   // Refresh (stopping/transcribing)
+            "🎙" → "\uE720"   // Microphone (idle)
+    (b) Apply persisted hotkeys at startup + live after the settings dialog.
+        Delete `private const int HotkeyId = 1;`, then replace
+        RegisterGlobalHotkey/UnregisterGlobalHotkey/HwndHook with:
+            private void RegisterGlobalHotkeys()
+            {
+                var handle = new WindowInteropHelper(this).Handle;
+                var source = HwndSource.FromHwnd(handle);
+                source?.AddHook(HwndHook);
+                var extras = SettingsExtras.Load();
+                if (!HotkeyConfig.Register(handle, HotkeyConfig.RecordHotkeyId, extras.RecordHotkey))
+                    SetStatus("Hotkey register failed — use mic button.");
+                HotkeyConfig.Register(handle, HotkeyConfig.ShowHideHotkeyId, extras.ShowHideHotkey);
+            }
+            private void UnregisterGlobalHotkeys()
+            {
+                try
+                {
+                    var handle = new WindowInteropHelper(this).Handle;
+                    HotkeyConfig.Unregister(handle, HotkeyConfig.RecordHotkeyId);
+                    HotkeyConfig.Unregister(handle, HotkeyConfig.ShowHideHotkeyId);
+                }
+                catch { }
+            }
+            private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+            {
+                if (msg == NativeMethods.WM_HOTKEY)
+                {
+                    var id = wParam.ToInt32();
+                    if (id == HotkeyConfig.RecordHotkeyId)
+                    {
+                        handled = true;
+                        Dispatcher.BeginInvoke(ToggleRecordAsync);
+                    }
+                    else if (id == HotkeyConfig.ShowHideHotkeyId)
+                    {
+                        handled = true;
+                        Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            if (!IsVisible) Show(); else Hide();
+                        }));
+                    }
+                }
+                return IntPtr.Zero;
+            }
+        And re-register live after the settings dialog closes (in
+        SettingsButton_Click after `_settings = SettingsStore.Load();`):
+            UnregisterGlobalHotkeys(); RegisterGlobalHotkeys();
+        (Also update the SourceInitialized/Closed subscriptions to the plural
+        names, and refresh the StatusText hint from extras.RecordHotkey.)
+    (c) Honor the persisted options (trivial reads, no new plumbing):
+            private void UpdateEngineLabel(string engine)
+            {
+                EngineText.Visibility = SettingsExtras.Load().ShowEngineLabel
+                    ? Visibility.Visible : Visibility.Collapsed;
+                EngineText.Text = $"engine: {engine}";
+            }
+        In InjectIntoPrevious, gate the clipboard backup on the flag
+        (wrap ONLY the existing Clipboard.SetText line):
+            if (SettingsExtras.Load().AutoCopy)
+            { try { Clipboard.SetText(text ?? string.Empty); } catch { } }
+    (d) Store rule: NEVER call SettingsStore.Save from MainWindow — it would
+        wipe RecordHotkey/ShowHideHotkey/AutoCopy/ShowEngineLabel. Only
+        SettingsWindow saves (via SettingsExtras.Save, which merges).
+    (e) New additive keys persisted by SettingsWindow (same file, merge — no
+        HotkeyConfig.cs change; honor them in MainWindow):
+        - "injectMode": "instant" (default, safe) | "animated". Reader already
+          exists: NativeMethods.LoadInjectMode. The Settings Options combo now
+          writes it (Save only, no live-apply).
+        - "hotkeyShowsPill": bool, default TRUE (missing/corrupt → true =
+          today's behavior: record hotkey re-shows the hidden pill). When
+          false, recording must run headless with toasts only (never Show()
+          the pill on hotkey). Settings checkbox now writes it; add a
+          never-throw loader mirroring LoadInjectMode (see
+          LoadHotkeyShowsPill in SettingsWindow.xaml.cs) and gate the
+          `if (!IsVisible) Show();` paths (ToggleRecordAsync + record-hotkey
+          hook) on it.
+        - "CancelHotkey": default "Ctrl+Shift+X" (id HotkeyConfig.CancelHotkeyId
+          = 3, already registered + Esc fallback in OnKeyDown/DiscardRecording).
+          Settings now has the third click-to-record box + Reset covers it.
