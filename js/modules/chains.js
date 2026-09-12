@@ -10,12 +10,12 @@ import { Logger } from './logger.js';
 import { Transcription } from './transcription.js';
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
-
-const $ = s => document.getElementById(s);
+import { esc } from './format.js';
+import { $ } from './dom.js';
 
 // --- injected app.js collaborators (assigned once in mountChains) ---
 // els is the shared element map built in app.js (single way to reach named
-// nodes; the local $() above covers only the ad-hoc lookups the moved code
+// nodes; the imported $() from dom.js covers only the ad-hoc lookups the moved code
 // already did). updateBadge/saveSettings/shortcutsOpen/renderProvidersStatus
 // are hoisted app.js functions passed by reference; onChainsRendered replaces
 // the old end-of-file renderAllChains reassignment (imports are read-only).
@@ -72,7 +72,6 @@ export function hasKeyFor(entry){
 function hasKeyForPolish(entry){
   return hasProviderKey(entry, 'groq');
 }
-function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;'); }
 
 // --- chain/model a11y: single role=status live region + delete-with-undo (seam: ui behavior) ---
 const liveEl = $('chain-live');

@@ -7,8 +7,10 @@ import { createWaveRenderer } from './wave.js';
 import { Storage } from './storage.js';
 import { Quota } from './quota.js';
 import { detectShell } from './shell.js';
+import { fa } from './format.js';
+import { $ } from './dom.js';
+import { worstOf } from './quota-badge.js';
 
-const $ = (id) => document.getElementById(id);
 const els = {
   fileWarn: $('file-warning'),
   wrap: $('pill-wrap'),
@@ -28,8 +30,6 @@ const els = {
   wave: $('pill-wave'),
 };
 
-const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
-const fa = (v) => String(v).replace(/\d/g, (d) => FA_DIGITS[d]);
 const fmtTimer = (ms) => {
   const s = Math.floor(ms / 1000);
   const mm = String(Math.floor(s / 60)).padStart(2, '0');
@@ -76,18 +76,14 @@ function setState(next, statusText = '') {
   if (statusText && els.status) els.status.textContent = statusText;
 }
 
-// Quota dot: READ-ONLY (same worst-color rule as app.js refreshQuotaStrip).
+// Quota dot: READ-ONLY (worst-color rule lives in quota-badge.js).
 function refreshQuotaDot() {
   if (!els.quotaDot) return;
   let s = null;
   try { s = Quota.getSummary('today'); } catch { return; }
   if (!s) return;
-  let worst = 0;
-  for (const m of (s.byModel || [])) {
-    const r = m.color === 'danger' ? 3 : m.color === 'warn-orange' ? 2 : m.color === 'warn' ? 1 : 0;
-    if (r > worst) worst = r;
-  }
-  els.quotaDot.className = 'dot' + (worst >= 3 ? ' err' : worst >= 1 ? ' warn' : '');
+  const badge = worstOf(s);
+  els.quotaDot.className = 'dot' + (badge ? ' ' + badge : '');
 }
 
 // Engine pair badge: idle shows first STT chain entry; success shows used engine.
