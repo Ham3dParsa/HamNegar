@@ -23,3 +23,8 @@ temp/
 graphify-out/
 .graphify/
 .graphify_analysis.json
+
+# native desktop app (moved in, ticket/desktop-move)
+desktop/**/bin/
+desktop/**/obj/
+desktop/**/.vs/
