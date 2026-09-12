@@ -18,6 +18,7 @@ const { Storage } = await import('./storage.js');
 
 function reset(){
   global.localStorage.clear();
+  Stats._resetForTests();
 }
 
 describe('LIMITS - live-transcribe حذف شده', ()=>{
@@ -106,6 +107,26 @@ describe('week/month/all', ()=>{
   });
 });
 
+describe('تک‌بارگذاری و کش burst', ()=>{
+  beforeEach(reset);
+  it('burst record/record/getSummary با خوانش محدود و اعداد درست', ()=>{
+    let loads = 0;
+    const orig = Storage.getStatsHistory;
+    Storage.getStatsHistory = function(...a){ loads++; return orig.apply(this, a); };
+    try {
+      Stats.record({model:'groq', durationMs:10000, words:20, chars:100});
+      Stats.record({model:'groq', durationMs:10000, words:20, chars:100});
+      const s = Stats.getSummary('today');
+      assert.equal(s.totals.count, 2);
+      assert.equal(s.totals.words, 40);
+      // single-load per call + burst cache: 2 record + 1 summary must not
+      // re-parse per internal step (old code: 6 loads). Same-tick cache => <=2.
+      assert.ok(loads <= 2, `expected <=2 history loads, got ${loads}`);
+    } finally {
+      Storage.getStatsHistory = orig;
+    }
+  });
+});
 describe('migration از QUOTA_USAGE', ()=>{
   beforeEach(reset);
   it('اگر STATS_HISTORY خالی و QUOTA_USAGE پر است، migrate کند', ()=>{

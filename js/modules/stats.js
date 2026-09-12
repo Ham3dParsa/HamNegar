@@ -21,20 +21,52 @@ function tehranDate(d = new Date()) {
   return d.toISOString().slice(0, 10);
 }
 
+let _histCache = null;
+let _histDirty = false;
+let _dropScheduled = false;
+function _scheduleCacheDrop() {
+  if (_dropScheduled) return;
+  _dropScheduled = true;
+  const drop = () => {
+    _dropScheduled = false;
+    // Never drop unsaved mutations; saves are synchronous so dirty is
+    // normally already false here.
+    if (!_histDirty) _histCache = null;
+  };
+  try {
+    if (typeof queueMicrotask === 'function') queueMicrotask(drop);
+    else Promise.resolve().then(drop);
+  } catch { _dropScheduled = false; }
+}
+
 function loadHistory() {
-  return Storage.getStatsHistory();
+  // Burst cache: one parsed array shared by record/aggregate/getSeries calls
+  // within the same synchronous tick (one render/record burst). Short-lived
+  // by design — dropped on microtask drain so the next tick re-reads from
+  // Storage; external writes are never shadowed by a stale cache.
+  // Persistence still goes only through the Storage seam.
+  if (_histCache) return _histCache;
+  _histCache = Storage.getStatsHistory();
+  _histDirty = false;
+  _scheduleCacheDrop();
+  return _histCache;
 }
 function saveHistory(arr) {
   // cap 365 days, keep sorted old->new
   if (arr.length > 365) arr = arr.slice(arr.length - 365);
   Storage.saveStatsHistory(arr);
+  _histCache = arr;
+  _histDirty = false;
+  _scheduleCacheDrop();
 }
 
-function migrateIfNeeded() {
-  const hist = loadHistory();
-  if (hist.length > 0) return;
+// Single-load contract: the caller passes its already-loaded history so no
+// second parse happens inside. Falls back to one load if called bare.
+function migrateIfNeeded(hist) {
+  const h = Array.isArray(hist) ? hist : loadHistory();
+  if (h.length > 0) return h;
   const q = Storage.getQuotaRaw();
-  if (!q || !q._date) return;
+  if (!q || !q._date) return h;
   const counts = {};
   const skipped = [];
   for (const k of Object.keys(LIMITS)) if (q[k]) counts[k] = q[k];
@@ -42,12 +74,14 @@ function migrateIfNeeded() {
   if (skipped.length) {
     try { console.warn('[Stats] migration skipped unknown keys', skipped); } catch {}
   }
-  if (Object.keys(counts).length === 0) return;
+  if (Object.keys(counts).length === 0) return h;
   // ignore live-transcribe if present (already not in LIMITS, but guard)
   delete counts['live-transcribe'];
-  if (Object.keys(counts).length === 0) return;
-  hist.push({ date: q._date, counts, words: 0, chars: 0, durationMs: 0, sessions: Object.values(counts).reduce((a,b)=>a+b,0) });
-  saveHistory(hist);
+  if (Object.keys(counts).length === 0) return h;
+  _histDirty = true;
+  h.push({ date: q._date, counts, words: 0, chars: 0, durationMs: 0, sessions: Object.values(counts).reduce((a,b)=>a+b,0) });
+  saveHistory(h);
+  return _histCache || h;
 }
 
 function getColor(pct) {
@@ -58,8 +92,8 @@ function getColor(pct) {
 }
 
 function aggregate(period) {
-  migrateIfNeeded();
-  const hist = loadHistory();
+  let hist = loadHistory();
+  hist = migrateIfNeeded(hist) || hist;
   if (hist.length === 0) return { totals: { count:0, words:0, chars:0, durationMs:0, sessions:0, minutes:0, counts:{} }, history: [] };
   let filtered = [];
   const todayStr = tehranDate();
@@ -102,15 +136,16 @@ export const Stats = {
     if (!success) return;
     // avoid polluting totals with empty sessions (e.g. engine returned '' but duration>0)
     if (!words && !chars) return;
-    migrateIfNeeded();
+    let hist = loadHistory();
+    hist = migrateIfNeeded(hist) || hist;
     const date = tehranDate();
-    const hist = loadHistory();
     let entry = hist.find(h=> h.date===date);
     if (!entry){
       entry = { date, counts:{}, words:0, chars:0, durationMs:0, sessions:0 };
       hist.push(entry);
       hist.sort((a,b)=> a.date.localeCompare(b.date));
     }
+    _histDirty = true;
     entry.counts[model]=(entry.counts[model]||0)+1;
     entry.words += words||0;
     entry.chars += chars||0;
@@ -173,15 +208,15 @@ export const Stats = {
   },
 
   getSeries(days=7){
-    migrateIfNeeded();
-    const hist = loadHistory();
+    let hist = loadHistory();
+    hist = migrateIfNeeded(hist) || hist;
     // return last N days sorted
     const sorted = [...hist].sort((a,b)=> a.date.localeCompare(b.date));
     const slice = sorted.slice(-days);
     return slice.map(h=> ({ date:h.date, count: Object.values(h.counts||{}).reduce((a,b)=>a+b,0), words:h.words||0, minutes: +((h.durationMs||0)/60000).toFixed(2) }));
   },
 
-  _resetForTests(){ Storage.saveStatsHistory([]); },
+  _resetForTests(){ _histCache = null; _histDirty = false; Storage.saveStatsHistory([]); },
 
   _tehranDate: tehranDate,
 };
