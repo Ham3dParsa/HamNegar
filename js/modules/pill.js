@@ -224,6 +224,7 @@ async function handleAudioStop(blob) {
     if (Storage.getSettings().autocopy) {
       try { await navigator.clipboard.writeText(text); } catch {}
     }
+    if (await tauriPaste(text)) toast('در برنامه فعال درج شد', 2000);
   } catch (err) {
     timerStop();
     if ((err && err.aborted) || aborter?.signal.aborted) {
@@ -299,6 +300,39 @@ function makeDraggable() {
   els.pill.addEventListener('pointercancel', () => { dragging = false; });
 }
 
+function toggleMic() {
+  if (state === 'recording') stopRecording();
+  else if (state === 'idle' || state === 'success' || state === 'error') startRecording();
+  else if (state === 'sending') toast('⏳ صبر کن — تبدیل ادامه دارد…', 1500);
+}
+
+// Tauri bridge (ticket 36) — contract for shell P1, web path byte-identical:
+// Rust→pill: event 'hamnegar-toggle-record' (same as M key).
+// pill→Rust: invoke('hamnegar_paste', { text }) after success, tauri-only.
+function tauriGlobal() {
+  try {
+    if (typeof window === 'undefined') return null;
+    const T = window.__TAURI__ || null;
+    if (!T || detectShell() !== 'tauri') return null;
+    return T;
+  } catch { return null; }
+}
+function tauriBridge() {
+  try {
+    const T = tauriGlobal();
+    if (!T || !T.event || typeof T.event.listen !== 'function') return;
+    T.event.listen('hamnegar-toggle-record', () => { try { toggleMic(); } catch {} }).catch(() => {});
+  } catch {}
+}
+async function tauriPaste(text) {
+  try {
+    const T = tauriGlobal();
+    if (!T || !T.core || typeof T.core.invoke !== 'function') return false;
+    await T.core.invoke('hamnegar_paste', { text });
+    return true;
+  } catch { return false; }
+}
+
 function bindKeys() {
   document.addEventListener('keydown', (e) => {
     const t = e.target;
@@ -312,9 +346,7 @@ function bindKeys() {
     }
     if (inField) return;
     if (e.key === 'm' || e.key === 'M') {
-      if (state === 'recording') stopRecording();
-      else if (state === 'idle' || state === 'success' || state === 'error') startRecording();
-      else if (state === 'sending') toast('⏳ صبر کن — تبدیل ادامه دارد…', 1500);
+      toggleMic();
     } else if (e.key === 'h' || e.key === 'H') {
       toggleHidden();
     }
@@ -337,6 +369,7 @@ function init() {
   setState('idle', '');
   makeDraggable();
   bindKeys();
+  tauriBridge();
   if (els.cancel) els.cancel.addEventListener('click', cancelAll);
   if (els.copy) els.copy.addEventListener('click', copyResult);
   if (els.show) els.show.addEventListener('click', toggleHidden);
