@@ -3,6 +3,7 @@
 // strings, aria and timers unchanged. Only wrappers added: module imports/exports
 // plus dependency injection (see mountStagebar). Seam: Logger/UI vitrine region.
 import { Storage } from './storage.js';
+import { hasKeyById } from './provider.js';
 import { Logger } from './logger.js';
 import { Transcription } from './transcription.js';
 import { Quota } from './quota.js';
@@ -185,7 +186,7 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
     // keeps the polish guards in validatePolishOutput.
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
-    const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
+    const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
     // phantom-timestamp guard (#144, app-side column): strip lone STT timecodes
@@ -225,7 +226,7 @@ async function runTranslate(code){
   try {
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
-    const preferOk = explicit && Storage.hasKeyForProvider(providerIdOf(explicit, 'groq'));
+    const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }

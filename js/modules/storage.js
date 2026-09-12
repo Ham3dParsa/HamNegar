@@ -23,8 +23,9 @@ const POLISH_DEFAULTS_LEGACY = ['openai/gpt-oss-120b','qwen/qwen3.8-27b','qwen/q
 // Canonical provider ids: groq|google|openrouter (+ customs). Legacy stored aliases
 // map to their canonical id (same localStorage slot, so no saved key is lost);
 // purged ids map to null so chain normalizers can drop those entries.
-// Customs pass through untouched.
-function migrateProviderId(raw){
+// Customs pass through untouched. Exported for the provider seam (ticket 37);
+// storage itself never imports provider.js (no cycle: provider imports storage).
+export function migrateProviderId(raw){
   const t = typeof raw === 'string' ? raw.trim() : '';
   if(!t) return '';
   if(t === 'gemini') return 'google';

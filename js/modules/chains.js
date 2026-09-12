@@ -5,6 +5,7 @@
 // module imports/exports plus dependency injection (see mountChains).
 // Seam: Logger/UI vitrine region (chains only).
 import { Storage } from './storage.js';
+import { resolve as resolveProvider, hasKey as hasProviderKey, hasKeyById, canonicalize } from './provider.js';
 import { Logger } from './logger.js';
 import { Transcription } from './transcription.js';
 import { Quota } from './quota.js';
@@ -59,23 +60,17 @@ export function getPolishChain(){ return polishChainState; }
 export function setPolishChain(next){ polishChainState = next; }
 
 // Canonical chain entry: {id, providerId, enabled}. Legacy `provider` alias + bare strings tolerated on read.
+// Single implementation lives in js/modules/provider.js (ticket 37); these are
+// thin same-name adapters so the app.js/stagebar/settingsModal injection keeps working.
 export function providerIdOf(entry, fallback){
-  if(entry && typeof entry === 'object'){
-    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return entry.providerId.trim();
-    if(typeof entry.provider === 'string' && entry.provider.trim()) return entry.provider.trim();
-  }
-  const id = typeof entry === 'object' ? entry.id : entry;
-  if(id === 'groq') return 'groq';
-  if(typeof id === 'string' && /^gemini/i.test(id)) return 'gemini';
-  if(typeof id === 'string' && id.includes(':free')) return 'openrouter';
-  return fallback || 'groq';
+  return resolveProvider(entry, fallback);
 }
 export function entryIdOf(entry){ return typeof entry === 'object' ? entry.id : entry; }
 export function hasKeyFor(entry){
-  return Storage.hasKeyForProvider(providerIdOf(entry, 'gemini'));
+  return hasProviderKey(entry, 'google');
 }
 function hasKeyForPolish(entry){
-  return Storage.hasKeyForProvider(providerIdOf(entry, 'groq'));
+  return hasProviderKey(entry, 'groq');
 }
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML.replace(/"/g,'&quot;'); }
 
@@ -171,10 +166,10 @@ function renderChain(container, chain, type){
   const polishOff = type==='polish' && !els.togglePolish?.checked;
   chain.forEach((entry, idx)=>{
     const id = entryIdOf(entry);
-    const providerId = providerIdOf(entry, type === 'stt' ? 'gemini' : 'groq');
+    const providerId = providerIdOf(entry, type === 'stt' ? 'google' : 'groq');
     const enabled = typeof entry === 'object' ? entry.enabled!==false : true;
     const meta = (type==='stt' ? STT_LABELS[id] : POLISH_LABELS[id]) || {label:id, sub:''};
-    const hasKey = Storage.hasKeyForProvider(providerId);
+    const hasKey = hasKeyById(providerId);
     const item = document.createElement('div');
     item.className = 'chain-item' + (hasKey?'':' missing') + (polishOff?' polish-off':'') + (!enabled?' polish-off':'');
     item.draggable = true;
@@ -214,8 +209,8 @@ function renderChain(container, chain, type){
     // toggle per-model (both chains) — single path: canonical {id, providerId, enabled}
     item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
       const arr = type==='stt'? sttChainState : polishChainState;
-      if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], providerId: providerIdOf(arr[idx], type==='stt'?'gemini':'groq'), enabled:e.target.checked};
-      else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'gemini':'groq'); arr[idx].enabled = e.target.checked; }
+      if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], providerId: providerIdOf(arr[idx], type==='stt'?'google':'groq'), enabled:e.target.checked};
+      else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'google':'groq'); arr[idx].enabled = e.target.checked; }
       persistChains();
       renderAllChains();
       announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
@@ -348,9 +343,8 @@ let flowRenderT = null; // debounce: validate()/search fire per keystroke, list 
 export function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ renderFlowList(); }catch{} }, 150); }
 function flowProviderLabel(pid){
   if (pid === 'groq') return 'Groq';
-  if (pid === 'gemini') return 'Google AI Studio';
+  if (pid === 'gemini' || pid === 'google') return 'Google AI Studio';
   if (pid === 'openrouter') return 'OpenRouter';
-  if (pid === 'zenspark') return 'OpenCode Zen';
   try {
     const hit = (Storage.getSettings().customProviders || []).find(x => x && x.id === pid);
     if (hit) return hit.name || pid;
@@ -374,8 +368,6 @@ function showFetchError(providerId, e){
     errBox.dataset.failed = '1';
     const t = $('m-err-text');
     if (t) t.textContent = msg + ' ';
-    const zen = $('m-err-zen');
-    if (zen) zen.hidden = providerId !== 'zenspark';
   }
 }
 function capsFor(id, pid){
@@ -386,7 +378,6 @@ function capsFor(id, pid){
     || /whisper|stt|transcrib/i.test(low);
   const free = /free/i.test(low);
   if (/^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || {}).sub || 'Google AI Studio' };
-  if (/^muse-spark-/i.test(s)) return { caps: ['t2t'], free: /contributor-free/i.test(s), fa: /1\.3/i.test(s) ? 'muse spark 1.3 contributor (رایگان)' : /1\.2/i.test(s) ? 'muse spark 1.2 contributor (رایگان)' : 'muse spark contributor (رایگان)' };
   if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
   return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
 }
@@ -408,11 +399,9 @@ function allFlowModels(){
     out.push({ id: clean, providerId: pid, caps, free, fa });
   };
   push('groq', 'groq');
-  push('muse-spark-1.3-contributor-free', 'zenspark');
-  push('muse-spark-1.2-contributor-free', 'zenspark');
-  for (const id of Object.keys(STT_LABELS)) if (id !== 'groq') push(id, /^gemini/i.test(id) ? 'gemini' : 'groq');
+  for (const id of Object.keys(STT_LABELS)) if (id !== 'groq') push(id, /^gemini/i.test(id) ? 'google' : 'groq');
   for (const id of Object.keys(POLISH_LABELS)) push(id, providerIdOf({ id }, 'groq'));
-  for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, pid);
+  for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, canonicalize(pid) || pid);
   return out;
 }
 function chainLoc(id, pid){
@@ -427,7 +416,6 @@ function flowScopeLabel(){
     : flowProv === 'groq' ? 'Groq'
     : flowProv === 'gemini' ? 'Google AI Studio'
     : flowProv === 'openrouter' ? 'OpenRouter'
-    : flowProv === 'zenspark' ? 'OpenCode_Zen'
     : flowProv === 'custom' ? 'سفارشی' : flowProv;
 }
 function renderKeyVisibility(){
@@ -435,15 +423,13 @@ function renderKeyVisibility(){
     groq: flowProv === 'all' || flowProv === 'groq',
     gemini: flowProv === 'all' || flowProv === 'gemini',
     openrouter: flowProv === 'all' || flowProv === 'openrouter',
-    zenspark: flowProv === 'all' || flowProv === 'zenspark',
     custom: flowProv === 'all' || flowProv === 'custom',
   };
-  const cardGroq = $('provider-card-groq'), cardGemini = $('provider-card-gemini'), cardOr = $('provider-card-openrouter'), cardZen = $('provider-card-zenspark');
+  const cardGroq = $('provider-card-groq'), cardGemini = $('provider-card-gemini'), cardOr = $('provider-card-openrouter');
   const customList = $('custom-providers-list'), customAdd = $('custom-add-card');
   if (cardGroq) cardGroq.hidden = !show.groq;
   if (cardGemini) cardGemini.hidden = !show.gemini;
   if (cardOr) cardOr.hidden = !show.openrouter;
-  if (cardZen) cardZen.hidden = !show.zenspark;
   if (customList) customList.hidden = !show.custom;
   if (customAdd) customAdd.hidden = !show.custom;
 }
@@ -452,11 +438,11 @@ function updateNokey(){
   if (!el) return;
   if (flowProv === 'all' || flowProv === 'custom') { el.hidden = true; return; }
   let has = false;
-  try { has = Storage.hasKeyForProvider(flowProv); } catch {}
+  try{ has = hasKeyById(flowProv); }catch{}
   el.hidden = has;
 }
 function syncCacheLines(){
-  for (const pid of ['groq', 'gemini', 'openrouter', 'zenspark']) {
+  for (const pid of ['groq', 'gemini', 'openrouter']) {
     const el = document.getElementById('cache-' + pid);
     if (el) el.textContent = fetchStamp.get(pid) || 'نه هنوز — «لیست مدل‌ها» را بزن';
   }
@@ -469,7 +455,7 @@ function renderFlowList(){
   const q = ($('m-q')?.value || '').trim().toLowerCase();
   box.innerHTML = '';
   const rows = allFlowModels()
-    .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter', 'zenspark'].includes(d.providerId) : d.providerId === flowProv)
+    .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter'].includes(d.providerId) : d.providerId === flowProv || (flowProv === 'gemini' && d.providerId === 'google'))
     .filter(d => {
       const capsSel = [...flowChips].filter(c => c === 'stt' || c === 't2t');
       if (capsSel.length && !capsSel.some(c => d.caps.includes(c))) return false;
@@ -478,7 +464,7 @@ function renderFlowList(){
     })
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
   for (const d of rows) {
-    const hasKey = (() => { try { return Storage.hasKeyForProvider(d.providerId); } catch { return false; } })();
+    const hasKey = (() => { try { return hasKeyById(d.providerId); } catch { return false; } })();
     const loc = chainLoc(d.id, d.providerId);
     const card = document.createElement('div');
     card.className = 'mrow';
@@ -513,22 +499,16 @@ function renderFlowList(){
   if (empty) {
     empty.hidden = rows.length !== 0;
     const mw = $('m-manual-wrap');
-    // Manual-id entry per rail (ticket/45, folds zen-cors): gemini/all → Gemini shape,
-    // zenspark → exact `muse-spark-*` shape; other rails → foreign pid, hidden.
-    const manualPid = (flowProv === 'gemini' || flowProv === 'all') ? 'gemini' : flowProv === 'zenspark' ? 'zenspark' : null;
+    // Manual-id entry per rail (ticket/45): gemini/all → Gemini shape;
+    // other rails → foreign pid, hidden.
+    const manualPid = (flowProv === 'gemini' || flowProv === 'all') ? 'google' : null;
     if (mw) {
       mw.hidden = !(rows.length === 0 && manualPid);
       if (!mw.hidden) {
         const inp = $('easy-model-input'), addB = $('btn-easy-add'), hint = $('m-manual-hint');
-        if (manualPid === 'zenspark') {
-          if (inp) { inp.placeholder = 'muse-spark-…'; inp.setAttribute('aria-label', 'شناسه دستی Zen'); }
-          if (addB) addB.textContent = 'افزودن دستی Zen';
-          if (hint) { hint.hidden = false; hint.textContent = 'شناسه‌های Zen شکل muse-spark-* دارند.'; }
-        } else {
-          if (inp) { inp.placeholder = 'gemini-…'; inp.setAttribute('aria-label', 'شناسه دستی Gemini'); }
-          if (addB) addB.textContent = 'افزودن دستی Gemini';
-          if (hint) hint.hidden = true;
-        }
+        if (inp) { inp.placeholder = 'gemini-…'; inp.setAttribute('aria-label', 'شناسه دستی Gemini'); }
+        if (addB) addB.textContent = 'افزودن دستی Gemini';
+        if (hint) hint.hidden = true;
       }
     }
   }
@@ -559,11 +539,11 @@ function toggleFlowModel(modelId, providerId){
     return;
   }
   const target = targetForModel(mid, pid);
-  if (pid === 'gemini' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
+  if (pid === 'google' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   if (target === 'stt') {
     if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   }
-  if (!Storage.hasKeyForProvider(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
+  if (!hasKeyById(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
   addModelToChain(mid, pid, target);
   renderFlowList();
 }
@@ -573,7 +553,7 @@ function addModelToChain(modelId, providerId, target){
   if(!mid || !pid) return;
   if(target==='stt' && !isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
   if(target==='stt'){
-    if(sttChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'gemini')===pid)){ Logger.toast('قبلاً هست'); return; }
+    if(sttChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'google')===pid)){ Logger.toast('قبلاً هست'); return; }
     sttChainState.push({ id:mid, providerId:pid, enabled:true });
   } else {
     if(polishChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'groq')===pid)){ Logger.toast('قبلاً هست'); return; }
@@ -586,13 +566,17 @@ function addModelToChain(modelId, providerId, target){
 }
 async function fetchAndShowModels(providerId){
   flowLastPid = providerId;
-  const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : providerId==='zenspark' ? els.btnZenModels : els.btnOrModels;
+  // Rail-vocabulary compat: 'gemini' here is the models-tab rail/filter/DOM key
+  // (btnGeminiModels, provider-card-gemini, cache-gemini in index.html), not the
+  // canonical identity — canonicalize() above maps it to 'google' for all
+  // identity logic (chainLoc/hasKey/dedup).
+  const btn = providerId==='groq' ? els.btnGroqModels : providerId==='gemini' ? els.btnGeminiModels : els.btnOrModels;
   const errBox = $('m-err');
   if(btn) btn.textContent='...';
   try{
     saveSettings();
     const ids = await Transcription.listModels(providerId);
-    modelCache.set(providerId, ids);
+    modelCache.set(canonicalize(providerId) || providerId, ids);
     fetchStamp.set(providerId, 'به‌روزشده: همین حالا (حافظه)');
     if(errBox){ errBox.hidden = true; delete errBox.dataset.failed; }
     renderFlowList();
@@ -690,7 +674,7 @@ function renderChainPanel(target){
   const chainFa = target === 'stt' ? 'STT' : 'پالیش';
   for(const d of rows){
     let hasKey = false;
-    try{ hasKey = Storage.hasKeyForProvider(d.providerId); }catch{ hasKey = false; }
+    try{ hasKey = hasKeyById(d.providerId); }catch{ hasKey = false; }
     const loc = chainLoc(d.id, d.providerId);
     const inTarget = !!loc && loc.type === target;
     const card = document.createElement('div');
@@ -755,7 +739,6 @@ export function mountChains(deps){
   els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
   els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini'));
   els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
-  els.btnZenModels?.addEventListener('click', ()=> fetchAndShowModels('zenspark'));
 
   // --- models flow card wiring: ONE search + ONE chip row + manual Gemini id ---
   $('m-q')?.addEventListener('input', renderFlowListSoon);
@@ -779,9 +762,9 @@ export function mountChains(deps){
   });
   $('m-nokey-link')?.addEventListener('click', (e)=>{
     e.preventDefault();
-    const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : flowProv === 'zenspark' ? $('provider-card-zenspark') : $('provider-card-openrouter');
+    const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
     if(card && 'open' in card) card.open = true;
-    const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : flowProv === 'zenspark' ? els.keyZen : els.keyOpenrouter;
+    const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : els.keyOpenrouter;
     input?.focus?.();
   });
   els.customName?.addEventListener('input', syncCustomModelsBtn);
@@ -858,7 +841,7 @@ export function mountChains(deps){
       // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so:
       // 1) exact hit in any fetched list (covers future releases + custom providers),
       // 2) whisper- only (Groq-exclusive in our provider set) — anything else picks its rail
-      if(/^gemini/i.test(mid)) pid = 'gemini';
+      if(/^gemini/i.test(mid)) pid = 'google';
       else if(mid.includes(':free')) pid = 'openrouter';
       else {
         let hit = '';
@@ -870,18 +853,18 @@ export function mountChains(deps){
     }
     if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
     const target = targetForModel(mid, pid);
-    if(pid === 'gemini' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
+    if(pid === 'google' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
     if(target === 'stt'){
       if(!isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
     }
-    if(!Storage.hasKeyForProvider(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
+    if(!hasKeyById(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
     addModelToChain(mid, pid, target);
     renderFlowList();
   });
   $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
   $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });
-  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
-  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'gemini'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
+  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
+  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
   els.btnExpandStt?.addEventListener('click', ()=> toggleChainPanel('stt'));
   els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));

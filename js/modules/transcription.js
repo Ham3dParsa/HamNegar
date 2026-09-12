@@ -3,6 +3,7 @@
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Google) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
+import { canonicalize, hasKey as hasProviderKey, displayPair } from './provider.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
 
@@ -61,34 +62,34 @@ export function applyPersonalDictionary(text, entries){
 
 async function queryGroq(blob, externalSignal){
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error(`کلید ${pairLabel('groq', STT_GROQ_MODEL)} نیست`),{status:401});
-  if(!k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${pairLabel('groq', STT_GROQ_MODEL)} باید gsk_ باشد`),{status:401});
+  if(!k) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} نیست`),{status:401});
+  if(!k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} باید gsk_ باشد`),{status:401});
   if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
   const fd=new FormData(); fd.append('file',blob,'speech.webm'); fd.append('model','whisper-large-v3'); fd.append('response_format','json');
-  Logger.log('info',`به ${pairLabel('groq', STT_GROQ_MODEL)}...`,{size:blob.size});
+  Logger.log('info',`به ${displayPair('groq', STT_GROQ_MODEL)}...`,{size:blob.size});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),35000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   const base = (groqBaseURL || 'https://api.groq.com/openai/v1').replace(/\/+$/,'');
   assertTrustedBase(base, ['api.groq.com']);
-  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${pairLabel('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${pairLabel('groq', STT_GROQ_MODEL)}: `+e.message),{status:0}); }
+  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('groq', STT_GROQ_MODEL)}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); Logger.log('error',`${pairLabel('groq', STT_GROQ_MODEL)} fail`,{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
-  const j=await res.json(); Logger.log('info',`${pairLabel('groq', STT_GROQ_MODEL)} ok`,j); return (j.text||'').trim();
+  if(!res.ok){ const er=await parseErr(res); Logger.log('error',`${displayPair('groq', STT_GROQ_MODEL)} fail`,{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
+  const j=await res.json(); Logger.log('info',`${displayPair('groq', STT_GROQ_MODEL)} ok`,j); return (j.text||'').trim();
 }
 async function queryGemini(blob, model, externalSignal){
   const { geminiKey: k } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error(`کلید ${pairLabel('google', model)} نیست`),{status:401});
-  if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error(`فرمت کلید ${pairLabel('google', model)} اشتباه`),{status:401});
+  if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
+  if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error(`فرمت کلید ${displayPair('google', model)} اشتباه`),{status:401});
   if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
   const b64=await blobToB64(blob);
-  Logger.log('info',`به ${pairLabel('google', model)}...`,{size:blob.size});
+  Logger.log('info',`به ${displayPair('google', model)}...`,{size:blob.size});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),40000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
-  let res; try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:"Transcribe verbatim in original language(s). Only transcription, no summary."},{inlineData:{mimeType:blob.type||"audio/webm",data:b64}}]}],generationConfig:{temperature:0.1}}),signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${pairLabel('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${pairLabel('google', model)}: `+e.message),{status:0}); }
+  let res; try{ res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:"Transcribe verbatim in original language(s). Only transcription, no summary."},{inlineData:{mimeType:blob.type||"audio/webm",data:b64}}]}],generationConfig:{temperature:0.1}}),signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error',`${pairLabel('google', model)} fail`,{status:res.status, model, body:er.text}); throw err; }
-  const j=await res.json(); Logger.log('debug',`${pairLabel('google', model)} raw`,j); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
+  if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text}); throw err; }
+  const j=await res.json(); Logger.log('debug',`${displayPair('google', model)} raw`,j); return j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
 }
 
 // Polish adapters — canonical providers groq|google|openrouter (+ custom) + Google fallback
@@ -135,48 +136,22 @@ function longInputError(layer = 'polish'){
   return Object.assign(new Error(msg), { status: 413 });
 }
 
-// Canonical text/STT provider ids: groq|google|openrouter (+ custom ids).
-// Legacy 'gemini' stored in old chains maps to 'google' (same endpoint + x-goog-api-key).
-function canonicalProviderId(pid){
-  if(typeof pid !== 'string') return pid;
-  const t = pid.trim();
-  if(t === 'gemini') return 'google';
-  return t;
-}
-// Ticket 28 (pair display): single display-string helper — every user-facing
-// provider/model readout renders as `providerId/modelId` (e.g.
-// groq/qwen3.6-27b, google/gemini-flash-lite-latest). Display only: never used
-// for selection, fallback, keys, or endpoints.
-function pairLabel(providerId, model){
-  let pid = canonicalProviderId(providerId);
-  pid = (typeof pid === 'string' ? pid.trim() : String(pid ?? '').trim());
-  if(/^(groq|google|openrouter)$/i.test(pid)) pid = pid.toLowerCase();
-  const mid = (typeof model === 'string' ? model.trim() : String(model ?? '').trim());
-  if(pid && mid) return `${pid}/${mid}`;
-  return pid || mid;
-}
+// Provider identity (canonical ids, legacy migration, display pairs) is owned by
+// js/modules/provider.js (ticket 37) — consumed here via canonicalize/displayPair.
 // STT via Groq always runs fixed whisper-large-v3, so its display pair is constant.
 const STT_GROQ_MODEL = 'whisper-large-v3';
 // STT entry → display pair only. Chain/key logic stays in sttProviderOf/hasKeyFor.
 function sttPairLabel(entry){
   const pid = sttProviderOf(entry);
-  if(pid === 'groq') return pairLabel('groq', STT_GROQ_MODEL);
+  if(pid === 'groq') return displayPair('groq', STT_GROQ_MODEL);
   const id = (typeof entry === 'object' ? entry.id : entry);
-  return pairLabel(pid, id);
+  return displayPair(pid, id);
 }
 // Storage still keys the Google credential as geminiKey, so 'google' resolves there.
+// Single owner is js/modules/provider.js (ticket 37): google branch ≡ same slot,
+// purged ids → false, everything else identical — verified case-by-case.
 function hasKeyForProviderId(providerId){
-  const c = canonicalProviderId(providerId);
-  if(c === 'zenspark') return false; // purged provider: filter pre-flight, no network attempt
-  if(c === 'google'){
-    try{
-      const s = Storage.getSettings();
-      if(s && s.geminiKey) return true;
-    }catch{}
-    try{ return Storage.hasKeyForProvider('gemini'); }catch{ return false; }
-    return false;
-  }
-  return Storage.hasKeyForProvider(c);
+  return hasProviderKey({ providerId });
 }
 
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
@@ -198,8 +173,8 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
 // Payload semantics match the legacy Groq path (temperature/max_tokens/qwen guards).
   if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
   const { key: k, base, trusted, extraHeaders } = resolveChatProvider(providerId);
-  if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${pairLabel(providerId, model)} برای پالیش نیست` : `کلید ${pairLabel(providerId, model)} برای ${layer} نیست`),{status:401});
-  if(providerId === 'groq' && !k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${pairLabel(providerId, model)} باید gsk_ باشد`),{status:401});
+  if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${displayPair(providerId, model)} برای پالیش نیست` : `کلید ${displayPair(providerId, model)} برای ${layer} نیست`),{status:401});
+  if(providerId === 'groq' && !k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair(providerId, model)} باید gsk_ باشد`),{status:401});
   if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
   assertTrustedBase(base, trusted);
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
@@ -208,28 +183,28 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
     res=await fetch(`${base}/chat/completions`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${k}`, ...extraHeaders},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${pairLabel(providerId, model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${pairLabel(providerId, model)} ${layer}: `+e.message),{status:0}); }
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair(providerId, model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair(providerId, model)} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${pairLabel(providerId, model)} ${layer} fail`,{status:res.status, model, base}); throw err; }
-  const j=await res.json(); Logger.log('debug',`${pairLabel(providerId, model)} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''});
-  if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${pairLabel(providerId, model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base}); throw err; }
+  const j=await res.json(); Logger.log('debug',`${displayPair(providerId, model)} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''});
+  if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${displayPair(providerId, model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
 }
 async function queryPolishViaGemini(text, model, layer = 'polish', system = null){
   const { geminiKey: k } = Storage.getSettings();
-  if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${pairLabel('google', model)} برای پالیش نیست` : `کلید ${pairLabel('google', model)} برای ${layer} نیست`),{status:401});
-  if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error(`فرمت کلید ${pairLabel('google', model)} اشتباه`),{status:401});
+  if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${displayPair('google', model)} برای پالیش نیست` : `کلید ${displayPair('google', model)} برای ${layer} نیست`),{status:401});
+  if(!(k.startsWith('AQ.')||k.startsWith('AIza'))) throw Object.assign(new Error(`فرمت کلید ${displayPair('google', model)} اشتباه`),{status:401});
   const url=`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
   const prompt = (system || `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; do not change the language, meaning or tone, do not explain, return ONLY the corrected text. If no correction is needed, return the input verbatim; never comment or apologize. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`) + `\nText:\n${text}`;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),20000);
   let res; try{
     res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,maxOutputTokens:polishOutputBudget(text)}}),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${pairLabel('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${pairLabel('google', model)} ${layer}: `+e.message),{status:0}); }
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${pairLabel('google', model)} ${layer} fail`,{status:res.status, model}); throw err; }
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json(); const out=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')?.trim()||'';
-  Logger.log('debug',`${pairLabel('google', model)} ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
-  if(j.candidates?.[0]?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${pairLabel('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
+  Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  if(j.candidates?.[0]?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(out, text, model, layer);
 }
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
@@ -241,14 +216,14 @@ function polishTargetOf(entry){
   const model = (entry.id || '').replace(':free','');
   const rawPid = (typeof entry.providerId === 'string' && entry.providerId.trim()) ? entry.providerId.trim()
     : (typeof entry.provider === 'string' && entry.provider.trim() ? entry.provider.trim() : '');
-  let providerId = canonicalProviderId(rawPid);
+  let providerId = canonicalize(rawPid);
   if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'google' : 'groq');
   return { model, providerId };
 }
 async function queryPolish(text, entry, layer = 'polish'){
   const { model, providerId } = polishTargetOf(entry);
-  if(canonicalProviderId(providerId) === 'google') return queryPolishViaGemini(text, model, layer);
-  return queryChat(canonicalProviderId(providerId), text, { model, layer });
+  if(canonicalize(providerId) === 'google') return queryPolishViaGemini(text, model, layer);
+  return queryChat(canonicalize(providerId), text, { model, layer });
 }
 
 // Full-chain text op (ticket/16 chain fallback): iterates ENABLED polishChain entries
@@ -265,7 +240,7 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
   if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
     // explicit dropdown picks carry no enabled flag — resolve it from the chain itself
     const rawMatch = rawChain.find(e => e && polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId);
-    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: canonicalProviderId(prefer.providerId), enabled: true });
+    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: canonicalize(prefer.providerId), enabled: true });
     else Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
   }
   if(chain.length===0) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
@@ -275,11 +250,11 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
     const { model, providerId } = polishTargetOf(entry);
     try{
       let out;
-      if(canonicalProviderId(providerId) === 'google') out = await queryPolishViaGemini(text, model, layer, system);
-      else out = await queryChat(canonicalProviderId(providerId), text, { system, model, layer });
+      if(canonicalize(providerId) === 'google') out = await queryPolishViaGemini(text, model, layer, system);
+      else out = await queryChat(canonicalize(providerId), text, { system, model, layer });
       if(out){
-        if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${pairLabel(providerId, model)}`);
-        else Logger.log('debug',`${layer} ok → ${pairLabel(providerId, model)}`,{model, providerId});
+        if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${displayPair(providerId, model)}`);
+        else Logger.log('debug',`${layer} ok → ${displayPair(providerId, model)}`,{model, providerId});
         if(layer === 'polish'){
           const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
           const applied = applyPersonalDictionary(out, dict);
@@ -287,11 +262,11 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
         }
         return { text: out, model, providerId };
       }
-      Logger.log('warn',`${pairLabel(providerId, model)} ${layer} empty`,{model});
+      Logger.log('warn',`${displayPair(providerId, model)} ${layer} empty`,{model});
     }catch(e){
       lastErr=e;
-      if(e.status===401 || e.status===403){ Logger.log('warn',`${pairLabel(providerId, model)} ${layer} skipped (key)`,{model, status:e.status}); continue; }
-      Logger.log('warn',`${pairLabel(providerId, model)} ${layer} fail (${i+1}/${chain.length})`,{model, msg:e.message, status:e.status});
+      if(e.status===401 || e.status===403){ Logger.log('warn',`${displayPair(providerId, model)} ${layer} skipped (key)`,{model, status:e.status}); continue; }
+      Logger.log('warn',`${displayPair(providerId, model)} ${layer} fail (${i+1}/${chain.length})`,{model, msg:e.message, status:e.status});
       if(e.status===429 && i<chain.length-1) await new Promise(r=>setTimeout(r,600));
     }
   }
@@ -311,18 +286,18 @@ async function translateText(text, lang, entry){
   const system = translateSystem(lang);
   if(entry){
     const { model, providerId } = polishTargetOf(entry);
-    if(!hasKeyForProviderId(providerId)) throw Object.assign(new Error(`⚠ کلید ${pairLabel(providerId, model)} نیست`),{status:401});
+    if(!hasKeyForProviderId(providerId)) throw Object.assign(new Error(`⚠ کلید ${displayPair(providerId, model)} نیست`),{status:401});
     let t;
-    if(canonicalProviderId(providerId) === 'google') t = await queryPolishViaGemini(text, model, 'translate', system);
-    else t = await queryChat(canonicalProviderId(providerId), text, { system, model, layer: 'translate' });
+    if(canonicalize(providerId) === 'google') t = await queryPolishViaGemini(text, model, 'translate', system);
+    else t = await queryChat(canonicalize(providerId), text, { system, model, layer: 'translate' });
     return { text: t, model, providerId };
   }
   return textChain(text, { system, layer: 'translate' });
 }
 function sttProviderOf(entry){
   if(entry && typeof entry === 'object'){
-    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return canonicalProviderId(entry.providerId.trim());
-    if(typeof entry.provider === 'string' && entry.provider.trim()) return canonicalProviderId(entry.provider.trim());
+    if(typeof entry.providerId === 'string' && entry.providerId.trim()) return canonicalize(entry.providerId.trim());
+    if(typeof entry.provider === 'string' && entry.provider.trim()) return canonicalize(entry.provider.trim());
   }
   const id = typeof entry === 'object' ? entry.id : entry;
   if(id==='groq') return 'groq';
@@ -410,7 +385,7 @@ export const Transcription = {
       const enabledChain = polishChain.filter(e=>e.enabled!==false);
       let usablePolish = enabledChain.filter(e => hasKeyForPolish(e));
       if(usablePolish.length !== enabledChain.length){
-        const skippedP = enabledChain.filter(e => !hasKeyForPolish(e)).map(e=>pairLabel(polishTargetOf(e).providerId, polishTargetOf(e).model));
+        const skippedP = enabledChain.filter(e => !hasKeyForPolish(e)).map(e=>displayPair(polishTargetOf(e).providerId, polishTargetOf(e).model));
         if(skippedP.length) Logger.log('info','پالیش بی‌کلید حذف شد', { skipped: skippedP });
       }
       if(usablePolish.length === 0 && enabledChain.length>0){
@@ -426,12 +401,12 @@ export const Transcription = {
             const out = await queryPolish(rawText, entry);
             if(out){
               polished = out;
-              polishModelUsed = pairLabel(ppid, pm);
-              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${pairLabel(ppid, pm)}`);
+              polishModelUsed = displayPair(ppid, pm);
+              if(i>0) Logger.log('info',`پالیش فالبک موفق #${i+1} → ${displayPair(ppid, pm)}`);
               break;
             }
           }catch(e){
-            Logger.log('warn',`پالیش ${pairLabel(ppid, pm)} خطا`,{msg:e.message, status:e.status});
+            Logger.log('warn',`پالیش ${displayPair(ppid, pm)} خطا`,{msg:e.message, status:e.status});
             if(e.status===429) await new Promise(r=>setTimeout(r,500));
             if(i===usablePolish.length-1) break;
           }
@@ -462,7 +437,7 @@ export const Transcription = {
     return ruleFixed;
   },
   async listModels(providerId){
-    const pid = canonicalProviderId(providerId);
+    const pid = canonicalize(providerId);
     if(pid === 'google'){
       const { geminiKey: k }=Storage.getSettings();
       if(!k) throw Object.assign(new Error('کلید google نیست'),{status:401});
@@ -507,7 +482,7 @@ export const Transcription = {
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
     return r.json();
   },
-  async queryChat(providerId, text, opts){ return queryChat(canonicalProviderId(providerId), text, opts); },
+  async queryChat(providerId, text, opts){ return queryChat(canonicalize(providerId), text, opts); },
   async textChain(text, opts){ return textChain(text, opts); },
   async translate(text, lang, entry){ return translateText(text, lang, entry); },
   async testPolish(){
