@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _transcribeCts;
     private string? _failedWav; // session-only retained wav after STT failure/cancel (never persisted)
     private int _attemptCount;
+    private DispatcherTimer? _levelTimer;
+    private double _smoothLevel;
 
     public MainWindow()
     {
@@ -212,6 +214,7 @@ public partial class MainWindow : Window
             SetStatus(Lang.K.MicError, shortMsg(ex));
             return;
         }
+        StartLevelTick();
         MicButton.Content = "\uE71A";
         MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EA4335"));
         PulseRing.Visibility = Visibility.Visible;
@@ -229,6 +232,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
+            StopLevelTick();
             SetStatus(Lang.K.StopError, shortMsg(ex));
             MicButton.Content = "\uE720";
             MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A73E8"));
@@ -236,6 +240,7 @@ public partial class MainWindow : Window
             CancelActionButton.Visibility = Visibility.Collapsed;
             return;
         }
+        StopLevelTick();
         MicButton.Content = "\uE720";
         MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A73E8"));
         PulseRing.Visibility = Visibility.Collapsed;
@@ -310,6 +315,7 @@ public partial class MainWindow : Window
         }
         finally
         {
+            StopLevelTick();
             try { _transcribeCts?.Dispose(); } catch { }
             _transcribeCts = null;
             _transcribing = false;
@@ -546,11 +552,73 @@ public partial class MainWindow : Window
     {
         if (!_recorder.IsRecording) return;
         try { File.Delete(_recorder.Stop()); } catch { }
+        finally { StopLevelTick(); }
         MicButton.Content = "\uE720";
         MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A73E8"));
         PulseRing.Visibility = Visibility.Collapsed;
         CancelActionButton.Visibility = Visibility.Collapsed;
         SetStatus(Lang.K.Canceled);
+    }
+
+    // ---- mic level animation (phase 04): cheap per-frame scale 1.0↔1.12 ----
+    // Reads AudioRecorder.Level (read-only peak telemetry, no audio logic
+    // here) on a 50ms DispatcherTimer; stops + rests at 1.0 when idle.
+    // Reduced-motion (OS client-area animation off) → no scaling, static 1.0.
+    private void StartLevelTick()
+    {
+        try
+        {
+            if (!SystemParameters.ClientAreaAnimation)
+                return;
+        }
+        catch { return; }
+        try
+        {
+            StopLevelTick();
+            _smoothLevel = 0;
+            _levelTimer = new DispatcherTimer(
+                TimeSpan.FromMilliseconds(50),
+                DispatcherPriority.Render,
+                (_, _) => TickLevel(),
+                Dispatcher);
+            _levelTimer.Start();
+        }
+        catch { /* animation best-effort only */ }
+    }
+
+    private void TickLevel()
+    {
+        try
+        {
+            if (!_recorder.IsRecording)
+            {
+                StopLevelTick();
+                return;
+            }
+            double target = _recorder.Level;
+            if (target < 0) target = 0;
+            if (target > 1) target = 1;
+            _smoothLevel += (target - _smoothLevel) * 0.35;
+            if (_smoothLevel < 0.004 && target < 0.004)
+                _smoothLevel = 0; // silence snaps home instead of hovering
+            double s = 1.0 + _smoothLevel * 0.12; // max 1.12, less-is-more
+            MicScale.ScaleX = s;
+            MicScale.ScaleY = s;
+        }
+        catch { /* animation best-effort only */ }
+    }
+
+    private void StopLevelTick()
+    {
+        try
+        {
+            _levelTimer?.Stop();
+            _levelTimer = null;
+            _smoothLevel = 0;
+            MicScale.ScaleX = 1.0;
+            MicScale.ScaleY = 1.0;
+        }
+        catch { /* animation best-effort only */ }
     }
 
     // Status is stored as key+args (never a baked string) so ApplyLang() can
