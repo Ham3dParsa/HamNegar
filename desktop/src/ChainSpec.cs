@@ -10,11 +10,18 @@ public sealed record ChainEngine(string Step, string Id, string Note);
 
 public static class ChainSpec
 {
-    public static IReadOnlyList<ChainEngine> Engines { get; } =
+    // NOTE: notes live in Lang (K.ChainNote1..4) — the literals below are
+    // gone; Engines is the localized projection (steps/ids are identifiers).
+    public static IReadOnlyList<ChainEngine> Engines => Localized();
+
+    // Language-facing projection: same steps/ids (identifiers, never
+    // translated), notes re-read from Lang so a live FA↔EN switch re-renders.
+    // SettingsWindow.ApplyLang() re-sets ItemsSource to this on every change.
+    public static IReadOnlyList<ChainEngine> Localized() =>
     [
-        new("1", "google/gemini-flash-lite-latest", "Tried first · fastest"),
-        new("2", "google/gemini-3.5-flash-lite", "Fallback model"),
-        new("3", "google/gemini-3.1-flash-lite", "Last Google fallback"),
-        new("4", "groq/whisper-large-v3", "Final fallback · Groq"),
+        new("1", "google/gemini-flash-lite-latest", Lang.Get(Lang.K.ChainNote1)),
+        new("2", "google/gemini-3.5-flash-lite", Lang.Get(Lang.K.ChainNote2)),
+        new("3", "google/gemini-3.1-flash-lite", Lang.Get(Lang.K.ChainNote3)),
+        new("4", "groq/whisper-large-v3", Lang.Get(Lang.K.ChainNote4)),
     ];
 }

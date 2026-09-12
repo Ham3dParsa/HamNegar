@@ -1,3 +1,26 @@
+OWNER VERIFY — FA/EN language system (Lang module, live switch, restart persists):
+1. Fresh launch (no "uiLang" key in %AppData%/HamNegar/pill.settings.json):
+   pill status reads "آماده — … برای ضبط", mic tooltip Persian, engine chip
+   "موتور: —". Open History → title "تاریخچه", header "تاریخچه رونویسی‌ها".
+   Gear → Settings → title "تنظیمات", ALL labels Persian (no English left).
+2. Flip FA→EN live: Settings → Options → زبان/Language → English. The
+   INSTANT all open windows follow (no Save needed): pill status/tooltips,
+   Settings labels/buttons/combos, History title/header/buttons/empty-hint —
+   incl. OS title bars of Settings + History. Zero mixed labels (the old
+   "History (تاریخچه)" tooltip and "History"/"تاریخچه رونویسی‌ها" title/body
+   mixes are gone). Flip back to فارسی → everything Persian again, live.
+3. Restart persists: with English active, pill.settings.json has
+   "uiLang": "en" (additive key, nothing else touched) → close + relaunch →
+   pill + Settings + History all open in English. Set back to فارسی
+   afterwards (default). Corrupt-proof: set "uiLang": "banana" (or delete the
+   key) → launch → Persian, no crash, no popup.
+4. Status templates stay localized with params: record → stop (no keys) →
+   "در حال ارسال…" walks "تلاش ۱: گوگل ✗ ← بعدی…" / "✓" in FA,
+   "Attempt 1: Google …" in EN; cancel → "لغو شد — صدا نگه داشته شد…" (FA) /
+   "Canceled — audio kept…" (EN). Verbose technical lines stay stable
+   English in both languages (diagnostics).
+Build: dotnet build clean, 0 warnings 0 errors; exe stayed alive 8s headless then killed.
+
 OWNER VERIFY — instant single-shot + human chain progress + cancel + failed-audio retention:
 1. Instant single-shot feel (200-char text): focus Notepad (cursor in field) →
    hotkey → speak ~200 chars → hotkey → the whole text must appear TYPED at

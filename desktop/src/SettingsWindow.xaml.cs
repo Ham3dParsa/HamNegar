@@ -21,6 +21,11 @@ public partial class SettingsWindow : Window
     private Button? _arming;
     private ExtraSettings _extras = new();
     private bool _themeReady; // true once ThemeComboBox reflects the stored value
+    private bool _langReady; // true once LanguageComboBox reflects the stored value
+    private bool _applyingLang; // true while ApplyLang rebuilds combos (suppress handlers)
+    private string _statusKey = "";
+    private object?[] _statusArgs = Array.Empty<object?>();
+    private bool _statusEmpty = true;
 
     public SettingsWindow()
     {
@@ -49,6 +54,105 @@ public partial class SettingsWindow : Window
         // Theme ComboBox reflects the stored `theme` key (dark default); live below.
         ThemeComboBox.SelectedIndex = ThemeManager.IsDark(ThemeManager.LoadTheme()) ? 0 : 1;
         _themeReady = true;
+        // Language ComboBox reflects the stored `uiLang` key (fa default); live below.
+        LanguageComboBox.SelectedIndex = Lang.Current == Lang.En ? 1 : 0;
+        _langReady = true;
+        Closed += (_, _) => { try { Lang.Changed -= OnLangChanged; } catch { /* best-effort */ } };
+        Lang.Changed += OnLangChanged;
+        ApplyLang();
+    }
+
+    // Language: single mechanism — code-behind ApplyLang() (see Lang.cs).
+    // Combo items are rebuilt here (selection preserved) so FA↔EN re-renders
+    // every label, tooltip, title, combo entry AND the current status line.
+    private void OnLangChanged()
+    {
+        try
+        {
+            if (Dispatcher.CheckAccess())
+                ApplyLang();
+            else
+                Dispatcher.BeginInvoke(new Action(ApplyLang));
+        }
+        catch { /* best-effort only */ }
+    }
+
+    private void ApplyLang()
+    {
+        try
+        {
+            _applyingLang = true;
+            FlowDirection = Lang.IsFa ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+            Title = Lang.Get(Lang.K.SettingsTitle);
+            ApiKeysHeader.Text = Lang.Get(Lang.K.ApiKeys);
+            GoogleKeyLabel.Text = Lang.Get(Lang.K.GoogleKey);
+            GroqKeyLabel.Text = Lang.Get(Lang.K.GroqKey);
+            KeysHint.Text = Lang.Get(Lang.K.KeysHint);
+            ShortcutsHeader.Text = Lang.Get(Lang.K.Shortcuts);
+            RecordLabel.Text = Lang.Get(Lang.K.RecToggle);
+            ShowHideLabel.Text = Lang.Get(Lang.K.ShowHide);
+            CancelRecLabel.Text = Lang.Get(Lang.K.CancelRec);
+            RecordHotkeyButton.ToolTip = ShowHideHotkeyButton.ToolTip = CancelHotkeyButton.ToolTip =
+                Lang.Get(Lang.K.HotkeyTip);
+            ResetHotkeysButton.Content = Lang.Get(Lang.K.ResetDefaults);
+            ResetHotkeysButton.ToolTip = Lang.Format(Lang.K.ResetTip,
+                HotkeyConfig.DefaultRecord, HotkeyConfig.DefaultShowHide, HotkeyConfig.DefaultCancel);
+            ShortcutsHint.Text = Lang.Get(Lang.K.ShortcutsHint);
+            ChainHeader.Text = Lang.Get(Lang.K.ChainTitle);
+            ChainItems.ItemsSource = ChainSpec.Localized();
+            OptionsHeader.Text = Lang.Get(Lang.K.Options);
+            ThemeLabel.Text = Lang.Get(Lang.K.Theme);
+            ThemeComboBox.ToolTip = Lang.Get(Lang.K.ThemeTip);
+            RebuildCombo(ThemeComboBox, Lang.Get(Lang.K.ThemeDark), Lang.Get(Lang.K.ThemeLight),
+                ThemeManager.IsDark(ThemeManager.LoadTheme()) ? 0 : 1);
+            LangLabel.Text = Lang.Get(Lang.K.LangLabel);
+            LanguageComboBox.ToolTip = Lang.Get(Lang.K.LangTip);
+            RebuildCombo(LanguageComboBox, Lang.Get(Lang.K.LangNameFa), Lang.Get(Lang.K.LangNameEn),
+                Lang.Current == Lang.En ? 1 : 0);
+            InjectLabel.Text = Lang.Get(Lang.K.InjectMode);
+            InjectModeComboBox.ToolTip = Lang.Get(Lang.K.InjectTip);
+            RebuildCombo(InjectModeComboBox, Lang.Get(Lang.K.InjectInstant), Lang.Get(Lang.K.InjectAnimated),
+                NativeMethods.LoadInjectMode() == NativeMethods.InjectMode.Animated ? 1 : 0);
+            HotkeyShowsPillCheck.Content = Lang.Get(Lang.K.HotkeyShowsPill);
+            AutoCopyCheck.Content = Lang.Get(Lang.K.AutoCopy);
+            ShowEngineLabelCheck.Content = Lang.Get(Lang.K.ShowEngine);
+            VerboseStatusCheck.Content = Lang.Get(Lang.K.Verbose);
+            OptionsHint.Text = Lang.Get(Lang.K.OptionsHint);
+            SaveButton.Content = Lang.Get(Lang.K.Save);
+            CancelButton.Content = Lang.Get(Lang.K.Cancel);
+            RenderStatus();
+        }
+        catch { /* best-effort only */ }
+        finally { _applyingLang = false; }
+    }
+
+    private static void RebuildCombo(ComboBox box, string first, string second, int selected)
+    {
+        try
+        {
+            box.Items.Clear();
+            box.Items.Add(first);
+            box.Items.Add(second);
+            box.SelectedIndex = selected is 0 or 1 ? selected : 0;
+        }
+        catch { /* best-effort only */ }
+    }
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        _statusEmpty = false;
+        RenderStatus();
+    }
+
+    private void RenderStatus()
+    {
+        try
+        {
+            StatusText.Text = _statusEmpty ? "" : Lang.Format(_statusKey, _statusArgs);
+        }
+        catch { /* best-effort only */ }
     }
 
     // ---- dark/light OS title bar + live theme ----
@@ -72,7 +176,7 @@ public partial class SettingsWindow : Window
 
     private void ThemeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_themeReady)
+        if (!_themeReady || _applyingLang)
             return; // initial SelectedIndex set above, not a user change
         try
         {
@@ -87,6 +191,25 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private string SelectedUiLang() => LanguageComboBox.SelectedIndex == 1 ? Lang.En : Lang.Fa;
+
+    private void LanguageComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!_langReady || _applyingLang)
+            return; // initial SelectedIndex set above, not a user change
+        try
+        {
+            // Persists (additive `uiLang` key) + fires Changed: every open
+            // window re-ApplyLangs live, incl. titles. Cancel keeps the choice
+            // (same policy as theme).
+            Lang.Set(SelectedUiLang());
+        }
+        catch
+        {
+            // Prototype: language switch is best-effort only.
+        }
+    }
+
     // ---- click-to-record hotkey capture ----
     private void HotkeyButton_Click(object sender, RoutedEventArgs e)
     {
@@ -95,7 +218,7 @@ public partial class SettingsWindow : Window
         Disarm(restore: true);
         _arming = btn;
         btn.Tag = btn.Content; // stash the current combo
-        btn.Content = "Press keys… (Esc cancels)";
+        btn.Content = Lang.Get(Lang.K.PressKeys);
         btn.Focus();
     }
 
@@ -115,14 +238,14 @@ public partial class SettingsWindow : Window
         var mods = Keyboard.Modifiers;
         if (mods == ModifierKeys.None)
         {
-            btn.Content = "Hold Ctrl / Alt / Shift / Win + key…";
+            btn.Content = Lang.Get(Lang.K.HoldMod);
             e.Handled = true;
             return;
         }
         var combo = HotkeyConfig.Build(mods, key);
         if (!HotkeyConfig.TryParse(combo, out _, out _))
         {
-            btn.Content = "Not usable — try again…";
+            btn.Content = Lang.Get(Lang.K.NotUsable);
             e.Handled = true;
             return;
         }
@@ -206,8 +329,8 @@ public partial class SettingsWindow : Window
     }
 
     // One additive merge for all prefs keys: preserves everything else in the file
-    // (keys, hotkeys, theme, unknown props). Called after SettingsExtras.Save.
-    private static void SaveAdditivePrefs(string injectMode, bool hotkeyShowsPill, bool verboseStatus)
+    // (keys, hotkeys, theme, uiLang, unknown props). Called after SettingsExtras.Save.
+    private static void SaveAdditivePrefs(string injectMode, bool hotkeyShowsPill, bool verboseStatus, string uiLang)
     {
         JsonObject root;
         try
@@ -224,6 +347,7 @@ public partial class SettingsWindow : Window
         root["injectMode"] = injectMode;
         root["hotkeyShowsPill"] = hotkeyShowsPill;
         root["verboseStatus"] = verboseStatus;
+        root["uiLang"] = Lang.Normalize(uiLang);
         var dir = Path.GetDirectoryName(SettingsStore.SettingsPath);
         if (!string.IsNullOrEmpty(dir))
             Directory.CreateDirectory(dir);
@@ -258,17 +382,17 @@ public partial class SettingsWindow : Window
             ThemeManager.SaveTheme(SelectedTheme());
             SettingsExtras.Save(keys, extras);
             // Additive keys (same merge idea, own small writer so the
-            // HotkeyConfig.cs shape stays untouched): injectMode + hotkeyShowsPill + verboseStatus.
-            SaveAdditivePrefs(injectMode, hotkeyShowsPill, verboseStatus);
+            // HotkeyConfig.cs shape stays untouched): injectMode + hotkeyShowsPill + verboseStatus + uiLang.
+            SaveAdditivePrefs(injectMode, hotkeyShowsPill, verboseStatus, SelectedUiLang());
             // Never log key material — presence only.
-            StatusText.Text = $"Saved. ({SettingsStore.KeyPresence(keys)})";
+            SetStatus(Lang.K.SavedFmt, SettingsStore.KeyPresence(keys));
             DialogResult = true;
             Close();
         }
         catch (Exception ex)
         {
             var m = ex.Message ?? ex.GetType().Name;
-            StatusText.Text = $"Save error: {(m.Length > 220 ? m[..220] : m)}";
+            SetStatus(Lang.K.SaveError, m.Length > 220 ? m[..220] : m);
         }
     }
 

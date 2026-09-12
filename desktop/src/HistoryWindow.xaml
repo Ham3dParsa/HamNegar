@@ -1,19 +1,19 @@
 <Window x:Class="HamNegar.Native.HistoryWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="History" Height="520" Width="460"
+         Height="520" Width="460"
         WindowStartupLocation="CenterOwner" ResizeMode="CanResize"
         ShowInTaskbar="False" FontFamily="Segoe UI"
         Background="{DynamicResource BgBrush}">
     <DockPanel Margin="12">
         <DockPanel DockPanel.Dock="Top" LastChildFill="False" Margin="0,0,0,8">
-            <TextBlock Text="تاریخچه رونویسی‌ها" Style="{DynamicResource SectionTitleStyle}" VerticalAlignment="Center"/>
-            <Button x:Name="ClearAllButton" Content="پاک‌کردن همه" Style="{DynamicResource SecondaryButtonStyle}"
-                    DockPanel.Dock="Right" Click="ClearAllButton_Click" ToolTip="حذف همه موارد تاریخچه"/>
+            <TextBlock x:Name="HeaderLabel" Text="" Style="{DynamicResource SectionTitleStyle}" VerticalAlignment="Center"/>
+            <Button x:Name="ClearAllButton" Content="" Style="{DynamicResource SecondaryButtonStyle}"
+                    DockPanel.Dock="Right" Click="ClearAllButton_Click"/>
         </DockPanel>
         <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Text="" Style="{DynamicResource HintStyle}"
                    Margin="0,8,0,0" TextWrapping="Wrap"/>
-        <TextBlock x:Name="EmptyHint" Text="هنوز چیزی رونویسی نشده است."
+        <TextBlock x:Name="EmptyHint" Text=""
                    Foreground="{DynamicResource MutedBrush}" FontSize="12" FontFamily="Segoe UI"
                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
         <ScrollViewer x:Name="HistoryScroll" VerticalScrollBarVisibility="Auto">
@@ -25,13 +25,13 @@
                                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
                                     <Button Content="&#xE77F;" Style="{DynamicResource IconButtonStyle}"
                                             Click="ReinjectButton_Click" Tag="{Binding Id}"
-                                            ToolTip="تایپ دوباره در پنجره قبلی"/>
+                                            ToolTip="{Binding ReinjectTip}"/>
                                     <Button Content="&#xE8C8;" Style="{DynamicResource IconButtonStyle}"
                                             Click="CopyButton_Click" Tag="{Binding Id}"
-                                            ToolTip="کپی در حافظه (clipboard)"/>
+                                            ToolTip="{Binding CopyTip}"/>
                                     <Button Content="&#xE74D;" Style="{DynamicResource IconButtonStyle}"
                                             Click="DeleteButton_Click" Tag="{Binding Id}"
-                                            ToolTip="حذف"/>
+                                            ToolTip="{Binding DeleteTip}"/>
                                 </StackPanel>
                                 <StackPanel Margin="0,0,8,0">
                                     <TextBlock FontSize="10" FontFamily="Segoe UI" Foreground="{DynamicResource MutedBrush}">
