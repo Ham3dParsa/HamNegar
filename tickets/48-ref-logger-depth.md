@@ -5,6 +5,7 @@
 
 ## Scope — Seam: Logger (`js/modules/logger.js` فقط + حذف کد از `app.js`)
 - `js/modules/logger.js`: `setFilter/toggleRunIsolation/resolveDisplayName` (انتقال `passes/applyFilters/buildFilterUI` از app.js)؛ بچینگ با DocumentFragment + فلاش rAF؛ ساخت خط با textContent؛ throttle روی scrollTop؛ آپدیت pillها درجا با `data-idx`؛ شمارنده نسل برای toast (F3-toast).
+- باگ E5 (همان seam): پنجره progress حداکثر ۲ pill نبارد تاریخچه شکست را — pill شکست‌خورده با اسلاید حفظ شود؛ `dismissProgress` هندل تایمر داشته باشد تا run تازه را مخفی نکند؛ مسیر EMPTY هم pill را failed علامت بزند.
 - `js/app.js`: فقط حذف کد منتقل‌شده + mount؛ هیچ منطق تازه‌ای نه.
 - همین فایل تیکت.
 
