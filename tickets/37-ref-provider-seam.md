@@ -25,6 +25,7 @@
 - smoke: زنجیره legacy با `gemini`/`zenspark` فقط google/groq بماند؛ گیت کلید در STT و پالیش و بج‌ها یکسان.
 - تست قرارداد: `normalizeSTTChain([{providerId:'gemini'}])→google`؛ `zenspark→dropped`.
 - `hamnegar-reviewer` PASS. بدون VERSION bump (بدون تغییر رفتار).
+- Rail-vocabulary note: نام‌های ریل/DOM (`gemini` در `flowProv`، `btnGeminiModels`، `provider-card-gemini`، `keyGemini`، `cache-gemini`) عمداً دست‌نخورده‌اند — واژگان فیلتر/نمایش‌اند و به `index.html` گره خورده‌اند (خارج از scope). همه منطق هویت کانونیک است: `fetchAndShowModels` ورودی rail را با `canonicalize()` به `google` می‌نگارد، `hasKeyFor` و `reset` با fallback کانونیک `'google'` کار می‌کنند.
 
 ## Type: task
 ## Wave: 1 · Track: REF-A

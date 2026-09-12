@@ -106,7 +106,7 @@ function renderProvidersStatus(){
 }
 function loadSettings(){
   const s=Storage.getSettings();
-  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey;   if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey; if(els.keyZen) els.keyZen.value=s.zenKey;
+  els.keyGroq.value=s.groqKey; els.keyGemini.value=s.geminiKey;   if(els.keyOpenrouter) els.keyOpenrouter.value=s.openrouterKey;
   if(els.groqBaseUrl) els.groqBaseUrl.value=s.groqBaseURL || GROQ_BASE_DEFAULT;
   if(els.openrouterBaseUrl) els.openrouterBaseUrl.value=s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT;
   setSttChain([...s.sttChain]);
@@ -117,7 +117,7 @@ function loadSettings(){
   flowInit();
   renderAllChains();
   updateBadge(); validate(); Dashboard.ensureReportUI(); Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); Dashboard.renderOverall();
-  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey&&!s.zenKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ نوار پایین را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
+  if(!s.groqKey&&!s.geminiKey&&!s.openrouterKey){ Logger.setStatus('کلید تنظیم نشده — ⚙️ نوار پایین را بزن','warn'); } else Logger.setStatus('آماده به کار','info');
 }
 function saveSettings(){
   try{
@@ -125,7 +125,6 @@ function saveSettings(){
       groqKey: els.keyGroq.value,
       geminiKey: els.keyGemini.value,
       openrouterKey: els.keyOpenrouter?.value||'',
-      zenKey: els.keyZen?.value||'',
       groqBaseURL: els.groqBaseUrl?.value||'',
       openrouterBaseURL: els.openrouterBaseUrl?.value||'',
       realtime: els.toggleRealtime.checked,
@@ -228,7 +227,6 @@ export function mountSettingsModal(deps){
 
   els.keyGroq.addEventListener('input',validate); els.keyGemini.addEventListener('input',validate);
   if(els.keyOpenrouter) els.keyOpenrouter.addEventListener('input',validate);
-  if(els.keyZen) els.keyZen.addEventListener('input',validate);
   if(els.groqBaseUrl) els.groqBaseUrl.addEventListener('input',validate);
   if(els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input',validate);
   if(els.togglePolish) els.togglePolish.addEventListener('change', ()=>{ persistChains(); Logger.log('info', `پالیش ${els.togglePolish.checked?'روشن':'خاموش'}`); });
@@ -250,7 +248,7 @@ export function mountSettingsModal(deps){
   els.btnSettings.onclick=()=> openModal();
   $('btn-close-modal').onclick=()=> closeModal();
   $('btn-save-modal').onclick=()=>{ try{ saveSettings(); }catch(e){ Logger.log('error','saveSettings modal failed',{msg:e.message}); return; } closeModal(); Logger.setStatus('تنظیمات ذخیره شد','info'); Logger.toast('ذخیره شد'); };
-  $('btn-reset-stt')?.addEventListener('click', ()=>{ setSttChain(STT_DEFAULTS.map(id=>({id, providerId:providerIdOf(id,'gemini'), enabled:true}))); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
+  $('btn-reset-stt')?.addEventListener('click', ()=>{ setSttChain(STT_DEFAULTS.map(id=>({id, providerId:providerIdOf(id,'google'), enabled:true}))); renderAllChains(); persistChains(); Logger.toast('STT بازنشانی شد'); });
   $('btn-reset-polish')?.addEventListener('click', ()=>{ setPolishChain(POLISH_DEFAULTS.map(e=>({...e}))); renderAllChains(); persistChains(); Logger.toast('پالیش بازنشانی شد'); });
   els.modal.addEventListener('click',e=>{ if(e.target===els.modal) closeModal(); });
   els.toggleRealtime.addEventListener('change',()=>{ Storage.saveSettings({realtime: els.toggleRealtime.checked}); Logger.log('info',`حالت آنی ${els.toggleRealtime.checked?'روشن':'خاموش'}`); });
