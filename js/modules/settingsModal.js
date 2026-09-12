@@ -9,8 +9,7 @@ import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.j
 import { Logger } from './logger.js';
 import { Dashboard } from './dashboard.js';
 import { Quota } from './quota.js';
-
-const $ = s => document.getElementById(s);
+import { $ } from './dom.js';
 
 // --- injected app.js collaborators (assigned once in mountSettingsModal) ---
 // els is the shared element map built in app.js. getStagebar is a live getter

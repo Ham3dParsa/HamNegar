@@ -7,8 +7,7 @@ import { Storage, defaultWaveConfig, WAVE_TYPES } from './storage.js';
 import { createWaveRenderer, STARTERS, starterById, randomStack, WAVE_FA } from './wave.js';
 import { Logger } from './logger.js';
 import { Audio } from './audio.js';
-
-const $ = s => document.getElementById(s);
+import { $ } from './dom.js';
 
 // --- injected app.js collaborators (assigned once in mountWaveTab) ---
 // els is the shared element map built in app.js (waveKillApply reads

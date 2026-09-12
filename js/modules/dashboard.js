@@ -2,13 +2,9 @@
 // Interface: Dashboard.ensureReportUI(), Dashboard.renderOverall()
 // Depth: hides Tehran period state, segmented UI, three hero cards, 7/30-day series strip.
 import { Quota } from './quota.js';
+import { fa, esc } from './format.js';
 
 let activePeriod = 'today';
-
-function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-
-// view-only Persian-digit formatting (no stats-math change; mirrors quota.js)
-function fa(v){ return String(v).replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d]); }
 
 export const Dashboard = {
   getPeriod(){ return activePeriod; },

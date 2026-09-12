@@ -8,8 +8,7 @@ import { Logger } from './logger.js';
 import { Transcription } from './transcription.js';
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
-
-const $ = s => document.getElementById(s);
+import { $ } from './dom.js';
 
 // --- injected app.js collaborators (assigned once in mountStagebar) ---
 let els = null;

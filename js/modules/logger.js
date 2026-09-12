@@ -1,6 +1,8 @@
 // Module: logger
 // Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) + setProgress/dismissProgress + groupRun(label)/clearRun — small surface, hides DOM/progress behind calls.
 // Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock, per-run grouping behind calls.
+import { fa, esc } from './format.js';
+
 let logBody, statusText, statusDot, toastEl;
 
 // Per-run groups (ticket/16): groupRun(label) opens run #n with a clickable separator;
@@ -32,8 +34,6 @@ const STT_DISPLAY_NAMES = {
   'gemini-flash-latest': 'Flash',
   'groq-whisper-2': 'Groq Whisper 2',
 };
-const FA_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
-function faNum(n) { return String(n).replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]); }
 function progressEntryLabel(id) {
   if (Object.prototype.hasOwnProperty.call(STT_DISPLAY_NAMES, id)) return STT_DISPLAY_NAMES[id];
   return String(id ?? '').replace(/^gemini-/i, '').replace(/-/g, ' ').trim() || '—';
@@ -67,7 +67,7 @@ function renderProgressWindow() {
     li.dataset.idx = String(idx);
     const rank = document.createElement('span');
     rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
-    rank.textContent = faNum(idx + 1);
+    rank.textContent = fa(idx + 1);
     const label = document.createElement('span');
     label.textContent = progressChain[idx].label;
     label.style.fontSize = '12px';
@@ -156,7 +156,7 @@ export const Logger = {
     progressEl.hidden = false;
     if (progressLabel && label) progressLabel.textContent = humanizeLabel(label);
     if (progressStep && typeof index === 'number' && typeof total === 'number') {
-      progressStep.textContent = `قدم ${faNum(index + 1)} از ${faNum(total)}`;
+      progressStep.textContent = `قدم ${fa(index + 1)} از ${fa(total)}`;
       if (progressBar) progressBar.style.width = `${Math.round(((index + 1) / total) * 100)}%`;
       if (progressBar) progressBar.parentElement.setAttribute('aria-valuenow', String(Math.round(((index + 1) / total) * 100)));
     }
@@ -203,4 +203,3 @@ export const Logger = {
     if (delay) setTimeout(hide, delay); else hide();
   },
 };
-function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

@@ -3,13 +3,9 @@
 // Depth: hiding removed — delegates to Stats. View only.
 import { Storage } from './storage.js';
 import { Stats, LIMITS } from './stats.js';
+import { fa, esc } from './format.js';
 
 export { LIMITS };
-
-function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-
-// view-only Persian-digit formatting for the single meta line (no stats-math change)
-function fa(v){ return String(v).replace(/\d/g, d=>'۰۱۲۳۴۵۶۷۸۹'[d]); }
 
 // keep expanded state per container so period switch doesn't collapse unexpectedly
 const expandedMap = new WeakMap();

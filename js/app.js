@@ -17,8 +17,10 @@ import {
   providerIdOf, entryIdOf, sanitizeMsg, hasKeyFor,
   chainPanelEls, chainPanelOpen, setChainPanel,
 } from './modules/chains.js';
+import { $ } from './modules/dom.js';
+import { fa } from './modules/format.js';
+import { worstOf } from './modules/quota-badge.js';
 
-const $ = s => document.getElementById(s);
 const els = {
   btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
@@ -282,12 +284,8 @@ function refreshQuotaStrip(){
   if(!s) return;
   if(nums) nums.textContent = `${s.totals.count} درخواست • ${s.totals.words} کلمه`;
   if(dot){
-    let worst = 0;
-    for(const m of (s.byModel || [])){
-      const r = m.color === 'danger' ? 3 : m.color === 'warn-orange' ? 2 : m.color === 'warn' ? 1 : 0;
-      if(r > worst) worst = r;
-    }
-    dot.className = 'dot' + (worst >= 3 ? ' err' : worst >= 1 ? ' warn' : '');
+    const badge = worstOf(s);
+    dot.className = 'dot' + (badge ? ' ' + badge : '');
   }
 }
 if(els.quotaGrid) new MutationObserver(()=> refreshQuotaStrip()).observe(els.quotaGrid, { childList: true });
@@ -594,13 +592,11 @@ let transcribingAbort=null;
 let discardRecording=false; // cancel during rec: drop the blob instead of transcribing
 // ticket 15 — actionbar variant A: hero morph + cancel visible during rec AND transcribing + BIG timer chip
 let recStartMs=0, recTimerId=null;
-const FA_DIGITS='۰۱۲۳۴۵۶۷۸۹';
-function recFa(n){ return String(n).replace(/\d/g, d=> FA_DIGITS[d]); }
 function recTimerPaint(){
   const el=document.getElementById('mic-timer');
   if(!el || el.hidden) return;
   const s=Math.max(0, Math.floor((performance.now()-recStartMs)/1000));
-  el.textContent=`${recFa(String(Math.floor(s/60)).padStart(2,'0'))}:${recFa(String(s%60).padStart(2,'0'))}`;
+  el.textContent=`${fa(String(Math.floor(s/60)).padStart(2,'0'))}:${fa(String(s%60).padStart(2,'0'))}`;
 }
 function recTimerStart(){
   recStartMs=performance.now();
