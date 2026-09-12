@@ -76,8 +76,12 @@
                     <Border.Style>
                         <Style TargetType="Border">
                             <Style.Triggers>
-                                <Trigger Property="Visibility" Value="Visible">
-                                    <Trigger.EnterActions>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding Visibility, RelativeSource={RelativeSource Self}}" Value="Visible" />
+                                        <Condition Binding="{Binding Source={x:Static SystemParameters.ClientAreaAnimation}}" Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <MultiDataTrigger.EnterActions>
                                         <BeginStoryboard Name="PulseBegin">
                                             <Storyboard RepeatBehavior="Forever">
                                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" From="1" To="1.08" Duration="0:0:1.1"/>
@@ -85,17 +89,21 @@
                                                 <DoubleAnimation Storyboard.TargetProperty="(UIElement.Opacity)" From="0.9" To="0" Duration="0:0:1.1"/>
                                             </Storyboard>
                                         </BeginStoryboard>
-                                    </Trigger.EnterActions>
-                                    <Trigger.ExitActions>
+                                    </MultiDataTrigger.EnterActions>
+                                    <MultiDataTrigger.ExitActions>
                                         <StopStoryboard BeginStoryboardName="PulseBegin"/>
-                                    </Trigger.ExitActions>
-                                </Trigger>
+                                    </MultiDataTrigger.ExitActions>
+                                </MultiDataTrigger>
                             </Style.Triggers>
                         </Style>
                     </Border.Style>
                 </Border>
                 <Button x:Name="MicButton" Content="&#xE720;" Style="{StaticResource MicButtonStyle}"
-                        HorizontalAlignment="Center" VerticalAlignment="Center" Click="MicButton_Click"/>
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Click="MicButton_Click">
+                    <Button.RenderTransform>
+                        <ScaleTransform x:Name="MicScale" ScaleX="1" ScaleY="1"/>
+                    </Button.RenderTransform>
+                </Button>
             </Grid>
 
             <TextBlock x:Name="StatusText" Text=""
