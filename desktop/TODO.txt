@@ -8,6 +8,20 @@ OWNER VERIFY — mic level animation (phase 04: voice-driven mic scale 1.0↔1.1
    stays static at 1.0 (pulse ring unchanged, pre-existing behavior).
 Build: dotnet build clean, 0 warnings 0 errors; exe stayed alive 8s headless then killed.
 
+OWNER VERIFY — ChainEngine single-home (phase 03, no behavior change):
+1. Record → stop transcribes as before on the default chain (google lites →
+   groq whisper): no keys → attempts walk then retained-audio path; with keys
+   → winner types into the previous window, engine chip shows the pair
+   (provider/model), history entry kept. Nothing visible changed vs SttChain.
+2. Progress lines unchanged: "تلاش ۱: گوگل ✗ ← بعدی…" per failed attempt,
+   winner "✓", final "نشست با گوگل/گروک" (attempts still reported via the same
+   IProgress engine/ok surface MainWindow already consumes).
+3. Single home: chain order + 401/403/404/429 fallback live only in
+   desktop/src/ChainEngine.cs (SttChain.cs forwards; ChainSpec.cs is
+   display-only text). Deletion check: removing ChainEngine.cs breaks the
+   build (SttChain cannot compile), proving no island remains.
+Build: dotnet build clean, 0 warnings 0 errors; exe stayed alive 8s headless then killed.
+
 OWNER VERIFY — FA/EN language system (Lang module, live switch, restart persists):
 1. Fresh launch (no "uiLang" key in %AppData%/HamNegar/pill.settings.json):
    pill status reads "آماده — … برای ضبط", mic tooltip Persian, engine chip
