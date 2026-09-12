@@ -1,37 +1,103 @@
-# REVIEW — HamNegar تله‌های بازبینی
+# REVIEW.md — HamNegar automated-review guidance
 
-این فایل منبع حقیقت برای `opencode-review` است. PR باید این تله‌ها را نخورد.
+Guidance for the automated reviewers (`kilo-code-bot`, `opencode-agent`) on PRs in this repo.
+This file is the shared source of truth for repo-specific traps. Kilo reads it from the
+PR base branch (`origin/main`); keep it under 10,000 characters.
 
-## تله‌های اجباری
+HamNegar is a Persian voice-typing web app: thin `index.html` shell, `css/app.css`,
+`js/app.js` wiring, deep modules under `js/modules/` (`storage`, `logger`, `quota`,
+`audio`, `realtime`, `transcription`). One ticket touches one seam (AGENTS.md §1).
 
-1. **Gemini Auth `AQ.`** — کلید جدید `AQ....` حتما با هدر `x-goog-api-key` برود، نه `?key=` کوئری. تست: `queryGemini` باید `headers: { 'x-goog-api-key': k }`.
+## Review style
 
-2. **file:// CORS** — `location.protocol === 'file:'` باید بنر هشدار نشان دهد و لاگ warn بزند.
+Be STRICT: flag all potential issues, prioritize quality and security.
+Gate threshold is "Warnings and above" — fail the check on any `[critical]` or `[warning]`.
 
-3. **Audio guard** — هر `transcription` قبل از `fetch` باید `if (blob.size < 800) throw TOO_SHORT` کند تا هزینه بیهوده ندهد.
+- `[critical]` — security hole, data loss, broken auth/fallback, secret leak. Must fix.
+- `[warning]` — bug, race, wasted API cost, seam violation, wrong fallback. Must fix.
+- `[info]` — nit, style preference, optional polish. Never blocks merge.
 
-4. **Storage seam** — هیچ ماژولی به جز `storage.js` حق ندارد مستقیم `localStorage.getItem('KEY_...')` بزند. همه از `Storage.getSettings()` / `Storage.saveSettings()`.
+Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANGES`.
 
-5. **Realtime race** — `rtBefore/rtAfter/rtBasePos` نباید گلوبال قابل بازنویسی باشد. باید به صورت `snap` به `handleTranscription(blob, snap)` پاس شود و با `id/version` ریس قدیمی دور ریخته شود.
+## What to focus on
 
-6. **Fallback 401** — روی `401/403` نباید بی‌شرط `throw` کرد؛ اگر کلید موتور دوم موجود است باید سراغ بعدی برود (لیست ترجیحی).
+- Security: XSS via `innerHTML` (must escape/`textContent`), key exposure in logs/DOM,
+  `file://` CORS banner, `https://`-only BaseURLs, untrusted custom hosts (confirm gate).
+- Performance: audio `blob` size guard before `fetch`, timeout/abort handling,
+  polish output budget, 429 backoff (`setTimeout 500-600ms`).
+- Bugs: realtime race (`rtBefore`/`rtAfter`), STT/polish fallback chains
+  (401/403 skip keyless, 404 next model, 429 next engine), chain normalization
+  (trim/dedup/allowlist), `finish_reason === 'length'` handling.
+- Style: modular seam discipline — one module per file, small interface, no cross-seam logic.
+- Tests: manual 5-second Persian transcription note required when the transcription
+  seam is touched; no automated test CI exists, so the reviewer is the only gate.
+- Docs: Persian UI strings (Vazirmatn, RTL), no English-only user-facing text.
 
-7. **.env** — هرگز `.env` کامیت نشود، فقط `.env.example` با `GROQ_API_KEY=` خالی. `git diff --check` باید تمیز باشد.
+## Mandatory traps
 
-8. **No Live Transcribe** — فعلا `BidiGenerateContent` / `Live API` اضافه نکن. فقط `Web Speech API` برای آنی.
+1. **Gemini Auth `AQ.`** — `AQ....` keys must go via `x-goog-api-key` header, never
+   `?key=` query. Positive: `headers: { 'x-goog-api-key': k }` in `queryGemini`,
+   `queryPolishViaGemini`, `listModels`, `testGemini`.
+2. **file:// CORS** — `location.protocol === 'file:'` must show a warning banner and
+   log `warn`, requiring `http://localhost` (never silent).
+3. **Audio guard** — every transcription path before `fetch` must throw on
+   `blob.size < 800` (status 400/TOO_SHORT) to avoid wasted API cost.
+4. **Storage seam** — only `storage.js` may touch `localStorage` directly. All other
+   modules use `Storage.getSettings()` / `Storage.saveSettings()` (plus typed
+   helpers `getDraft`/`saveHeights`/`getQuotaRaw`). No raw `KEY_...` strings elsewhere.
+5. **Realtime race** — `rtBefore`/`rtAfter`/base-pos must be a closure `snap` passed to
+   `handleTranscription(blob, snap)`, with an `id`/`version` check discarding stale
+   results. No overwritable globals.
+6. **Fallback 401/403** — never unconditional `throw` on 401/403. Skip the keyless or
+   rejected entry (`hasKeyFor`/`hasKeyForPolish` pre-flight + `continue` with warn log)
+   and try the next chain entry. Same for polish/text chains.
+7. **Secrets** — never commit `.env` (only `.env.example` with empty placeholders).
+   Never log key material (`pairLabel` is display-only). `git diff --check` must be clean.
+8. **No Live Transcribe** — do not add `BidiGenerateContent`/Live WebSocket. Realtime
+   preview is Web Speech API only; finalization is Groq/Gemini REST.
 
-## چک
-- `grep -rn "localStorage" js/ --include="*.js" | grep -v "storage.js"` باید صفر باشد.
-- `grep -rn "\?key=" js/ --include="*.js"` باید صفر باشد.
+## Verify (run, don't guess)
 
-## Post-merge gate compliance — PR #4 follow-up (fix/followup-pr4-gate)
+- `grep -rn "localStorage" js/ --include="*.js" | grep -v "storage.js"` → must be empty
+- `grep -rn "?key=" js/ --include="*.js"` → must be empty
+- every `fetch(` in `transcription.js` reachable only after a `blob.size < 800` guard
+- `grep -rn "BidiGenerateContent" js/ --include="*.js"` → must be empty
 
-> جبران ادغام زودهنگام PR #4 در `eb666f4` با 5 هشدار must-fix باز و پوش مستقیم `82fe4aa` روی `main` بدون گیت `APPROVED`. این بخش گواه است که فیکس‌ها داخل همین follow-up PR ردیابی می‌شوند و ادغام بعدی فقط با `APPROVED` مجاز است.
+## Don't duplicate / skip
 
-- **وضعیت:** 5 مورد `[warning]` از PR #4 قبلاً در `82fe4aa` اعمال شد و در این PR مستند/تثبیت می‌شود؛ گیت آینده: `APPROVED` الزامی، پوش مستقیم به `main` ممنوع.
-- **XSS esc (`js/app.js:123,141`):** رفع با `function esc(s){...textContent...}` و `esc(meta.label/sub)` در `renderChain` — شواهد: `docs/PR4_FOLLOWUP_EVIDENCE.md` §1.
-- **Quota sttChain (`js/modules/quota.js:29`):** رفع با `s.sttChain?.[0]` به جای `s.primary/s.model` — شواهد: §2.
-- **401/403 فالبک (`js/modules/transcription.js:114-138,152-168`):** رفع اولیه `82fe4aa` با `remaining.some(hasKey)` + `throw` + skip بی‌کلید + `polish 401 break`؛ تکمیل این PR: تراز 4 نقطه به `hasKeyFor` (`groq→groqKey, /=openrouterKey, else geminiKey`) در `117,122,132,135` — شواهد: §3.
-- **parseChain filter (`js/modules/storage.js:40`):** رفع با `x.trim()!==''` و `new Set` dedup + allowlist در migration — شواهد: §4.
-- **تست دستی ۵ ثانیه (`AGENTS.md:3`):** لاگ 5s فارسی `سلام، این آزمایش هم‌نگار است` پیوست شد — `log-panel` با `Quota.render` + `transcription` زنجیره فالبک — شواهد: §5.
-- **منبع حقیقت:** این فایل + evidence file؛ هر PR بعدی باید این چک را `APPROVED` بگیرد قبل از merge.
+No lint/test CI exists in this repo (only `opencode-review` + `opencode` workflows),
+so do NOT assume CI catches anything — flag style, types, and logic yourself.
+Skip and never comment on:
+
+- `docs/evidence/**` PNGs, `temp/`, `.worktrees/`, `desktop/` binaries, lockfiles
+- Bot-authored PRs (dependabot/renovate/`*[bot]`) — ignored by default
+- Whitespace-only or single-file typo fixes — reply `lgtm` and nothing else
+
+## Sub-agent usage
+
+Sub-agents are read-only: no posting, no edits. Each returns path, line, severity,
+rationale, confidence. The main reviewer verifies every finding, dedups, and posts.
+
+- 0 sub-agents: docs-only, formatting-only, evidence-PNG-only, or single-file typo.
+- 1 sub-agent: focused change (<300 lines, one seam) touching a risky area —
+  auth/keys, fallback chains, storage migration, realtime race.
+- 3 sub-agents: PR spanning 2-3 seams (e.g. storage + transcription + UI):
+  1. data/seam reviewer (keys, chains, migration, quota), 2. UI reviewer
+  (Persian strings, banner, progress/toast, a11y), 3. test/docs reviewer
+  (manual-test note, CHANGELOG/VERSION per AGENTS.md §7 if behavioral).
+- 6 sub-agents: only for >800 changed lines or security-sensitive cross-cutting work.
+  Shard by independent seams, never all on the same files.
+
+## Output format
+
+```text
+Status: REQUEST_CHANGES | APPROVED — N [warning/critical] must be fixed, M [info] optional
+Must fix before merge:
+- [ ] file_path:line_number [severity] description — positive fix
+Optional / defer:
+- [ ] file_path:line_number [info] description — defer reason
+Traps checked: 1..8 pass/fail (or "none relevant" for docs-only)
+```
+
+Post inline comments on exact diff lines; suggestions are suggestions, the human decides.
+If the PR is clean against everything above, comment `lgtm` (maps to `APPROVED`).
