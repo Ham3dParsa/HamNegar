@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -33,9 +32,46 @@ public partial class MainWindow : Window
             try { DragMove(); } catch { /* click on button etc. */ }
         };
         SourceInitialized += (_, _) => RegisterGlobalHotkeys();
-        Closed += (_, _) => UnregisterGlobalHotkeys();
-        RefreshHotkeyHint();
+        Closed += (_, _) => { UnregisterGlobalHotkeys(); try { Lang.Changed -= OnLangChanged; } catch { } };
+        Lang.Changed += OnLangChanged;
+        ApplyLang();
         UpdateEngineLabel("—");
+    }
+
+    // Language: single mechanism — code-behind ApplyLang() (see Lang.cs).
+    // Re-renders title, tooltips, mic tip, engine chip AND the current status
+    // (kept as key+args so a live switch never loses it).
+    private void OnLangChanged()
+    {
+        try
+        {
+            if (Dispatcher.CheckAccess())
+                ApplyLang();
+            else
+                Dispatcher.BeginInvoke(new Action(ApplyLang));
+        }
+        catch { /* best-effort only */ }
+    }
+
+    private void ApplyLang()
+    {
+        try
+        {
+            FlowDirection = Lang.IsFa ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+            Title = Lang.Get(Lang.K.MainTitle);
+            TitleLabel.Text = Lang.Get(Lang.K.PillTitle);
+            HistoryButton.ToolTip = Lang.Get(Lang.K.TipHistory);
+            SettingsButton.ToolTip = Lang.Get(Lang.K.TipSettings);
+            HideButton.ToolTip = Lang.Get(Lang.K.TipHide);
+            CloseButton.ToolTip = Lang.Get(Lang.K.TipClose);
+            CancelActionButton.ToolTip = Lang.Get(Lang.K.TipCancel);
+            RetryButton.ToolTip = Lang.Get(Lang.K.TipRetry);
+            DiscardButton.ToolTip = Lang.Get(Lang.K.TipDiscard);
+            RefreshHotkeyHint();
+            RenderStatus();
+            UpdateEngineLabel(_lastEngine);
+        }
+        catch { /* best-effort only */ }
     }
 
     // ---- global hotkeys (persisted, configurable in Settings) ----
@@ -46,7 +82,7 @@ public partial class MainWindow : Window
         source?.AddHook(HwndHook);
         var extras = SettingsExtras.Load();
         if (!HotkeyConfig.Register(handle, HotkeyConfig.RecordHotkeyId, extras.RecordHotkey))
-            SetStatus("Hotkey register failed — use mic button.");
+            SetStatus(Lang.K.HotkeyFail);
         HotkeyConfig.Register(handle, HotkeyConfig.ShowHideHotkeyId, extras.ShowHideHotkey);
         HotkeyConfig.Register(handle, HotkeyConfig.CancelHotkeyId, extras.CancelHotkey);
     }
@@ -71,8 +107,14 @@ public partial class MainWindow : Window
         try
         {
             var rec = SettingsExtras.Load().RecordHotkey;
-            StatusText.Text = $"Ready — {rec} to record";
-            MicButton.ToolTip = $"Toggle record ({rec})";
+            MicButton.ToolTip = Lang.Format(Lang.K.MicTip, rec);
+            // Idle hint only: never clobber an in-flight status (recording /
+            // transcribing / retained results re-render via RenderStatus).
+            if (_statusKey != Lang.K.ReadyStatus && _statusKey != Lang.K.HotkeyFail && _statusKey != "")
+                return;
+            _statusKey = Lang.K.ReadyStatus;
+            _statusArgs = new object?[] { rec };
+            RenderStatus();
         }
         catch { }
     }
@@ -120,7 +162,7 @@ public partial class MainWindow : Window
         // "hotkey mid-transcribe kills pending text" hole regardless of timing.
         if (_transcribing)
         {
-            SetStatus("در حال تبدیل — ✕ یا هات‌کی لغو.");
+            SetStatus(Lang.K.TranscribingBusy);
             return;
         }
         // Hidden window: hotkey shows it again unless the user disabled it
@@ -167,7 +209,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetStatus($"Mic error: {shortMsg(ex)}");
+            SetStatus(Lang.K.MicError, shortMsg(ex));
             return;
         }
         MicButton.Content = "\uE71A";
@@ -175,7 +217,7 @@ public partial class MainWindow : Window
         PulseRing.Visibility = Visibility.Visible;
         CancelActionButton.Visibility = Visibility.Visible;
         HideRetryDiscard();
-        SetStatus("Recording… press hotkey again to stop.");
+        SetStatus(Lang.K.Recording);
     }
 
     private async Task StopAndTranscribeAsync()
@@ -187,7 +229,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetStatus($"Stop error: {shortMsg(ex)}");
+            SetStatus(Lang.K.StopError, shortMsg(ex));
             MicButton.Content = "\uE720";
             MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A73E8"));
             PulseRing.Visibility = Visibility.Collapsed;
@@ -217,24 +259,24 @@ public partial class MainWindow : Window
         PulseRing.Visibility = Visibility.Collapsed;
         CancelActionButton.Visibility = Visibility.Visible;
         HideRetryDiscard();
-        SetStatus("در حال ارسال…");
+        SetStatus(Lang.K.Sending);
         try { _transcribeCts?.Dispose(); } catch { }
         _transcribeCts = new CancellationTokenSource();
         var ct = _transcribeCts.Token;
         var progress = new Progress<(string engine, bool ok)>(t =>
         {
             _attemptCount++;
-            string faN = ToFaDigits(_attemptCount);
-            string faE = FaEngine(t.engine);
+            string n = Lang.Digits(_attemptCount);
+            string e = Lang.EngineName(t.engine);
             if (t.ok)
-                SetStatus($"تلاش {faN}: {faE} ✓");
+                SetStatus(Lang.K.AttemptOk, n, e);
             else
-                SetStatus($"تلاش {faN}: {faE} ✗ ← بعدی…");
+                SetStatus(Lang.K.AttemptNext, n, e);
         });
         bool success = false;
         try
         {
-            SetStatus("در حال ارسال…");
+            SetStatus(Lang.K.Sending);
             var result = await SttChain.TranscribeAsync(wavPath, _settings.GoogleKey, _settings.GroqKey, ct, progress).ConfigureAwait(true);
             try { HistoryStore.Add(result.Text, result.Engine); } catch { /* history best-effort only */ }
             UpdateEngineLabel(result.Engine);
@@ -249,7 +291,7 @@ public partial class MainWindow : Window
         {
             _failedWav = wavPath; // keep wav for retry; NOT deleted here
             ShowRetryDiscard();
-            SetStatus("لغو شد — صدا نگه داشته شد، تلاش مجدد؟");
+            SetStatus(Lang.K.CanceledKept);
         }
         catch (Exception ex)
         {
@@ -257,13 +299,13 @@ public partial class MainWindow : Window
             {
                 try { if (File.Exists(wavPath)) File.Delete(wavPath); } catch { }
                 HideRetryDiscard();
-                SetStatus("صدا خیلی کوتاه بود — چیزی ارسال نشد.");
+                SetStatus(Lang.K.TooShort);
             }
             else
             {
                 _failedWav = wavPath; // keep wav for retry; NOT deleted here
                 ShowRetryDiscard();
-                SetStatus("ناموفق بود — صدا نگه داشته شد، تلاش مجدد؟");
+                SetStatus(Lang.K.FailedKept);
             }
         }
         finally
@@ -292,7 +334,7 @@ public partial class MainWindow : Window
         {
             _failedWav = null;
             HideRetryDiscard();
-            SetStatus("صدای نگه‌داشته‌شده پیدا نشد.");
+            SetStatus(Lang.K.KeptMissing);
             return;
         }
         _ = TranscribeFileAsync(path);
@@ -306,7 +348,7 @@ public partial class MainWindow : Window
         _failedWav = null;
         try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); } catch { }
         HideRetryDiscard();
-        SetStatus("دور ریخته شد.");
+        SetStatus(Lang.K.Discarded);
     }
 
     private void ShowRetryDiscard()
@@ -337,31 +379,6 @@ public partial class MainWindow : Window
     private static bool IsEmptyAudioGuard(Exception ex) =>
         ex is InvalidOperationException && (ex.Message ?? string.Empty).Contains("Audio too short", StringComparison.Ordinal);
 
-    private static string FaEngine(string engine)
-    {
-        try
-        {
-            if (engine.StartsWith("google/", StringComparison.OrdinalIgnoreCase))
-                return "گوگل";
-            if (engine.StartsWith("groq/", StringComparison.OrdinalIgnoreCase))
-                return "گروک";
-            return engine;
-        }
-        catch
-        {
-            return engine;
-        }
-    }
-
-    private static string ToFaDigits(int n)
-    {
-        var s = n.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var sb = new StringBuilder(s.Length);
-        foreach (var ch in s)
-            sb.Append(ch >= '0' && ch <= '9' ? (char)('\u06F0' + (ch - '0')) : ch);
-        return sb.ToString();
-    }
-
     private static bool IsVerbose()
     {
         try { return SettingsWindow.LoadVerboseStatus(); } catch { return false; }
@@ -376,9 +393,10 @@ public partial class MainWindow : Window
     // Debug status line reports every stage (HWND hex, restore ok/fail,
     // foreground match, sent/total chars, win32 error) so the owner can tell
     // exactly which stage failed. Lengths only, never content.
-    // HUMAN FIRST: the status line shows a short Persian sentence; the old
-    // technical line is appended only when "نمایش جزئیات فنی" is on
-    // (pill.settings.json key "verboseStatus", default OFF).
+    // HUMAN FIRST: the status line shows a short localized sentence
+    // (Lang.K.Inj*); the technical line (Lang.K.Tech*, stable English) is
+    // appended only when verboseStatus is on (pill.settings.json key
+    // "verboseStatus", default OFF).
     public void InjectIntoPrevious(string text, string engine)
     {
         // Silent backup ONLY when AutoCopy is on: Clipboard.SetText needs no focus, steals none.
@@ -387,20 +405,23 @@ public partial class MainWindow : Window
         if (autoCopy)
         { try { Clipboard.SetText(text ?? string.Empty); } catch { /* backup best-effort only */ } }
         bool verbose = IsVerbose();
-        void SetHuman(string human, string technical) =>
-            SetStatus(verbose ? $"{human}\n{technical}" : human);
+        // Human + technical lines are both Lang templates (key+args, so a live
+        // switch re-renders). Tails pick clipboard vs history wording.
+        string tail = autoCopy ? Lang.K.TailClipboard : Lang.K.TailHistory;
+        void SetHuman(string humanKey, object?[] humanArgs, string techKey, object?[] techArgs) =>
+            SetStatusComposite(humanKey, humanArgs, techKey, techArgs, verbose);
         if (string.IsNullOrEmpty(text))
         {
-            SetHuman("متن خالی — چیزی تایپ نشد.",
-                $"Done ({engine}) — empty, nothing typed.");
+            SetHuman(Lang.K.InjEmpty, Array.Empty<object?>(), Lang.K.TechEmpty, new object?[] { engine });
             return;
         }
         string hwndHex = $"0x{_prevWindow.ToInt64():X}";
         bool valid = _prevWindow != IntPtr.Zero && NativeMethods.IsWindow(_prevWindow);
         if (!valid)
         {
-            SetHuman("پنجره مقصد بسته شد — در تاریخچه نگه داشته شد.",
-                $"Done ({engine}) — hwnd {hwndHex} gone; " + (autoCopy ? "copied, paste manually." : "kept in history."));
+            string tailGone = autoCopy ? Lang.K.TailCopied : Lang.K.TailKept;
+            SetHuman(Lang.K.InjGone, Array.Empty<object?>(), Lang.K.TechGone,
+                new object?[] { engine, hwndHex, Lang.Get(tailGone) });
             return;
         }
         // Mode from pill.settings.json key "injectMode" (never-throw, default instant).
@@ -418,21 +439,22 @@ public partial class MainWindow : Window
             try { focusChanged = NativeMethods.GetForegroundWindow() != _prevWindow; } catch { }
             if (sent >= text.Length)
             {
-                SetHuman($"نشست با {FaEngine(engine)}",
-                    $"Done ({engine}) — hwnd {hwndHex} restored:{restored} fg:{fgMatch} mode:animated typed {sent}/{text.Length} chars; " + (autoCopy ? "backup on clipboard." : "saved in history."));
+                SetHuman(Lang.K.InjLanded, new object?[] { Lang.EngineName(engine) }, Lang.K.TechDone,
+                    new object?[] { engine, hwndHex, restored, fgMatch, "animated", sent, text.Length, Lang.Get(tail) });
             }
             else if (focusChanged)
             {
                 try { EnsureInHistory(text, engine); } catch { /* history best-effort only */ }
-                SetHuman("توقف: فوکوس عوض شد — بقیه در تاریخچه",
-                    $"توقف: فوکوس عوض شد — بقیه در تاریخچه (typed {sent}/{text.Length} chars, hwnd {hwndHex} restored:{restored} fg:{fgMatch} mode:animated); " + (autoCopy ? "backup on clipboard." : "saved in history."));
+                SetHuman(Lang.K.InjFocusMoved, Array.Empty<object?>(), Lang.K.TechStopped,
+                    new object?[] { sent, text.Length, hwndHex, restored, fgMatch, Lang.Get(tail) });
             }
             else
             {
                 int err = Marshal.GetLastWin32Error();
                 try { EnsureInHistory(text, engine); } catch { /* history best-effort only */ }
-                SetHuman($"ناقص تایپ شد ({sent}/{text.Length}) — بقیه در تاریخچه",
-                    $"Done ({engine}) — hwnd {hwndHex} restored:{restored} fg:{fgMatch} mode:animated typed {sent}/{text.Length} chars err={err}; " + (autoCopy ? "backup on clipboard, paste manually." : "saved in history."));
+                string tailManual = autoCopy ? Lang.K.TailBackupManual : Lang.K.TailHistory;
+                SetHuman(Lang.K.InjPartial, new object?[] { sent, text.Length }, Lang.K.TechDone,
+                    new object?[] { engine, hwndHex, restored, fgMatch, "animated", sent, text.Length, $"{Lang.Get(tailManual)} err={err}" });
             }
         }
         else
@@ -440,14 +462,15 @@ public partial class MainWindow : Window
             try { sent = NativeMethods.SendUnicodeText(text); } catch { sent = 0; }
             if (sent >= text.Length)
             {
-                SetHuman($"نشست با {FaEngine(engine)}",
-                    $"Done ({engine}) — hwnd {hwndHex} restored:{restored} fg:{fgMatch} mode:instant typed {sent}/{text.Length} chars; " + (autoCopy ? "backup on clipboard." : "saved in history."));
+                SetHuman(Lang.K.InjLanded, new object?[] { Lang.EngineName(engine) }, Lang.K.TechDone,
+                    new object?[] { engine, hwndHex, restored, fgMatch, "instant", sent, text.Length, Lang.Get(tail) });
             }
             else
             {
                 int err = Marshal.GetLastWin32Error();
-                SetHuman($"ناقص تایپ شد ({sent}/{text.Length}) — بقیه در تاریخچه",
-                    $"Done ({engine}) — hwnd {hwndHex} restored:{restored} fg:{fgMatch} mode:instant typed {sent}/{text.Length} chars err={err}; " + (autoCopy ? "backup on clipboard, paste manually." : "saved in history."));
+                string tailManual = autoCopy ? Lang.K.TailBackupManual : Lang.K.TailHistory;
+                SetHuman(Lang.K.InjPartial, new object?[] { sent, text.Length }, Lang.K.TechDone,
+                    new object?[] { engine, hwndHex, restored, fgMatch, "instant", sent, text.Length, $"{Lang.Get(tailManual)} err={err}" });
             }
         }
     }
@@ -527,10 +550,59 @@ public partial class MainWindow : Window
         MicButton.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1A73E8"));
         PulseRing.Visibility = Visibility.Collapsed;
         CancelActionButton.Visibility = Visibility.Collapsed;
-        SetStatus("لغو شد.");
+        SetStatus(Lang.K.Canceled);
     }
 
-    private void SetStatus(string s) => StatusText.Text = s;
+    // Status is stored as key+args (never a baked string) so ApplyLang() can
+    // re-render the live line after an FA↔EN switch. Composite variant keeps
+    // the human + verbose-technical pair for inject results.
+    private string _statusKey = Lang.K.ReadyStatus;
+    private object?[] _statusArgs = Array.Empty<object?>();
+    private string? _compositeHumanKey;
+    private object?[] _compositeHumanArgs = Array.Empty<object?>();
+    private string? _compositeTechKey;
+    private object?[] _compositeTechArgs = Array.Empty<object?>();
+    private bool _compositeVerbose;
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        _compositeHumanKey = null;
+        RenderStatus();
+    }
+
+    private void SetStatusComposite(string humanKey, object?[] humanArgs, string techKey, object?[] techArgs, bool verbose)
+    {
+        _compositeHumanKey = humanKey;
+        _compositeHumanArgs = humanArgs;
+        _compositeTechKey = techKey;
+        _compositeTechArgs = techArgs;
+        _compositeVerbose = verbose;
+        _statusKey = humanKey;
+        _statusArgs = humanArgs;
+        RenderStatus();
+    }
+
+    private void RenderStatus()
+    {
+        try
+        {
+            if (_compositeHumanKey is not null && _compositeTechKey is not null)
+            {
+                var human = Lang.Format(_compositeHumanKey, _compositeHumanArgs);
+                StatusText.Text = _compositeVerbose
+                    ? $"{human}\n{Lang.Format(_compositeTechKey, _compositeTechArgs)}"
+                    : human;
+            }
+            else
+            {
+                StatusText.Text = Lang.Format(_statusKey, _statusArgs);
+            }
+        }
+        catch { /* best-effort only */ }
+    }
+
     private string _lastEngine = "—";
     private void UpdateEngineLabel(string engine)
     {
@@ -538,7 +610,7 @@ public partial class MainWindow : Window
         bool show = true;
         try { show = SettingsExtras.Load().ShowEngineLabel; } catch { }
         EngineText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        EngineText.Text = $"engine: {engine}";
+        EngineText.Text = Lang.Format(Lang.K.EngineChip, engine);
     }
 
     private static string shortMsg(Exception ex)

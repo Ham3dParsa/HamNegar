@@ -1,21 +1,23 @@
 <Window x:Class="HamNegar.Native.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="640" Width="400"
+         Height="640" Width="400"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         ShowInTaskbar="False" FontFamily="Segoe UI"
         Background="{DynamicResource BgBrush}">
+    <!-- NOTE: no user-facing literals in this file (Lang.cs owns all strings;
+         code-behind ApplyLang() fills every label/tooltip/title/combo). -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
         <StackPanel>
             <!-- (keys stay) API keys -->
             <Border Style="{DynamicResource CardStyle}">
                 <StackPanel>
-                    <TextBlock Text="API keys" Style="{DynamicResource SectionTitleStyle}"/>
-                    <TextBlock Text="Google key" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBlock x:Name="ApiKeysHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
+                    <TextBlock x:Name="GoogleKeyLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
                     <PasswordBox x:Name="GoogleKeyBox" Margin="0,0,0,8"/>
-                    <TextBlock Text="Groq key" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBlock x:Name="GroqKeyLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
                     <PasswordBox x:Name="GroqKeyBox" Margin="0,0,0,8"/>
-                    <TextBlock Text="Keys: %AppData%/HamNegar/pill.settings.json (plain JSON — prototype only)"
+                    <TextBlock x:Name="KeysHint" Text=""
                                Style="{DynamicResource HintStyle}"/>
                 </StackPanel>
             </Border>
@@ -23,55 +25,52 @@
             <!-- (a) SHORTCUTS: click-to-record hotkeys, persisted to settings JSON -->
             <Border Style="{DynamicResource CardStyle}">
                 <StackPanel>
-                    <TextBlock Text="Shortcuts" Style="{DynamicResource SectionTitleStyle}"/>
+                    <TextBlock x:Name="ShortcutsHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Record toggle" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
+                        <TextBlock x:Name="RecordLabel" Text="" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
                                    VerticalAlignment="Center"/>
                         <Button x:Name="RecordHotkeyButton" Grid.Column="1"
                                 Style="{DynamicResource RecordHotkeyStyle}"
                                 Click="HotkeyButton_Click"
                                 PreviewKeyDown="HotkeyButton_PreviewKeyDown"
-                                LostKeyboardFocus="HotkeyButton_LostFocus"
-                                ToolTip="Click, then press the new shortcut"/>
+                                LostKeyboardFocus="HotkeyButton_LostFocus"/>
                     </Grid>
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Show / hide pill" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
+                        <TextBlock x:Name="ShowHideLabel" Text="" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
                                    VerticalAlignment="Center"/>
                         <Button x:Name="ShowHideHotkeyButton" Grid.Column="1"
                                 Style="{DynamicResource RecordHotkeyStyle}"
                                 Click="HotkeyButton_Click"
                                 PreviewKeyDown="HotkeyButton_PreviewKeyDown"
-                                LostKeyboardFocus="HotkeyButton_LostFocus"
-                                ToolTip="Click, then press the new shortcut"/>
+                                LostKeyboardFocus="HotkeyButton_LostFocus"/>
                     </Grid>
                     <Grid Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="Cancel recording" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
+                        <TextBlock x:Name="CancelRecLabel" Text="" Foreground="{DynamicResource TextBrush}" FontSize="12" FontFamily="Segoe UI"
                                    VerticalAlignment="Center"/>
                         <Button x:Name="CancelHotkeyButton" Grid.Column="1"
                                 Style="{DynamicResource RecordHotkeyStyle}"
                                 Click="HotkeyButton_Click"
                                 PreviewKeyDown="HotkeyButton_PreviewKeyDown"
-                                LostKeyboardFocus="HotkeyButton_LostFocus"
-                                ToolTip="Click, then press the new shortcut"/>
+                                LostKeyboardFocus="HotkeyButton_LostFocus"/>
                     </Grid>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="ResetHotkeysButton" Content="Reset defaults"
+                        <Button x:Name="ResetHotkeysButton" Content=""
                                 Style="{DynamicResource SecondaryButtonStyle}"
-                                Click="ResetHotkeysButton_Click" ToolTip="Back to Ctrl+Shift+Space / Ctrl+Shift+H / Ctrl+Shift+X"/>
+                                Click="ResetHotkeysButton_Click"/>
                     </StackPanel>
-                    <TextBlock Text="Click a shortcut, then press the new keys (needs a modifier). Saved to pill.settings.json; the pill picks them up once the hotkey handoff lands (TODO §7)."
+                    <TextBlock x:Name="ShortcutsHint" Text=""
                                Style="{DynamicResource HintStyle}" Margin="0,8,0,0"/>
                 </StackPanel>
             </Border>
@@ -79,7 +78,7 @@
             <!-- (b) CHAIN: read-only engine order -->
             <Border Style="{DynamicResource CardStyle}">
                 <StackPanel>
-                    <TextBlock Text="Transcription chain (fixed order)" Style="{DynamicResource SectionTitleStyle}"/>
+                    <TextBlock x:Name="ChainHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
                     <ItemsControl x:Name="ChainItems" IsTabStop="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -111,34 +110,29 @@
             <!-- (c) OPTIONS (extensible: new rows go above the checkboxes) -->
             <Border Style="{DynamicResource CardStyle}">
                 <StackPanel>
-                    <TextBlock Text="Options" Style="{DynamicResource SectionTitleStyle}"/>
-                    <TextBlock Text="Theme" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBlock x:Name="OptionsHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
+                    <TextBlock x:Name="ThemeLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
                     <ComboBox x:Name="ThemeComboBox" Margin="0,0,0,4"
-                              SelectionChanged="ThemeComboBox_SelectionChanged"
-                              ToolTip="Dark is the default; applies to every window at once">
-                        <ComboBoxItem Content="Dark"/>
-                        <ComboBoxItem Content="Light"/>
-                    </ComboBox>
-                    <TextBlock Text="Inject mode" Style="{DynamicResource FieldLabelStyle}"/>
-                    <ComboBox x:Name="InjectModeComboBox" Margin="0,0,0,4"
-                              ToolTip="Instant types everything at once (safe default); animated types in chunks and stops if focus moves">
-                        <ComboBoxItem Content="Instant"/>
-                        <ComboBoxItem Content="Animated"/>
-                    </ComboBox>
-                    <CheckBox x:Name="HotkeyShowsPillCheck" Content="Hotkey shows pill when hidden"/>
-                    <CheckBox x:Name="AutoCopyCheck" Content="Copy transcript to clipboard (silent backup)"/>
-                    <CheckBox x:Name="ShowEngineLabelCheck" Content="Show engine label on the pill"/>
-                    <CheckBox x:Name="VerboseStatusCheck" Content="نمایش جزئیات فنی"/>
-                    <TextBlock Text="All options persist now. The engine label hides on the pill once its handoff lands (TODO §7)."
+                              SelectionChanged="ThemeComboBox_SelectionChanged"/>
+                    <TextBlock x:Name="LangLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <ComboBox x:Name="LanguageComboBox" Margin="0,0,0,4"
+                              SelectionChanged="LanguageComboBox_SelectionChanged"/>
+                    <TextBlock x:Name="InjectLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <ComboBox x:Name="InjectModeComboBox" Margin="0,0,0,4"/>
+                    <CheckBox x:Name="HotkeyShowsPillCheck" Content=""/>
+                    <CheckBox x:Name="AutoCopyCheck" Content=""/>
+                    <CheckBox x:Name="ShowEngineLabelCheck" Content=""/>
+                    <CheckBox x:Name="VerboseStatusCheck" Content=""/>
+                    <TextBlock x:Name="OptionsHint" Text=""
                                Style="{DynamicResource HintStyle}" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
 
             <!-- Footer -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,2,0,0">
-                <Button x:Name="SaveButton" Content="Save" Style="{DynamicResource PrimaryButtonStyle}"
+                <Button x:Name="SaveButton" Content="" Style="{DynamicResource PrimaryButtonStyle}"
                         Margin="0,0,8,0" Click="SaveButton_Click" IsDefault="True"/>
-                <Button x:Name="CancelButton" Content="Cancel" Style="{DynamicResource SecondaryButtonStyle}"
+                <Button x:Name="CancelButton" Content="" Style="{DynamicResource SecondaryButtonStyle}"
                         Click="CancelButton_Click" IsCancel="True"/>
             </StackPanel>
             <TextBlock x:Name="StatusText" Text="" Foreground="{DynamicResource MutedBrush}" FontSize="11" FontFamily="Segoe UI"

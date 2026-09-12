@@ -23,7 +23,6 @@ public partial class HistoryWindow : Window
     public HistoryWindow()
     {
         InitializeComponent();
-        ApplyTitle(Title);
         // Dark OS title bar (main pill is borderless-dark; this window has a real frame).
         // Reads the live `theme` key so a light session opens with a light frame.
         SourceInitialized += (_, _) => ApplyTitleBarTheme();
@@ -31,16 +30,74 @@ public partial class HistoryWindow : Window
         {
             try { Refresh(); } catch { /* best-effort only */ }
         };
+        Closed += (_, _) => { try { Lang.Changed -= OnLangChanged; } catch { /* best-effort */ } };
         Closed += OnClosedCleanup;
+        Lang.Changed += OnLangChanged;
+        ApplyLang();
         RefreshList();
         SetupWatcher();
     }
 
-    // Language-system seam (full FA/EN switch is a later ticket — do not build it here).
-    // All Title sets must go through this method.
+    // Language: single mechanism — code-behind ApplyLang() (see Lang.cs).
+    // All Title sets still go through ApplyTitle(); live FA↔EN re-renders
+    // labels, tooltips, title AND the current status (kept as key+args).
+    private void OnLangChanged()
+    {
+        try
+        {
+            if (Dispatcher.CheckAccess())
+                ApplyLang();
+            else
+                Dispatcher.BeginInvoke(new Action(ApplyLang));
+        }
+        catch { /* best-effort only */ }
+    }
+
+    private void ApplyLang()
+    {
+        try
+        {
+            FlowDirection = Lang.IsFa ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+            ApplyTitle(Lang.Get(Lang.K.HistoryTitle));
+            HeaderLabel.Text = Lang.Get(Lang.K.HistoryHeader);
+            ClearAllButton.Content = Lang.Get(Lang.K.ClearAll);
+            ClearAllButton.ToolTip = Lang.Get(Lang.K.ClearTip);
+            EmptyHint.Text = Lang.Get(Lang.K.EmptyHint);
+            RenderStatus();
+            RefreshList(); // row tooltips (Reinject/Copy/Delete) are Lang-bound
+        }
+        catch { /* best-effort only */ }
+    }
+
+    // All Title sets go through this method (language + theme seams meet here).
     internal void ApplyTitle(string title)
     {
         try { Title = title; } catch { /* best-effort only */ }
+    }
+
+    // Status kept as key+args so a live FA↔EN switch re-renders it.
+    private string _statusKey = "";
+    private object?[] _statusArgs = Array.Empty<object?>();
+    private bool _statusEmpty = true;
+
+    private void SetStatus(string key, params object?[] args)
+    {
+        _statusKey = key;
+        _statusArgs = args;
+        _statusEmpty = false;
+        RenderStatus();
+    }
+
+    private void RenderStatus()
+    {
+        try
+        {
+            if (_statusEmpty)
+                StatusText.Text = "";
+            else
+                StatusText.Text = Lang.Format(_statusKey, _statusArgs);
+        }
+        catch { /* best-effort only */ }
     }
 
     // Modeless opener for the MainWindow track (they own HistoryButton_Click).
@@ -254,18 +311,18 @@ public partial class HistoryWindow : Window
             var entry = Find(id);
             if (entry is null || string.IsNullOrEmpty(entry.Text))
             {
-                StatusText.Text = "موردی یافت نشد.";
+                SetStatus(Lang.K.NotFound);
                 return;
             }
             if (Owner is MainWindow main)
             {
                 main.InjectIntoPrevious(entry.Text, entry.Engine);
-                StatusText.Text = "ارسال شد — نتیجه را در خط وضعیت پنجره اصلی ببینید.";
+                SetStatus(Lang.K.Resent);
             }
             else
             {
                 try { Clipboard.SetText(entry.Text); } catch { /* backup best-effort only */ }
-                StatusText.Text = "در حافظه کپی شد (clipboard) — با Ctrl+V بچسبانید.";
+                SetStatus(Lang.K.CopiedPaste);
             }
         }
         catch
@@ -282,11 +339,11 @@ public partial class HistoryWindow : Window
             var entry = Find(id);
             if (entry is null || string.IsNullOrEmpty(entry.Text))
             {
-                StatusText.Text = "موردی یافت نشد.";
+                SetStatus(Lang.K.NotFound);
                 return;
             }
             try { Clipboard.SetText(entry.Text); } catch { /* best-effort only */ }
-            StatusText.Text = "در حافظه کپی شد (clipboard).";
+            SetStatus(Lang.K.Copied);
         }
         catch
         {
@@ -300,9 +357,9 @@ public partial class HistoryWindow : Window
         {
             var id = (sender as Button)?.Tag as string;
             if (HistoryStore.Delete(id))
-                StatusText.Text = "حذف شد.";
+                SetStatus(Lang.K.Deleted);
             else
-                StatusText.Text = "موردی یافت نشد.";
+                SetStatus(Lang.K.NotFound);
             RefreshList();
         }
         catch
@@ -317,7 +374,7 @@ public partial class HistoryWindow : Window
         {
             HistoryStore.Clear();
             RefreshList();
-            StatusText.Text = "تاریخچه پاک شد.";
+            SetStatus(Lang.K.Cleared);
         }
         catch
         {
@@ -345,12 +402,16 @@ public partial class HistoryWindow : Window
     }
 
     // Flat projection for the DataTemplate (time + engine + text preview).
+    // Row action tooltips are Lang-bound properties (XAML carries no literals).
     private sealed class HistoryRow
     {
         public string Id { get; init; } = string.Empty;
         public string TimeText { get; init; } = string.Empty;
         public string Engine { get; init; } = string.Empty;
         public string Preview { get; init; } = string.Empty;
+        public string ReinjectTip { get; init; } = string.Empty;
+        public string CopyTip { get; init; } = string.Empty;
+        public string DeleteTip { get; init; } = string.Empty;
 
         public static HistoryRow From(HistoryEntry e)
         {
@@ -364,6 +425,9 @@ public partial class HistoryWindow : Window
                 TimeText = e.Time.ToLocalTime().ToString("yyyy/MM/dd HH:mm"),
                 Engine = string.IsNullOrWhiteSpace(e.Engine) ? "—" : e.Engine,
                 Preview = preview,
+                ReinjectTip = Lang.Get(Lang.K.ReinjectTip),
+                CopyTip = Lang.Get(Lang.K.CopyTip),
+                DeleteTip = Lang.Get(Lang.K.DeleteTip),
             };
         }
     }

@@ -183,7 +183,7 @@ internal static class NativeMethods
     // ANIMATED (opt-in): chunked send (4 chars per chunk, ~40ms gap ≈ visible
     // typing) with a FOCUS GUARD — before each chunk re-check GetForegroundWindow() equals the
     // captured target HWND; on mismatch stop immediately and return the sent
-    // count so the caller can toast ("توقف: فوکوس عوض شد — بقیه در تاریخچه")
+    // count so the caller can toast (Lang.K.InjFocusMoved)
     // and keep the full text in history. Runs on the caller's thread (the gap
     // sleeps there); lengths/HWNDs only, never content.
     // Returns the number of chars fully injected before the stop.
