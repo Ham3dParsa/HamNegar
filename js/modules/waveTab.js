@@ -30,7 +30,14 @@ let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowT
 let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
 let waveAdvIds = new Set();
 function waveName(wv, idx){ const n = (wv.name || '').trim(); return n || `موج ${idx + 1}`; }
-function wavePersist(){ waveCfg = Storage.saveWave(waveCfg); waveRenderer?.setConfig(waveCfg); waveSync(); }
+// --- persist timing (ticket 41): preview immediate, persist debounced trailing + flush ---
+let wavePersistTimer = null;
+let wavePersistPending = false;
+function wavePreview(){ try{ waveRenderer?.setConfig(waveCfg); }catch{} waveSync(); }
+function waveSchedulePersist(){ wavePersistPending = true; if(wavePersistTimer) clearTimeout(wavePersistTimer); wavePersistTimer = setTimeout(()=> waveFlushPersist(), 250); }
+function waveFlushPersist(){ if(wavePersistTimer){ clearTimeout(wavePersistTimer); wavePersistTimer = null; } if(!wavePersistPending) return; wavePersistPending = false; waveCfg = Storage.saveWave(waveCfg); try{ waveRenderer?.setConfig(waveCfg); }catch{} waveSync(); }
+// legacy name keeps immediate-preview + debounced persist contract; flush is sync write
+function wavePersist(){ wavePreview(); waveSchedulePersist(); }
 function waveSeg(box, vals, cur, faMap, cb){
   box.innerHTML = '';
   vals.forEach(v => {
@@ -102,16 +109,17 @@ function waveSlider(mount, o){
     mount.classList.toggle('is-follow', following);
     if (chip) chip.setAttribute('aria-pressed', String(following));
   };
-  rg.addEventListener('input', () => { o.set(+rg.value); paint(); o.onChange(); });
+  rg.addEventListener('input', () => { o.set(+rg.value); paint(); wavePreview(); waveSchedulePersist(); });
+  rg.addEventListener('change', () => { waveFlushPersist(); });
   rg.addEventListener('dblclick', () => {
     o.set(o.follow ? null : o.def);
-    paint(); o.onChange();
+    paint(); wavePreview(); waveSchedulePersist(); waveFlushPersist();
   });
   if (chip) chip.addEventListener('click', e => {
     e.preventDefault(); e.stopPropagation();
     const v = o.get();
     o.set((o.follow && v == null) ? o.follow.globalVal() : null);
-    paint(); o.onChange();
+    paint(); wavePreview(); waveSchedulePersist(); waveFlushPersist();
   });
   paint();
   (o.scope === 'global' ? waveGlobalPaints : waveListPaints).push(paint);
@@ -358,7 +366,8 @@ function waveRenderList(){
     const rCol = document.createElement('div'); rCol.className = 'wave-row-btns';
     const c1Lab = document.createElement('span'); c1Lab.className = 'wave-ctrl-label'; c1Lab.textContent = 'رنگ ۱';
     const c1 = document.createElement('input'); c1.type = 'color'; c1.value = wv.c1; c1.setAttribute('aria-label', 'رنگ ۱');
-    c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePersist(); });
+    c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePreview(); waveSchedulePersist(); });
+    c1.addEventListener('change', () => waveFlushPersist());
     rCol.append(c1Lab, c1);
     body.appendChild(rCol);
     // T2 dead-setting hygiene (#109): `thick` is never read in drawBars (wave.js) —
@@ -386,7 +395,8 @@ function waveRenderList(){
       rC2.dataset.hygiene = 'c2-row';
       const c2Lab = document.createElement('span'); c2Lab.className = 'wave-ctrl-label'; c2Lab.textContent = 'رنگ ۲ (توقف دوم گرادیان)';
       const c2 = document.createElement('input'); c2.type = 'color'; c2.value = wv.c2; c2.setAttribute('aria-label', 'رنگ ۲');
-      c2.addEventListener('input', () => { wv.c2 = c2.value; wavePersist(); });
+      c2.addEventListener('input', () => { wv.c2 = c2.value; wavePreview(); waveSchedulePersist(); });
+      c2.addEventListener('change', () => waveFlushPersist());
       rC2.append(c2Lab, c2);
       adv.appendChild(rC2);
     }
@@ -613,6 +623,22 @@ function waveKillApply(){
 function isWaveHidden(){ return waveHidden; }
 function isWaveMicActive(){ return !!waveMicStream || !!waveMicCtx; }
 
+// --- flush hooks (ticket 41): ensure debounced write is not lost on close ---
+let waveFlushBound = false;
+function bindWaveFlushHooks(){
+  if(waveFlushBound) return;
+  waveFlushBound = true;
+  const flush = () => waveFlushPersist();
+  try{ $('btn-save-modal')?.addEventListener('click', flush); }catch{}
+  try{ $('btn-close-modal')?.addEventListener('click', flush); }catch{}
+  try{ els.modal?.addEventListener('click', e=>{ if(e.target===els.modal) flush(); }); }catch{}
+  try{ els.tabPipeline?.addEventListener('click', flush); }catch{}
+  try{ els.tabWave?.addEventListener('click', flush); }catch{}
+  try{ window.addEventListener('pagehide', flush); }catch{}
+  try{ window.addEventListener('beforeunload', flush); }catch{}
+  try{ document.addEventListener('visibilitychange', ()=>{ if(document.hidden) flush(); }); }catch{}
+  try{ document.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.modal?.style.display==='flex') flush(); }); }catch{}
+}
 // Thin wiring entry: assigns injected collaborators. Returns the handles app.js
 // still needs (settingsModal wiring + file-end kill-switch apply); everything
 // else stays private.
@@ -620,5 +646,6 @@ export function mountWaveTab(deps){
   els = deps.els || els;
   getMainWave = deps.getMainWave || getMainWave;
   syncRecStrip = deps.syncRecStrip || syncRecStrip;
+  bindWaveFlushHooks();
   return { waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, waveKillApply, isWaveHidden, isWaveMicActive };
 }
