@@ -51,6 +51,11 @@ const POLISH_LABELS = {
 
 let sttChainState = [];
 let polishChainState = [];
+// --- persist timing (ticket 41): free mutation + debounced flush -> one render cascade ---
+let chainPersistTimer = null;
+let chainPending = false;
+function scheduleChainsPersist(){ chainPending = true; if(chainPersistTimer) clearTimeout(chainPersistTimer); chainPersistTimer = setTimeout(()=> flushChains(), 300); }
+function flushChains(){ if(chainPersistTimer){ clearTimeout(chainPersistTimer); chainPersistTimer = null; } if(!chainPending) return; chainPending = false; Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish?.checked ?? true }); try{ updateBadge(); }catch{} try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{} try{ Dashboard.renderOverall(); }catch{} try{ renderAllChains(); }catch{} }
 
 // Live accessors for app.js-owned call sites (loadSettings/saveSettings/reset:
 // they reassign, so callers must read/write through these, never a snapshot).
@@ -126,8 +131,7 @@ function undoDelete(){
   hideUndoToast();
   const arr = type === 'stt' ? sttChainState : polishChainState;
   arr.splice(Math.min(index, arr.length), 0, entry);
-  persistChains();
-  renderAllChains();
+  scheduleChainsPersist();
   announce(`«${labelOf(entry, type)}» بازگردانده شد`);
   focusChainRow(type, Math.min(index, arr.length - 1));
 }
@@ -210,8 +214,7 @@ function renderChain(container, chain, type){
       const arr = type==='stt'? sttChainState : polishChainState;
       if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], providerId: providerIdOf(arr[idx], type==='stt'?'google':'groq'), enabled:e.target.checked};
       else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'google':'groq'); arr[idx].enabled = e.target.checked; }
-      persistChains();
-      renderAllChains();
+      scheduleChainsPersist();
       announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
       focusChainRow(type, idx, '[data-toggle]');
     });
@@ -219,8 +222,7 @@ function renderChain(container, chain, type){
       const arr = type==='stt'? sttChainState : polishChainState;
       const [removed] = arr.splice(idx,1);
       lastDeleted = { entry: removed, index: idx, type };
-      persistChains();
-      renderAllChains();
+      scheduleChainsPersist();
       announce(`مدل ${meta.label} حذف شد — برای بازگردانی «واگرد» را بزن`);
       showUndoToast(meta.label);
       focusChainRow(type, idx);
@@ -297,8 +299,7 @@ function renderChain(container, chain, type){
     const arr = type==='stt'? sttChainState : polishChainState;
     const [moved]=arr.splice(from,1);
     arr.splice(to,0,moved);
-    renderAllChains();
-    persistChains();
+    scheduleChainsPersist();
   };
 }
 
@@ -307,8 +308,7 @@ function moveChain(type, idx, dir){
   const n = idx+dir;
   if(n<0||n>=arr.length) return;
   [arr[idx], arr[n]] = [arr[n], arr[idx]];
-  renderAllChains();
-  persistChains();
+  scheduleChainsPersist();
   announce(`«${labelOf(arr[n], type)}» به جایگاه ${n+1} از ${arr.length} منتقل شد`);
   focusChainRow(type, n);
 }
@@ -324,12 +324,7 @@ export function renderAllChains(){
   try { onChainsRendered?.(); } catch {}
 }
 
-export function persistChains(){
-  Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish.checked });
-  updateBadge();
-  Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
-  Dashboard.renderOverall();
-}
+export function persistChains(){ scheduleChainsPersist(); }
 
 // --- models flow card (ticket/08): rail is single truth, inline key cards, ONE search + ONE chip row → flat list ---
 // Data source is modelCache (Transcription.listModels) + known chain labels; rows toggle real chains.
@@ -530,8 +525,7 @@ function toggleFlowModel(modelId, providerId){
     const arr = loc.type === 'stt' ? sttChainState : polishChainState;
     const [removed] = arr.splice(loc.index, 1);
     lastDeleted = { entry: removed, index: loc.index, type: loc.type };
-    persistChains();
-    renderAllChains();
+    scheduleChainsPersist();
     renderFlowList();
     announce(`مدل ${mid} حذف شد — برای بازگردانی «واگرد» را بزن`);
     showUndoToast(mid);
@@ -558,7 +552,7 @@ function addModelToChain(modelId, providerId, target){
     if(polishChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'groq')===pid)){ Logger.toast('قبلاً هست'); return; }
     polishChainState.push({ id:mid, providerId:pid, enabled:true });
   }
-  persistChains(); renderAllChains();
+  scheduleChainsPersist();
   const list = target === 'stt' ? sttChainState : polishChainState;
   announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
   Logger.toast('افزوده شد');
@@ -623,7 +617,7 @@ export function renderCustomProviders(){
       // drop chain entries pointing at removed provider
       sttChainState = sttChainState.filter(x=> providerIdOf(x,'') !== c.id);
       polishChainState = polishChainState.filter(x=> providerIdOf(x,'') !== c.id);
-      persistChains(); renderCustomProviders(); renderFlowList(); renderAllChains();
+      scheduleChainsPersist(); renderCustomProviders(); renderFlowList();
       Logger.toast('حذف شد');
     });
     head.append(dot, name, pill, spacer, base, rm);
@@ -860,14 +854,25 @@ export function mountChains(deps){
     addModelToChain(mid, pid, target);
     renderFlowList();
   });
-  $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه روشن'); });
-  $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه خاموش'); });
-  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); persistChains(); renderAllChains(); Logger.toast('همه STT روشن'); });
-  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); persistChains(); renderAllChains(); Logger.toast('همه STT خاموش'); });
+  $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); Logger.toast('همه روشن'); });
+  $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); Logger.toast('همه خاموش'); });
+  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); Logger.toast('همه STT روشن'); });
+  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); Logger.toast('همه STT خاموش'); });
 
   els.btnExpandStt?.addEventListener('click', ()=> toggleChainPanel('stt'));
   els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));
   els.sttAddSearch?.addEventListener('input', ()=> renderChainPanel('stt'));
   els.polishAddSearch?.addEventListener('input', ()=> renderChainPanel('polish'));
+  // --- persist flush hooks (ticket 41): modal-close + pagehide ensure no loss ---
+  try{
+    const flush = ()=> flushChains();
+    $('btn-save-modal')?.addEventListener('click', flush);
+    $('btn-close-modal')?.addEventListener('click', flush);
+    els.modal?.addEventListener('click', e=>{ if(e.target===els.modal) flush(); });
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape' && els.modal?.style.display==='flex') flush(); });
+    window.addEventListener('pagehide', flush);
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) flush(); });
+  }catch{}
   return { renderAllChains, renderFlowList, renderChainPanel, renderCustomProviders, flowInit, persistChains };
 }
