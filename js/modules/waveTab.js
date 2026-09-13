@@ -27,6 +27,7 @@ let waveRenderer = null, waveInit = false, waveFakeOn = true;
 // visible (waveIdle absent → true), reduced-motion stays independent.
 let waveHidden = !Storage.getWaveIdle();
 let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowTimer = null;
+let waveMicPending = false;
 let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
 let waveAdvIds = new Set();
 function waveName(wv, idx){ const n = (wv.name || '').trim(); return n || `موج ${idx + 1}`; }
@@ -532,7 +533,9 @@ function waveEnsure(){
     waveSync();
   });
   $('wave-mic-test')?.addEventListener('click', async () => {
+    if (waveMicPending) return;
     if (waveMicStream) { waveMicStop(); waveSync(); return; }
+    waveMicPending = true;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('no-gum');
       waveMicStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -547,8 +550,7 @@ function waveEnsure(){
     } catch (err) {
       waveMicStop();
       Logger.toast('میکروفون باز نشد — همان سطح مصنوعی می‌ماند');
-    }
-    waveSync();
+    } finally { waveMicPending = false; waveSync(); }
   });
   // Follow the main recorder's analyser when the preview has no temp mic (reuse, no new stream).
   // Single guarded instance: re-entry into waveEnsure must not accumulate timers.

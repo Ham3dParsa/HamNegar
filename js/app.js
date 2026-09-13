@@ -515,6 +515,7 @@ function makeOnInterim(snap){
 }
 
 let isRecording=false, vadTimer=null;
+let recordingStarting=false;
 // ticket/106 — realtime failure surfaces (additive; engine untouched).
 // Every realtime failure lands here: unsupported browser, start()==false,
 // SR onError codes, onend while recording. Recording (Audio path) always
@@ -648,6 +649,8 @@ function shakeMic(){
   setTimeout(()=> els.btnMic.classList.remove('shake'), 400);
 }
 async function startRecording(){
+  // T1 double-start guard: block re-entry while starting or already recording
+  if (isRecording || recordingStarting || Audio.isRecording()) { Logger.toast('⏳ در حال شروع ضبط…', 1200); return; }
   discardRecording = false; // defensive: a missed onStop must never discard a later recording
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
@@ -659,6 +662,7 @@ async function startRecording(){
   const keylessPreview = !hasBatchKey && s.realtime && Realtime.isSupported();
   if(!hasBatchKey && !keylessPreview){ Logger.setStatus('کلید نداری — ⚙️ نوار پایین را بزن','error'); openModal(); return; }
   let snap=null;
+  recordingStarting = true;
   try{
     snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'', keyless: keylessPreview };
     rtSnap = snap;
@@ -691,7 +695,8 @@ async function startRecording(){
     }
     if(s.vad) startVAD();
     Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad, snapId: snap.id});
-  }catch(e){ if(snap && rtSnap?.id===snap.id) rtSnap=null; Logger.setStatus('میکروفون خطا: '+e.message,'error'); Logger.log('error','getUserMedia',e.message); Logger.toast(e.message); }
+  }catch(e){ try { await Audio.stop(); } catch {} if(snap && rtSnap?.id===snap.id) rtSnap=null; Logger.setStatus('میکروفون خطا: '+e.message,'error'); Logger.log('error','getUserMedia',e.message); Logger.toast(e.message); }
+  finally { recordingStarting = false; }
 }
 function stopRecording(){
   if(!isRecording) return;
@@ -735,7 +740,7 @@ document.addEventListener('keydown', (e)=>{
   if (els.modal && els.modal.style.display === 'flex') return; // modal owns Esc (element handler consumes)
   if (isRecording || (isTranscribing && transcribingAbort)){ e.preventDefault(); e.stopPropagation(); cancelTranscription(); }
 });
-function startVAD(){ let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
+function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
 async function handleTranscription(blob, snap){
