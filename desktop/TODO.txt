@@ -1,3 +1,5 @@
+icon: taskbar shows HamNegar icon, window chrome shows same, EXE file shows icon in Explorer
+
 OWNER VERIFY — mic level animation (phase 04: voice-driven mic scale 1.0↔1.12):
 1. Record → button breathes with voice: click mic (or Ctrl+Shift+Space) →
    speak loudly → mic button visibly grows (up to ~1.12x) with your voice and
