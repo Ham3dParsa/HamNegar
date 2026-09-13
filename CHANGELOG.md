@@ -2,6 +2,10 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.46] - 2026-09-13
+### Fixed
+- **گاردهای صوتی — double-start، mic یتیم، VAD شبح (#60 BUG-A):** `Audio.start` reentrant-safe (بستن stream/ctx قبلی + rollback با try/finally روی شکست میانی) و `Audio.stop` با disconnect و await close؛ `startRecording` گارد `isRecording/in-flight` + `Audio.stop()` در catch؛ `waveTab` mic-test گارد pending؛ `startVAD` clear قبل از re-arm؛ هرگز بیش از یک stream زنده یا mic بازِ بی‌UI.
+
 ## [0.6.45] - 2026-09-11
 ### Added
 - **پل قرص–Tauri (#36):** قرارداد `hamnegar-toggle-record` (Rust→قرص، همان منطق کلید M) و `invoke hamnegar_paste` بعد از موفقیت فقط در حالت tauri؛ مسیر وب بایت‌به‌بایت؛ `listen` شناور با catch.
