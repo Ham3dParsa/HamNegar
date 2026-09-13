@@ -4,6 +4,9 @@
 // provider helpers (getProviders/hasKeyForProvider). Chains (STT + polish) share one entry shape
 // {id, providerId, enabled} where providerId is 'groq'|'google'|'openrouter'|custom id
 // (legacy stored providerIds migrate on read; purged ones are dropped).
+// Ticket 39: getSettings is served from an in-memory copy-on-read cache (dirty flag,
+// saveSettings write-through); reads trust a norm-version stamp + strict shape-check
+// and fall back to full normalize on mismatch (ticket 24 migration unchanged).
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
 export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
@@ -157,6 +160,159 @@ const KEYS = {
   LOG_COLLAPSED: 'LOG_COLLAPSED',
   REPORT_COLLAPSED: 'REPORT_COLLAPSED',
 };
+
+// ---- Ticket 39 (ref/storage): settings cache + normalize-on-write ----
+// In-memory settings cache with a dirty flag. saveSettings is the only writer
+// of settings keys (no direct localStorage writes to these keys outside this
+// module), so write-through refresh keeps the cache exact. getSettings returns
+// a FRESH COPY every time — callers mutate results (e.g. settingsModal spreads
+// chains), so the cached object itself is never handed out.
+// Write path normalizes fully; read path trusts a persisted version stamp
+// (SETTINGS_STAMP_KEY, one-shot legacy migration E5) plus a cheap strict
+// shape-check, and falls back to the full legacy normalize on mismatch —
+// legacy/corrupt data self-heals exactly as before (ticket 24 contract:
+// legacy `gemini` entries become `google`, `zenspark` entries are dropped).
+const SETTINGS_CACHE_VERSION = 1;
+const SETTINGS_STAMP_KEY = 'SETTINGS_NORM_V1';
+let _settingsCache = null;
+let _settingsDirty = true;
+
+function cloneSettings(s){
+  if(typeof structuredClone === 'function'){
+    try{ return structuredClone(s); }catch{}
+  }
+  return {
+    ...s,
+    sttChain: s.sttChain.map(e => ({ ...e })),
+    polishChain: s.polishChain.map(e => ({ ...e })),
+    customProviders: s.customProviders.map(e => ({ ...e })),
+  };
+}
+
+function hasKeyInSettings(s, pid){
+  if(pid === 'groq') return !!s.groqKey;
+  if(pid === 'google') return !!(s.googleKey || s.geminiKey);
+  if(pid === 'openrouter') return !!s.openrouterKey;
+  const c = s.customProviders.find(x => x.id === pid);
+  return !!(c && c.key);
+}
+
+// Strict shape-check: accepts ONLY what normalize-on-write persists (exact keys,
+// trimmed values, canonical providerIds, no ':free' residue, no legacy aliases).
+// Anything else → null → full legacy normalize on read. Output on accept is built
+// in canonical key order, byte-identical to the normalize path.
+function verifyChainList(arr){
+  if(!Array.isArray(arr) || !arr.length) return null;
+  const seen = new Set(); const out = [];
+  for(const x of arr){
+    if(!x || typeof x !== 'object' || Array.isArray(x)) return null;
+    const k = Object.keys(x);
+    if(k.length !== 3 || !k.includes('id') || !k.includes('providerId') || !k.includes('enabled')) return null;
+    if(typeof x.id !== 'string' || !x.id.trim() || x.id !== x.id.trim() || x.id.includes(':free')) return null;
+    if(typeof x.providerId !== 'string' || !x.providerId.trim() || x.providerId !== x.providerId.trim()) return null;
+    const pid = x.providerId;
+    if(pid === 'gemini' || pid === 'zenspark') return null;
+    if(x.enabled !== true && x.enabled !== false) return null;
+    const key = `${pid}:${x.id}`;
+    if(seen.has(key)) return null;
+    seen.add(key);
+    out.push({ id: x.id, providerId: pid, enabled: x.enabled });
+  }
+  return out;
+}
+function verifyCustomList(arr){
+  if(!Array.isArray(arr)) return null;
+  const seen = new Set(); const out = [];
+  for(const x of arr){
+    if(!x || typeof x !== 'object' || Array.isArray(x)) return null;
+    const k = Object.keys(x);
+    if(k.length !== 4 || !k.includes('id') || !k.includes('name') || !k.includes('baseURL') || !k.includes('key')) return null;
+    if(typeof x.id !== 'string' || !x.id.trim() || x.id !== x.id.trim()) return null;
+    if(typeof x.name !== 'string' || !x.name.trim() || x.name !== x.name.trim()) return null;
+    if(typeof x.baseURL !== 'string' || x.baseURL !== x.baseURL.trim() || /\/$/.test(x.baseURL)) return null;
+    if(typeof x.key !== 'string' || x.key !== x.key.trim()) return null;
+    if(seen.has(x.id)) return null;
+    seen.add(x.id);
+    out.push({ id: x.id, name: x.name, baseURL: x.baseURL, key: x.key });
+  }
+  return out;
+}
+function tryVerifySettings(rawStt, rawPolish, rawCustoms){
+  try{
+    const sttChain = rawStt == null ? normalizeSTTChain(STT_DEFAULTS) : verifyChainList(JSON.parse(rawStt));
+    if(!sttChain) return null;
+    const polishChain = rawPolish == null ? POLISH_DEFAULTS.map(e => ({ ...e })) : verifyChainList(JSON.parse(rawPolish));
+    if(!polishChain) return null;
+    const customProviders = rawCustoms == null ? [] : verifyCustomList(JSON.parse(rawCustoms));
+    if(!customProviders) return null;
+    return { sttChain, polishChain, customProviders };
+  }catch{ return null; }
+}
+function assembleSettings(sttChain, polishChain, customProviders){
+  const peRaw = localStorage.getItem(KEYS.POLISH_ENABLED);
+  const logColRaw = localStorage.getItem(KEYS.LOG_COLLAPSED);
+  const repColRaw = localStorage.getItem(KEYS.REPORT_COLLAPSED);
+  const googleKey = localStorage.getItem(KEYS.GEMINI) || '';
+  return {
+    groqKey: localStorage.getItem(KEYS.GROQ) || '',
+    groqBaseURL: localStorage.getItem(KEYS.GROQ_BASE) || GROQ_BASE_DEFAULT,
+    geminiKey: googleKey,
+    googleKey,
+    openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
+    openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
+    primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
+    model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
+    sttChain,
+    polishChain,
+    customProviders,
+    polishEnabled: peRaw === null ? true : peRaw === '1',
+    realtime: localStorage.getItem(KEYS.REALTIME) === '1',
+    vad: localStorage.getItem(KEYS.VAD) !== '0',
+    autocopy: localStorage.getItem(KEYS.AUTOCOPY) === '1',
+    logCollapsed: logColRaw === null ? true : logColRaw === '1',
+    reportCollapsed: repColRaw === null ? true : repColRaw === '1',
+  };
+}
+function readSettingsFromStore(){
+  const rawStt = localStorage.getItem(KEYS.STT_CHAIN);
+  const rawPolish = localStorage.getItem(KEYS.POLISH_CHAIN);
+  const rawCustoms = localStorage.getItem(KEYS.CUSTOM_PROVIDERS);
+  const stamped = localStorage.getItem(SETTINGS_STAMP_KEY) === String(SETTINGS_CACHE_VERSION);
+  const hasLegacyPrimaryModel = !rawStt && (localStorage.getItem(KEYS.PRIMARY) || localStorage.getItem(KEYS.MODEL));
+  if(stamped && !hasLegacyPrimaryModel){
+    const fast = tryVerifySettings(rawStt, rawPolish, rawCustoms);
+    if(fast) return assembleSettings(fast.sttChain, fast.polishChain, fast.customProviders);
+  }
+  // Legacy full path (ticket 24 behavior, verbatim): normalize everything.
+  let sttChain = parseSTTChain(rawStt, STT_DEFAULTS);
+  let polishChain = parsePolishChain(rawPolish, POLISH_DEFAULTS);
+  if(hasLegacyPrimaryModel){
+    const p = localStorage.getItem(KEYS.PRIMARY) || 'groq';
+    const m = localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest';
+    const allowed = new Set([...STT_DEFAULTS, 'groq']);
+    const set = new Set();
+    if(p==='groq'){ set.add('groq'); if(allowed.has(m)) set.add(m); } else { if(allowed.has(m)) set.add(m); set.add('groq'); }
+    for(const d of STT_DEFAULTS) set.add(d);
+    sttChain = normalizeSTTChain([...set]);
+  }
+  const customProviders = parseCustomProviders(rawCustoms);
+  // One-shot migration persist (E5): healed chains land next to the stamp so
+  // later cold reads take the verify fast path. Best-effort: reads stay pure.
+  try{
+    if(rawStt == null ? hasLegacyPrimaryModel : rawStt !== JSON.stringify(sttChain))
+      localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(sttChain));
+    if(rawPolish != null && rawPolish !== JSON.stringify(polishChain))
+      localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(polishChain));
+    if(rawCustoms != null && rawCustoms !== JSON.stringify(customProviders))
+      localStorage.setItem(KEYS.CUSTOM_PROVIDERS, JSON.stringify(customProviders));
+    localStorage.setItem(SETTINGS_STAMP_KEY, String(SETTINGS_CACHE_VERSION));
+  }catch{}
+  return assembleSettings(sttChain, polishChain, customProviders);
+}
+function refreshSettingsCache(){
+  _settingsCache = readSettingsFromStore();
+  _settingsDirty = false;
+}
 
 function parseSTTChain(raw, defaults){
   if(!raw) return normalizeSTTChain(defaults);
@@ -341,42 +497,9 @@ function normalizeDict(arr) {
 }
 export const Storage = {
   getSettings() {
-    const rawStt = localStorage.getItem(KEYS.STT_CHAIN);
-    const rawPolish = localStorage.getItem(KEYS.POLISH_CHAIN);
-    let sttChain = parseSTTChain(rawStt, STT_DEFAULTS);
-    let polishChain = parsePolishChain(rawPolish, POLISH_DEFAULTS);
-    if(!rawStt && (localStorage.getItem(KEYS.PRIMARY) || localStorage.getItem(KEYS.MODEL))){
-      const p = localStorage.getItem(KEYS.PRIMARY) || 'groq';
-      const m = localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest';
-      const allowed = new Set([...STT_DEFAULTS, 'groq']);
-      const set = new Set();
-      if(p==='groq'){ set.add('groq'); if(allowed.has(m)) set.add(m); } else { if(allowed.has(m)) set.add(m); set.add('groq'); }
-      for(const d of STT_DEFAULTS) set.add(d);
-      sttChain = normalizeSTTChain([...set]);
-    }
-    const peRaw = localStorage.getItem(KEYS.POLISH_ENABLED);
-    const logColRaw = localStorage.getItem(KEYS.LOG_COLLAPSED);
-    const repColRaw = localStorage.getItem(KEYS.REPORT_COLLAPSED);
-    const googleKey = localStorage.getItem(KEYS.GEMINI) || '';
-    return {
-      groqKey: localStorage.getItem(KEYS.GROQ) || '',
-      groqBaseURL: localStorage.getItem(KEYS.GROQ_BASE) || GROQ_BASE_DEFAULT,
-      geminiKey: googleKey,
-      googleKey,
-      openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
-      openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
-      primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
-      model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
-      sttChain,
-      polishChain,
-      customProviders: parseCustomProviders(localStorage.getItem(KEYS.CUSTOM_PROVIDERS)),
-      polishEnabled: peRaw === null ? true : peRaw === '1',
-      realtime: localStorage.getItem(KEYS.REALTIME) === '1',
-      vad: localStorage.getItem(KEYS.VAD) !== '0',
-      autocopy: localStorage.getItem(KEYS.AUTOCOPY) === '1',
-      logCollapsed: logColRaw === null ? true : logColRaw === '1',
-      reportCollapsed: repColRaw === null ? true : repColRaw === '1',
-    };
+    if(!_settingsDirty && _settingsCache) return cloneSettings(_settingsCache);
+    refreshSettingsCache();
+    return cloneSettings(_settingsCache);
   },
   saveSettings(patch) {
     // validate BaseURLs first — atomic: no partial persist on throw (waiver: custom host allowed, confirm at fetch)
@@ -413,6 +536,11 @@ export const Storage = {
     if ('autocopy' in patch) localStorage.setItem(KEYS.AUTOCOPY, patch.autocopy ? '1' : '0');
     if ('logCollapsed' in patch) localStorage.setItem(KEYS.LOG_COLLAPSED, patch.logCollapsed ? '1' : '0');
     if ('reportCollapsed' in patch) localStorage.setItem(KEYS.REPORT_COLLAPSED, patch.reportCollapsed ? '1' : '0');
+    // Ticket 39 write-through: chains/customs above were normalized on write.
+    // Refresh the cache from the store, so the next getSettings is a zero-read
+    // hit (single re-read on the rare write path; also stamps/heals any legacy
+    // keys this patch did not touch).
+    refreshSettingsCache();
   },
   getProviders() {
     // built-ins (key presence only — never leaks key values) + customs
@@ -425,13 +553,14 @@ export const Storage = {
     ];
   },
   hasKeyForProvider(providerId) {
-    const s = Storage.getSettings();
     const pid = migrateProviderId(providerId);
-    if(pid === 'groq') return !!s.groqKey;
-    if(pid === 'google') return !!(s.googleKey || s.geminiKey);
-    if(pid === 'openrouter') return !!s.openrouterKey;
     if(pid === null || !pid) return false;
-    const c = s.customProviders.find(x => x.id === pid);
+    if(!_settingsDirty && _settingsCache) return hasKeyInSettings(_settingsCache, pid);
+    // Cheap key-only fast path on a cold cache: 1–2 reads, no chain parsing.
+    if(pid === 'groq') return !!localStorage.getItem(KEYS.GROQ);
+    if(pid === 'google') return !!localStorage.getItem(KEYS.GEMINI);
+    if(pid === 'openrouter') return !!localStorage.getItem(KEYS.OPENROUTER);
+    const c = parseCustomProviders(localStorage.getItem(KEYS.CUSTOM_PROVIDERS)).find(x => x.id === pid);
     return !!(c && c.key);
   },
   getDraft() { return localStorage.getItem(KEYS.DRAFT) || ''; },
