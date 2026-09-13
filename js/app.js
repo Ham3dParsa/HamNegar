@@ -185,7 +185,7 @@ els.logBody?.addEventListener('keydown', (e) => {
   if (sep && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleRunIsolation(sep); }
 });
 
-if (location.protocol === 'file:') { els.fileWarn.style.display = 'block'; Logger.log('warn','file:// باز شده',location.href); }
+if (location.protocol === 'file:') { if(els.fileWarn) els.fileWarn.style.display='block'; if(els.fileWarn) els.fileWarn.hidden = false; Logger.log('warn','file:// باز شده',location.href); } else { if(els.fileWarn){ els.fileWarn.style.display = 'none'; els.fileWarn.hidden = true; } }
 
 // --- settings wiring + tabs + modal live in js/modules/settingsModal.js (ticket 31) ---
 // Mounted FIRST so mountChains below can reuse its handles (updateBadge/
@@ -836,7 +836,7 @@ async function handleTranscription(blob, snap){
       // already handled toast/status above
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
-      if(err.status === 429) setQuotaExpanded(true); // quota errors auto-expand the strip; nothing else does
+      if(err.status === 429){ setQuotaExpanded(true); try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{} try{ Dashboard.renderOverall(); }catch{} try{ refreshQuotaStrip(); }catch{} }
       let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
       Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
       Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);

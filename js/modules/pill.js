@@ -233,6 +233,7 @@ async function handleAudioStop(blob) {
       if (err && err.status === 429) h = 'سهمیه پر — کمی صبر کن';
       else if (err && err.status === 404) h = 'مدل پیدا نشد';
       else if (err && (err.status === 401 || err.status === 403)) h = 'کلید نامعتبر';
+      if (err && err.status === 429) { try{ refreshQuotaDot(); }catch{} }
       setState('error', `❌ ${msg.slice(0, 60)}`);
       toast(`❌ ${msg.slice(0, 60)} — ${h}`, 3500);
     }
@@ -350,7 +351,8 @@ function bindKeys() {
 }
 
 function init() {
-  if (location.protocol === 'file:' && els.fileWarn) els.fileWarn.hidden = false;
+  if (location.protocol === 'file:' && els.fileWarn) { els.fileWarn.hidden = false; els.fileWarn.style.display = 'block'; }
+  else if (els.fileWarn) { els.fileWarn.hidden = true; els.fileWarn.style.display = 'none'; }
   try {
     if (els.shell) els.shell.textContent = detectShell() === 'tauri' ? 'تاوری' : 'وب';
   } catch {}

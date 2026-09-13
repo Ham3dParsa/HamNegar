@@ -506,7 +506,7 @@ function renderFlowList(){
       }
     }
   }
-  if (err && !err.dataset.failed) err.hidden = true;
+  if (err) { err.hidden = true; delete err.dataset.failed; }
   const retry = $('m-retry');
   if (retry) retry.disabled = !flowLastPid;
   updateNokey();

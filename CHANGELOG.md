@@ -2,6 +2,10 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.47] - 2026-09-13
+### Fixed
+- **UI کهنه ( ‎#61 E7/R7/E8):** پرچم `dataset.failed` با هر رندر تازه/فیلتر پاک می‌شود (نه فقط fetch موفق) و retry روی pid تازه گیت است؛ مسیر 429 هم `Quota.render`/`Dashboard.renderOverall`/`refreshQuotaStrip` (app.js) و `refreshQuotaDot` (pill.js) را صدا می‌زند؛ بنر `file://` با shiv inline غیرماژول + CSS پیش‌فرض `display:block` حتی با بلاک ماژول دیده می‌شود و با لود موفق app دوباره مخفی می‌شود.
+
 ## [0.6.46] - 2026-09-13
 ### Fixed
 - **گاردهای صوتی — double-start، mic یتیم، VAD شبح (#60 BUG-A):** `Audio.start` reentrant-safe (بستن stream/ctx قبلی + rollback با try/finally روی شکست میانی) و `Audio.stop` با disconnect و await close؛ `startRecording` گارد `isRecording/in-flight` + `Audio.stop()` در catch؛ `waveTab` mic-test گارد pending؛ `startVAD` clear قبل از re-arm؛ هرگز بیش از یک stream زنده یا mic بازِ بی‌UI.
