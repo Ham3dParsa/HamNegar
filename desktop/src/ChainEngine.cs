@@ -22,6 +22,7 @@
 // status handling and chain order must land in this file only.
 
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -44,6 +45,12 @@ public sealed class CustomProvider
     public string BaseUrl { get; set; } = string.Empty;
     public string Key { get; set; } = string.Empty;
     public string Model { get; set; } = string.Empty;
+}
+
+public sealed class ChainEntry
+{
+    public string Id { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
 }
 
 public static class ChainEngine
@@ -101,6 +108,42 @@ public static class ChainEngine
         ("4", "groq/whisper-large-v3"),
     ];
 
+    // ---- editable chain config (persisted in pill.settings.json) ----
+    private const string SttChainKey = "sttChain";
+    private const string PolishChainKey = "polishChain";
+
+    private static readonly string[] SttDefaultIds =
+    [
+        "google/gemini-flash-lite-latest",
+        "google/gemini-3.5-flash-lite",
+        "google/gemini-3.1-flash-lite",
+        "groq/whisper-large-v3",
+    ];
+
+    private static readonly string[] PolishDefaultIds =
+    [
+        "groq/qwen/qwen3.6-27b",
+        "google/gemini-flash-lite-latest",
+    ];
+
+    private static IReadOnlyList<ChainEntry> DefaultSttEntries =>
+        SttDefaultIds.Select(id => new ChainEntry { Id = id, Enabled = true }).ToList();
+
+    private static IReadOnlyList<ChainEntry> DefaultPolishEntries
+    {
+        get
+        {
+            var list = PolishDefaultIds.Select(id => new ChainEntry { Id = id, Enabled = true }).ToList();
+            foreach (var c in ListCustomProviders())
+            {
+                var pid = $"custom/{c.Id.Trim()}";
+                if (!list.Any(e => string.Equals(e.Id, pid, StringComparison.OrdinalIgnoreCase)))
+                    list.Add(new ChainEntry { Id = pid, Enabled = true });
+            }
+            return list;
+        }
+    }
+
     // ---- pair display (web pairLabel; display only) ----
     public static string PairLabel(string? providerId, string? model)
     {
@@ -123,7 +166,7 @@ public static class ChainEngine
         return t;
     }
 
-    // ---- STT chain (behavior identical to legacy SttChain) ----
+    // ---- STT chain (order + enabled from persisted config; fallback to defaults) ----
     public static async Task<ChainResult> TranscribeAsync(
         string wavPath,
         string googleKey,
@@ -137,74 +180,120 @@ public static class ChainEngine
 
         Exception? last = null;
 
-        foreach (var model in GoogleModels)
-        {
-            string engine = $"google/{model}";
-            if (string.IsNullOrWhiteSpace(googleKey))
-            {
-                last = new InvalidOperationException($"{engine}: no key \u2014 skipped");
-                Report(progress, engine, false);
-                continue; // treat like 401 → next engine
-            }
-            try
-            {
-                var text = await QueryGeminiAsync(wavPath, model, googleKey, ct).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    Report(progress, engine, true);
-                    return new ChainResult { Text = text.Trim(), Engine = engine };
-                }
-                last = new InvalidOperationException($"{engine}: empty transcript");
-                Report(progress, engine, false);
-            }
-            catch (ChainException e) when (e.Status == 429)
-            {
-                last = e;
-                Report(progress, engine, false);
-                await Task.Delay(600, ct).ConfigureAwait(false);
-            }
-            catch (ChainException e) when (e.Status is 401 or 403 or 404)
-            {
-                last = e; // 401/403 → next engine, 404 → next model (same thing here)
-                Report(progress, engine, false);
-            }
-            catch (Exception e)
-            {
-                last = e;
-                Report(progress, engine, false);
-            }
-        }
+        var chain = GetSttChain();
+        var enabled = chain.Where(c => c.Enabled).ToList();
+        if (enabled.Count == 0)
+            enabled = chain.ToList();
+        if (enabled.Count == 0)
+            enabled = DefaultSttEntries.ToList();
 
-        if (!string.IsNullOrWhiteSpace(groqKey))
+        foreach (var entry in enabled)
         {
-            string engine = $"groq/{GroqModel}";
-            try
+            var id = (entry.Id ?? string.Empty).Trim();
+            if (id.StartsWith("google/", StringComparison.OrdinalIgnoreCase))
             {
-                var text = await QueryGroqAsync(wavPath, groqKey, ct).ConfigureAwait(false);
-                if (!string.IsNullOrWhiteSpace(text))
+                var model = id.Substring("google/".Length).Trim();
+                if (string.IsNullOrEmpty(model))
+                    continue;
+                string engine = $"google/{model}";
+                if (string.IsNullOrWhiteSpace(googleKey))
                 {
-                    Report(progress, engine, true);
-                    return new ChainResult { Text = text.Trim(), Engine = engine };
+                    last = new InvalidOperationException($"{engine}: no key \u2014 skipped");
+                    Report(progress, engine, false);
+                    continue;
                 }
-                last = new InvalidOperationException($"{engine}: empty transcript");
-                Report(progress, engine, false);
+                try
+                {
+                    var text = await QueryGeminiAsync(wavPath, model, googleKey, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        Report(progress, engine, true);
+                        return new ChainResult { Text = text.Trim(), Engine = engine };
+                    }
+                    last = new InvalidOperationException($"{engine}: empty transcript");
+                    Report(progress, engine, false);
+                }
+                catch (ChainException e) when (e.Status == 429)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                    await Task.Delay(600, ct).ConfigureAwait(false);
+                }
+                catch (ChainException e) when (e.Status is 401 or 403 or 404)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                }
+                catch (Exception e)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                }
             }
-            catch (ChainException e) when (e.Status == 429)
+            else if (id.StartsWith("groq/", StringComparison.OrdinalIgnoreCase))
             {
-                last = e;
-                Report(progress, engine, false);
-                await Task.Delay(600, ct).ConfigureAwait(false);
+                var model = id.Substring("groq/".Length).Trim();
+                // Support legacy groq entry exactly
+                if (!string.Equals(model, GroqModel, StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(model))
+                {
+                    // unknown groq model → treat as whisper-large-v3
+                    model = GroqModel;
+                }
+                else
+                {
+                    model = GroqModel;
+                }
+                string engine = $"groq/{GroqModel}";
+                if (string.IsNullOrWhiteSpace(groqKey))
+                {
+                    last = new InvalidOperationException($"{engine}: no key \u2014 skipped");
+                    Report(progress, engine, false);
+                    continue;
+                }
+                try
+                {
+                    var text = await QueryGroqAsync(wavPath, groqKey, ct).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        Report(progress, engine, true);
+                        return new ChainResult { Text = text.Trim(), Engine = engine };
+                    }
+                    last = new InvalidOperationException($"{engine}: empty transcript");
+                    Report(progress, engine, false);
+                }
+                catch (ChainException e) when (e.Status == 429)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                    await Task.Delay(600, ct).ConfigureAwait(false);
+                }
+                catch (ChainException e) when (e.Status is 401 or 403 or 404)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                }
+                catch (Exception e)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                }
             }
-            catch (Exception e)
+            else if (id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase))
             {
-                last = e;
+                // STT custom not implemented (OpenAI-compatible transcription via custom not in this track);
+                // skip custom STT entries gracefully (never crash).
+                var cid = id.Substring("custom/".Length).Trim();
+                string engine = $"custom/{cid}";
+                last = new InvalidOperationException($"{engine}: custom STT not supported \u2014 skipped");
+                Report(progress, engine, false);
+                continue;
+            }
+            else
+            {
+                string engine = id.Length > 0 ? id : "unknown";
+                last = new InvalidOperationException($"{engine}: unknown STT id \u2014 skipped");
                 Report(progress, engine, false);
             }
-        }
-        else
-        {
-            last ??= new InvalidOperationException($"groq/{GroqModel}: no key \u2014 skipped");
-            Report(progress, $"groq/{GroqModel}", false);
         }
 
         throw last ?? new InvalidOperationException("Transcription failed on all engines.");
@@ -368,6 +457,7 @@ public static class ChainEngine
             ["key"] = provider.Key ?? string.Empty,
             ["model"] = provider.Model ?? string.Empty,
         };
+        bool isNew = existing is null;
         if (existing is not null)
         {
             int idx = arr.IndexOf(existing);
@@ -378,6 +468,24 @@ public static class ChainEngine
             arr.Add(node);
         }
         root["customProviders"] = arr;
+        // ensure new custom appears in polish chain at end (least surprise)
+        if (isNew)
+        {
+            try
+            {
+                var pChain = GetPolishChain().ToList();
+                var pid = $"custom/{id}";
+                if (!pChain.Any(e => string.Equals(e.Id, pid, StringComparison.OrdinalIgnoreCase)))
+                {
+                    pChain.Add(new ChainEntry { Id = pid, Enabled = true });
+                    var pArr = new JsonArray();
+                    foreach (var e in pChain)
+                        pArr.Add(new JsonObject { ["id"] = e.Id, ["enabled"] = e.Enabled });
+                    root[PolishChainKey] = pArr;
+                }
+            }
+            catch { }
+        }
         WriteSettingsRoot(root);
     }
 
@@ -397,6 +505,23 @@ public static class ChainEngine
             {
                 arr.RemoveAt(i);
                 root!["customProviders"] = arr;
+                // also remove from polish chain if present (never crash)
+                try
+                {
+                    var pArr = root["polishChain"]?.AsArray();
+                    if (pArr is not null)
+                    {
+                        var pid = $"custom/{want}";
+                        for (int j = pArr.Count - 1; j >= 0; j--)
+                        {
+                            var po = pArr[j]?.AsObject();
+                            if (po is not null && string.Equals(po["id"]?.GetValue<string>()?.Trim(), pid, StringComparison.OrdinalIgnoreCase))
+                                pArr.RemoveAt(j);
+                        }
+                        root["polishChain"] = pArr;
+                    }
+                }
+                catch { }
                 WriteSettingsRoot(root!);
                 return true;
             }
@@ -404,23 +529,213 @@ public static class ChainEngine
         return false;
     }
 
+    // ---- editable chain persistence (public CRUD/pair APIs; presentation layer uses these) ----
+    public static IReadOnlyList<ChainEntry> GetSttChain()
+    {
+        try
+        {
+            var root = ReadSettingsRoot();
+            var arr = root?[SttChainKey]?.AsArray();
+            if (arr is null || arr.Count == 0)
+                return DefaultSttEntries;
+            var list = new List<ChainEntry>(arr.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var n in arr)
+            {
+                var o = n?.AsObject();
+                if (o is null) continue;
+                var id = o["id"]?.GetValue<string>()?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(id)) continue;
+                if (!seen.Add(id)) continue;
+                var en = o["enabled"]?.GetValue<bool>() ?? true;
+                // keep even unknown ids (future-proof) but UI will filter display; engine loop will skip gracefully
+                list.Add(new ChainEntry { Id = id, Enabled = en });
+            }
+            if (list.Count == 0)
+                return DefaultSttEntries;
+            return list;
+        }
+        catch
+        {
+            return DefaultSttEntries;
+        }
+    }
+
+    public static void SaveSttChain(IReadOnlyList<ChainEntry> chain)
+    {
+        try
+        {
+            var sanitized = new List<ChainEntry>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (chain is not null)
+            {
+                foreach (var e in chain)
+                {
+                    var id = (e?.Id ?? string.Empty).Trim();
+                    if (string.IsNullOrEmpty(id)) continue;
+                    if (!seen.Add(id)) continue;
+                    sanitized.Add(new ChainEntry { Id = id, Enabled = e!.Enabled });
+                }
+            }
+            if (sanitized.Count == 0)
+                sanitized = DefaultSttEntries.ToList();
+            var root = ReadSettingsRoot() ?? new JsonObject();
+            var arr = new JsonArray();
+            foreach (var e in sanitized)
+            {
+                arr.Add(new JsonObject { ["id"] = e.Id, ["enabled"] = e.Enabled });
+            }
+            root[SttChainKey] = arr;
+            WriteSettingsRoot(root);
+        }
+        catch { /* never crash */ }
+    }
+
+    public static void ResetSttChain() => SaveSttChain(DefaultSttEntries);
+
+    public static IReadOnlyList<ChainEntry> GetPolishChain()
+    {
+        try
+        {
+            var customs = ListCustomProviders();
+            var customIds = new HashSet<string>(customs.Select(c => $"custom/{c.Id.Trim()}"), StringComparer.OrdinalIgnoreCase);
+            var root = ReadSettingsRoot();
+            var arr = root?[PolishChainKey]?.AsArray();
+            if (arr is null || arr.Count == 0)
+                return DefaultPolishEntries;
+            var list = new List<ChainEntry>(arr.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var n in arr)
+            {
+                var o = n?.AsObject();
+                if (o is null) continue;
+                var id = o["id"]?.GetValue<string>()?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(id)) continue;
+                if (!seen.Add(id)) continue;
+                var en = o["enabled"]?.GetValue<bool>() ?? true;
+                list.Add(new ChainEntry { Id = id, Enabled = en });
+            }
+            if (list.Count == 0)
+                return DefaultPolishEntries;
+            // Append missing customs that were added after the stored order (new provider → visible at end)
+            foreach (var cid in customIds)
+            {
+                if (!seen.Contains(cid))
+                    list.Add(new ChainEntry { Id = cid, Enabled = true });
+            }
+            // Append missing polish defaults if user deleted them and stored lacks them (keep at least defaults visible)
+            foreach (var did in PolishDefaultIds)
+            {
+                if (!seen.Contains(did) && !list.Any(e => string.Equals(e.Id, did, StringComparison.OrdinalIgnoreCase)))
+                    list.Add(new ChainEntry { Id = did, Enabled = true });
+            }
+            return list;
+        }
+        catch
+        {
+            return DefaultPolishEntries;
+        }
+    }
+
+    public static void SavePolishChain(IReadOnlyList<ChainEntry> chain)
+    {
+        try
+        {
+            var sanitized = new List<ChainEntry>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (chain is not null)
+            {
+                foreach (var e in chain)
+                {
+                    var id = (e?.Id ?? string.Empty).Trim();
+                    if (string.IsNullOrEmpty(id)) continue;
+                    if (!seen.Add(id)) continue;
+                    sanitized.Add(new ChainEntry { Id = id, Enabled = e!.Enabled });
+                }
+            }
+            if (sanitized.Count == 0)
+                sanitized = DefaultPolishEntries.ToList();
+            var root = ReadSettingsRoot() ?? new JsonObject();
+            var arr = new JsonArray();
+            foreach (var e in sanitized)
+                arr.Add(new JsonObject { ["id"] = e.Id, ["enabled"] = e.Enabled });
+            root[PolishChainKey] = arr;
+            WriteSettingsRoot(root);
+        }
+        catch { }
+    }
+
+    public static void ResetPolishChain() => SavePolishChain(DefaultPolishEntries);
+    public static void ResetAllChains() { ResetSttChain(); ResetPolishChain(); }
+
     // ---- internals (single home for dispatch + prompts + guards) ----
     private sealed record PolishAttempt(string ProviderId, string Model, string Key, string BaseUrl);
 
     private static List<PolishAttempt> PolishAttempts(string googleKey, string groqKey)
     {
-        var list = new List<PolishAttempt>(4);
-        if (!string.IsNullOrWhiteSpace(groqKey))
-            list.Add(new PolishAttempt("groq", DefaultPolishModel, groqKey, GroqChatBaseDefault));
-        foreach (var c in ListCustomProviders())
+        var chain = GetPolishChain();
+        var enabled = chain.Where(c => c.Enabled).ToList();
+        if (enabled.Count == 0)
+            enabled = chain.ToList();
+        if (enabled.Count == 0)
+            enabled = DefaultPolishEntries.ToList();
+        var list = new List<PolishAttempt>(enabled.Count + 2);
+        var customsById = ListCustomProviders().ToDictionary(c => c.Id.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
+        foreach (var e in enabled)
         {
-            if (string.IsNullOrWhiteSpace(c.Key) || string.IsNullOrWhiteSpace(c.BaseUrl))
+            var id = (e.Id ?? string.Empty).Trim();
+            if (id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase))
+            {
+                var cid = id.Substring("custom/".Length).Trim();
+                if (!customsById.TryGetValue(cid, out var cp)) continue;
+                if (string.IsNullOrWhiteSpace(cp.Key) || string.IsNullOrWhiteSpace(cp.BaseUrl)) continue;
+                var model = string.IsNullOrWhiteSpace(cp.Model) ? DefaultPolishModel : cp.Model.Trim();
+                list.Add(new PolishAttempt(CanonicalProviderId(cp.Id), model, cp.Key, cp.BaseUrl.Trim().TrimEnd('/')));
+            }
+            else if (string.Equals(id, "groq/qwen/qwen3.6-27b", StringComparison.OrdinalIgnoreCase) || string.Equals(id, PairLabel(DefaultPolishProvider, DefaultPolishModel), StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(groqKey)) continue;
+                list.Add(new PolishAttempt("groq", DefaultPolishModel, groqKey, GroqChatBaseDefault));
+            }
+            else if (id.StartsWith("google/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(googleKey)) continue;
+                var model = id.Substring("google/".Length).Trim();
+                if (string.IsNullOrEmpty(model)) model = GoogleModels[0];
+                list.Add(new PolishAttempt("google", model, googleKey, string.Empty));
+            }
+            else if (id.StartsWith("groq/", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(groqKey)) continue;
+                var model = id.Substring("groq/".Length).Trim();
+                if (string.IsNullOrEmpty(model)) model = DefaultPolishModel;
+                list.Add(new PolishAttempt("groq", model, groqKey, GroqChatBaseDefault));
+            }
+            else if (id.StartsWith("openrouter/", StringComparison.OrdinalIgnoreCase))
+            {
+                // openrouter entry without custom — needs key; skip if no mapping
                 continue;
-            var model = string.IsNullOrWhiteSpace(c.Model) ? DefaultPolishModel : c.Model.Trim();
-            list.Add(new PolishAttempt(CanonicalProviderId(c.Id), model, c.Key, c.BaseUrl.Trim().TrimEnd('/')));
+            }
+            else
+            {
+                // unknown id → skip (never crash)
+                continue;
+            }
         }
-        if (!string.IsNullOrWhiteSpace(googleKey))
-            list.Add(new PolishAttempt("google", GoogleModels[0], googleKey, string.Empty));
+        // Fallback to legacy order if filtered list empty but keys exist (preserves old behavior on corrupt)
+        if (list.Count == 0)
+        {
+            if (!string.IsNullOrWhiteSpace(groqKey))
+                list.Add(new PolishAttempt("groq", DefaultPolishModel, groqKey, GroqChatBaseDefault));
+            foreach (var c in customsById.Values)
+            {
+                if (string.IsNullOrWhiteSpace(c.Key) || string.IsNullOrWhiteSpace(c.BaseUrl)) continue;
+                var model = string.IsNullOrWhiteSpace(c.Model) ? DefaultPolishModel : c.Model.Trim();
+                list.Add(new PolishAttempt(CanonicalProviderId(c.Id), model, c.Key, c.BaseUrl.Trim().TrimEnd('/')));
+            }
+            if (!string.IsNullOrWhiteSpace(googleKey))
+                list.Add(new PolishAttempt("google", GoogleModels[0], googleKey, string.Empty));
+        }
         return list;
     }
 

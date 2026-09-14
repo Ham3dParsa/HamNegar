@@ -75,35 +75,96 @@
                 </StackPanel>
             </Border>
 
-            <!-- (b) CHAIN: read-only engine order -->
+            <!-- (b) CHAIN EDITOR: STT + Polish editable over ChainEngine -->
             <Border Style="{DynamicResource CardStyle}">
                 <StackPanel>
-                    <TextBlock x:Name="ChainHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
-                    <ItemsControl x:Name="ChainItems" IsTabStop="False">
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="SttChainHeader" Text="" Style="{DynamicResource SectionTitleStyle}" VerticalAlignment="Center"/>
+                        <Button x:Name="ResetSttButton" Content="" Style="{DynamicResource SecondaryButtonStyle}" Grid.Column="1" Click="ResetSttButton_Click"/>
+                    </Grid>
+                    <ItemsControl x:Name="SttChainItems" IsTabStop="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid Margin="0,3">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26"/>
+                                        <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Width="20" Height="20" CornerRadius="10"
-                                            Background="{DynamicResource HoverBrush}" BorderBrush="{DynamicResource LineBrush}" BorderThickness="1"
-                                            HorizontalAlignment="Left" VerticalAlignment="Top">
-                                        <TextBlock Text="{Binding Step}" Foreground="{DynamicResource AccentSoftBrush}" FontSize="10"
-                                                   FontFamily="Segoe UI" HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
+                                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0" Checked="ChainEnabled_Changed" Unchecked="ChainEnabled_Changed" Tag="{Binding Id}"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Text="{Binding Id}" Foreground="{DynamicResource TextBrush}" FontSize="11"
-                                                   FontFamily="Consolas, Segoe UI" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{Binding Note}" Foreground="{DynamicResource MutedBrush}" FontSize="10"
-                                                   FontFamily="Segoe UI"/>
+                                        <TextBlock Text="{Binding Id}" Foreground="{DynamicResource TextBrush}" FontSize="11" FontFamily="Consolas, Segoe UI" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Note}" Foreground="{DynamicResource MutedBrush}" FontSize="10" FontFamily="Segoe UI"/>
                                     </StackPanel>
+                                    <Button Grid.Column="2" Content="&#xE70E;" FontFamily="{StaticResource IconFont}" Style="{DynamicResource IconButtonStyle}" Margin="4,0,2,0" Click="SttUp_Click" Tag="{Binding Id}"/>
+                                    <Button Grid.Column="3" Content="&#xE70D;" FontFamily="{StaticResource IconFont}" Style="{DynamicResource IconButtonStyle}" Click="SttDown_Click" Tag="{Binding Id}"/>
                                 </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <TextBlock x:Name="SttHint" Text="" Style="{DynamicResource HintStyle}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{DynamicResource CardStyle}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="PolishChainHeader" Text="" Style="{DynamicResource SectionTitleStyle}" VerticalAlignment="Center"/>
+                        <Button x:Name="ResetPolishButton" Content="" Style="{DynamicResource SecondaryButtonStyle}" Grid.Column="1" Click="ResetPolishButton_Click"/>
+                    </Grid>
+                    <ItemsControl x:Name="PolishChainItems" IsTabStop="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <CheckBox IsChecked="{Binding Enabled, Mode=TwoWay}" VerticalAlignment="Center" Margin="0,0,6,0" Checked="ChainEnabled_Changed" Unchecked="ChainEnabled_Changed" Tag="{Binding Id}"/>
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Id}" Foreground="{DynamicResource TextBrush}" FontSize="11" FontFamily="Consolas, Segoe UI" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Sub}" Foreground="{DynamicResource MutedBrush}" FontSize="10" FontFamily="Segoe UI" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="&#xE70E;" FontFamily="{StaticResource IconFont}" Style="{DynamicResource IconButtonStyle}" Margin="4,0,2,0" Click="PolishUp_Click" Tag="{Binding Id}"/>
+                                    <Button Grid.Column="3" Content="&#xE70D;" FontFamily="{StaticResource IconFont}" Style="{DynamicResource IconButtonStyle}" Margin="0,0,2,0" Click="PolishDown_Click" Tag="{Binding Id}"/>
+                                    <Button Grid.Column="4" Content="&#xE74D;" FontFamily="{StaticResource IconFont}" Style="{DynamicResource IconButtonStyle}" Click="RemoveCustom_Click" Tag="{Binding Id}" Visibility="{Binding RemoveVisibility}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock x:Name="PolishHint" Text="" Style="{DynamicResource HintStyle}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <Border Style="{DynamicResource CardStyle}">
+                <StackPanel>
+                    <TextBlock x:Name="CustomHeader" Text="" Style="{DynamicResource SectionTitleStyle}"/>
+                    <TextBlock x:Name="CustomIdLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBox x:Name="CustomIdBox" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="CustomNameLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBox x:Name="CustomNameBox" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="CustomBaseLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBox x:Name="CustomBaseBox" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="CustomKeyLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <PasswordBox x:Name="CustomKeyBox" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="CustomModelLabel" Text="" Style="{DynamicResource FieldLabelStyle}"/>
+                    <TextBox x:Name="CustomModelBox" Margin="0,0,0,8"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button x:Name="AddCustomButton" Content="" Style="{DynamicResource PrimaryButtonStyle}" Click="AddCustomButton_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="CustomHint" Text="" Style="{DynamicResource HintStyle}" Margin="0,6,0,0"/>
                 </StackPanel>
             </Border>
 
