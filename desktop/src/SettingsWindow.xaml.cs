@@ -91,25 +91,24 @@ public partial class SettingsWindow : Window
             ResetHotkeysButton.Content = Lang.Get(Lang.K.ResetDefaults);
             ResetHotkeysButton.ToolTip = Lang.Format(Lang.K.ResetTip, HotkeyConfig.DefaultRecord, HotkeyConfig.DefaultShowHide, HotkeyConfig.DefaultCancel);
             ShortcutsHint.Text = Lang.Get(Lang.K.ShortcutsHint);
-            // Chain editor strings: born with editor (FA/EN live, no Lang.cs touch yet)
-            bool fa = Lang.IsFa;
-            SttChainHeader.Text = fa ? "زنجیره رونویسی" : "Transcription chain";
-            ResetSttButton.Content = fa ? "بازنشانی" : "Reset";
-            ResetSttButton.ToolTip = fa ? "بازگشت به ترتیب پیش‌فرض" : "Restore default order";
-            SttHint.Text = fa ? "ترتیب را با ▲/▼ تغییر دهید؛ تیک را برای فعال/غیرفعال بردارید. حداقل یکی فعال بماند." : "Reorder with ▲/▼; toggle to enable/disable. At least one stays active.";
-            PolishChainHeader.Text = fa ? "زنجیره پرداخت متن" : "Polish chain";
-            ResetPolishButton.Content = fa ? "بازنشانی" : "Reset";
-            ResetPolishButton.ToolTip = fa ? "بازگشت به ترتیب پیش‌فرض" : "Restore default order";
-            PolishHint.Text = fa ? "پرداخت با چت: ترتیب تلاش؛ ارائه‌دهنده سفارشی هم اینجاست." : "Polish via chat: attempt order; custom providers appear here.";
-            CustomHeader.Text = fa ? "ارائه‌دهنده سفارشی (OpenAI-compatible)" : "Custom provider (OpenAI-compatible)";
-            CustomIdLabel.Text = fa ? "شناسه (مثل myprov)" : "ID (e.g. myprov)";
-            CustomNameLabel.Text = fa ? "نام نمایشی" : "Display name";
-            CustomBaseLabel.Text = fa ? "Base URL (باید https)" : "Base URL (must be https)";
-            CustomKeyLabel.Text = fa ? "کلید API" : "API key";
-            CustomModelLabel.Text = fa ? "مدل" : "Model";
-            AddCustomButton.Content = fa ? "افزودن" : "Add";
-            AddCustomButton.ToolTip = fa ? "افزودن ارائه‌دهنده سفارشی به زنجیره پرداخت" : "Add custom provider to polish chain";
-            CustomHint.Text = fa ? "baseURL باید https باشد؛ کلید و مدل الزامی‌اند. حذف از لیست پرداخت هم پاک می‌کند." : "baseURL must be https; key and model required. Removing deletes from polish chain too.";
+            // Chain editor strings live in Lang.cs (K.Chain*) like every other label.
+            SttChainHeader.Text = Lang.Get(Lang.K.ChainSttTitle);
+            ResetSttButton.Content = Lang.Get(Lang.K.ChainReset);
+            ResetSttButton.ToolTip = Lang.Get(Lang.K.ChainResetTip);
+            SttHint.Text = Lang.Get(Lang.K.ChainSttHint);
+            PolishChainHeader.Text = Lang.Get(Lang.K.ChainPolishTitle);
+            ResetPolishButton.Content = Lang.Get(Lang.K.ChainReset);
+            ResetPolishButton.ToolTip = Lang.Get(Lang.K.ChainResetTip);
+            PolishHint.Text = Lang.Get(Lang.K.ChainPolishHint);
+            CustomHeader.Text = Lang.Get(Lang.K.ChainCustomTitle);
+            CustomIdLabel.Text = Lang.Get(Lang.K.ChainCustomId);
+            CustomNameLabel.Text = Lang.Get(Lang.K.ChainCustomName);
+            CustomBaseLabel.Text = Lang.Get(Lang.K.ChainCustomBase);
+            CustomKeyLabel.Text = Lang.Get(Lang.K.ChainCustomKey);
+            CustomModelLabel.Text = Lang.Get(Lang.K.ChainCustomModel);
+            AddCustomButton.Content = Lang.Get(Lang.K.ChainCustomAdd);
+            AddCustomButton.ToolTip = Lang.Get(Lang.K.ChainCustomAddTip);
+            CustomHint.Text = Lang.Get(Lang.K.ChainCustomHint);
             // Refresh notes to reflect language switch
             RefreshSttChain();
             RefreshPolishChain();
@@ -178,8 +177,8 @@ public partial class SettingsWindow : Window
                 else if (id.Equals("google/gemini-3.5-flash-lite", StringComparison.OrdinalIgnoreCase)) note = Lang.Get(Lang.K.ChainNote2);
                 else if (id.Equals("google/gemini-3.1-flash-lite", StringComparison.OrdinalIgnoreCase)) note = Lang.Get(Lang.K.ChainNote3);
                 else if (id.Equals("groq/whisper-large-v3", StringComparison.OrdinalIgnoreCase)) note = Lang.Get(Lang.K.ChainNote4);
-                else if (id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase)) note = Lang.IsFa ? "سفارشی — رونویسی" : "custom — transcription";
-                else note = Lang.IsFa ? "نامشخص" : "unknown";
+                else if (id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase)) note = Lang.Get(Lang.K.ChainNoteCustomStt);
+                else note = Lang.Get(Lang.K.ChainNoteUnknown);
                 rows.Add(new ChainRow { Id = id, Note = note, Enabled = c.Enabled, RemoveVisibility = Visibility.Collapsed });
             }
             _sttRows = rows;
@@ -205,10 +204,10 @@ public partial class SettingsWindow : Window
                 bool isCustom = id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase);
                 if (isCustom && customs.TryGetValue(id, out var cp))
                     sub = $"{cp.BaseUrl} · {cp.Model}".Trim(' ', '·');
-                else if (id.Equals("groq/qwen/qwen3.6-27b", StringComparison.OrdinalIgnoreCase)) sub = Lang.IsFa ? "پیش‌فرض پرداخت" : "default polish";
-                else if (id.StartsWith("google/", StringComparison.OrdinalIgnoreCase)) sub = Lang.IsFa ? "جایگزین گوگل" : "Google fallback";
-                else if (id.StartsWith("groq/", StringComparison.OrdinalIgnoreCase)) sub = "Groq";
-                else sub = isCustom ? (Lang.IsFa ? "سفارشی (پاک‌شده؟)" : "custom (missing?)") : "";
+                else if (id.Equals("groq/qwen/qwen3.6-27b", StringComparison.OrdinalIgnoreCase)) sub = Lang.Get(Lang.K.ChainPolishDefault);
+                else if (id.StartsWith("google/", StringComparison.OrdinalIgnoreCase)) sub = Lang.Get(Lang.K.ChainPolishGoogleFallback);
+                else if (id.StartsWith("groq/", StringComparison.OrdinalIgnoreCase)) sub = Lang.Get(Lang.K.ChainPolishGroq);
+                else sub = isCustom ? Lang.Get(Lang.K.ChainPolishCustomMissing) : "";
                 rows.Add(new ChainRow { Id = id, Note = "", Sub = sub, Enabled = c.Enabled, RemoveVisibility = isCustom ? Visibility.Visible : Visibility.Collapsed });
             }
             _polishRows = rows;
@@ -256,8 +255,7 @@ public partial class SettingsWindow : Window
                 // Determine which ItemsControl owns this CheckBox by walking up? Persist both to be safe.
                 PersistSttFromRows();
                 PersistPolishFromRows();
-                bool fa = Lang.IsFa;
-                SetStatusRaw(fa ? "ذخیره شد." : "Saved.");
+                SetStatusRaw(Lang.Get(Lang.K.ChainSaved));
             }
         }
         catch { }
@@ -272,7 +270,7 @@ public partial class SettingsWindow : Window
         var tmp = _sttRows[idx - 1]; _sttRows[idx - 1] = _sttRows[idx]; _sttRows[idx] = tmp;
         HamNegar.Native.Chain.ChainEngine.SaveSttChain(_sttRows.Select(r => new ChainEntry { Id = r.Id, Enabled = r.Enabled }).ToList());
         RefreshSttChain();
-        SetStatusRaw(Lang.IsFa ? "ترتیب رونویسی ذخیره شد." : "STT order saved.");
+        SetStatusRaw(Lang.Get(Lang.K.ChainSttSaved));
     }
 
     private void SttDown_Click(object sender, RoutedEventArgs e)
@@ -284,7 +282,7 @@ public partial class SettingsWindow : Window
         var tmp = _sttRows[idx + 1]; _sttRows[idx + 1] = _sttRows[idx]; _sttRows[idx] = tmp;
         HamNegar.Native.Chain.ChainEngine.SaveSttChain(_sttRows.Select(r => new ChainEntry { Id = r.Id, Enabled = r.Enabled }).ToList());
         RefreshSttChain();
-        SetStatusRaw(Lang.IsFa ? "ترتیب رونویسی ذخیره شد." : "STT order saved.");
+        SetStatusRaw(Lang.Get(Lang.K.ChainSttSaved));
     }
 
     private void PolishUp_Click(object sender, RoutedEventArgs e)
@@ -296,7 +294,7 @@ public partial class SettingsWindow : Window
         var tmp = _polishRows[idx - 1]; _polishRows[idx - 1] = _polishRows[idx]; _polishRows[idx] = tmp;
         HamNegar.Native.Chain.ChainEngine.SavePolishChain(_polishRows.Select(r => new ChainEntry { Id = r.Id, Enabled = r.Enabled }).ToList());
         RefreshPolishChain();
-        SetStatusRaw(Lang.IsFa ? "ترتیب پرداخت ذخیره شد." : "Polish order saved.");
+        SetStatusRaw(Lang.Get(Lang.K.ChainPolishSaved));
     }
 
     private void PolishDown_Click(object sender, RoutedEventArgs e)
@@ -308,17 +306,17 @@ public partial class SettingsWindow : Window
         var tmp = _polishRows[idx + 1]; _polishRows[idx + 1] = _polishRows[idx]; _polishRows[idx] = tmp;
         HamNegar.Native.Chain.ChainEngine.SavePolishChain(_polishRows.Select(r => new ChainEntry { Id = r.Id, Enabled = r.Enabled }).ToList());
         RefreshPolishChain();
-        SetStatusRaw(Lang.IsFa ? "ترتیب پرداخت ذخیره شد." : "Polish order saved.");
+        SetStatusRaw(Lang.Get(Lang.K.ChainPolishSaved));
     }
 
     private void ResetSttButton_Click(object sender, RoutedEventArgs e)
     {
-        try { HamNegar.Native.Chain.ChainEngine.ResetSttChain(); RefreshSttChain(); SetStatusRaw(Lang.IsFa ? "زنجیره رونویسی بازنشانی شد." : "STT chain reset."); } catch { }
+        try { HamNegar.Native.Chain.ChainEngine.ResetSttChain(); RefreshSttChain(); SetStatusRaw(Lang.Get(Lang.K.ChainSttResetDone)); } catch { }
     }
 
     private void ResetPolishButton_Click(object sender, RoutedEventArgs e)
     {
-        try { HamNegar.Native.Chain.ChainEngine.ResetPolishChain(); RefreshPolishChain(); SetStatusRaw(Lang.IsFa ? "زنجیره پرداخت بازنشانی شد." : "Polish chain reset."); } catch { }
+        try { HamNegar.Native.Chain.ChainEngine.ResetPolishChain(); RefreshPolishChain(); SetStatusRaw(Lang.Get(Lang.K.ChainPolishResetDone)); } catch { }
     }
 
     private void AddCustomButton_Click(object sender, RoutedEventArgs e)
@@ -328,18 +326,18 @@ public partial class SettingsWindow : Window
         var baseUrl = CustomBaseBox.Text?.Trim().TrimEnd('/') ?? string.Empty;
         var key = CustomKeyBox.Password?.Trim() ?? string.Empty;
         var model = CustomModelBox.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(id)) { SetStatusRaw(Lang.IsFa ? "شناسه الزامی است." : "ID is required."); return; }
-        if (string.IsNullOrEmpty(baseUrl)) { SetStatusRaw(Lang.IsFa ? "Base URL الزامی است." : "Base URL is required."); return; }
-        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)) { SetStatusRaw(Lang.IsFa ? "Base URL باید https باشد." : "Base URL must be https."); return; }
-        if (string.IsNullOrEmpty(model)) { SetStatusRaw(Lang.IsFa ? "مدل الزامی است." : "Model is required."); return; }
-        if (string.IsNullOrEmpty(key)) { SetStatusRaw(Lang.IsFa ? "کلید الزامی است." : "Key is required."); return; }
+        if (string.IsNullOrEmpty(id)) { SetStatusRaw(Lang.Get(Lang.K.ChainIdRequired)); return; }
+        if (string.IsNullOrEmpty(baseUrl)) { SetStatusRaw(Lang.Get(Lang.K.ChainBaseRequired)); return; }
+        if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) || !uri.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase)) { SetStatusRaw(Lang.Get(Lang.K.ChainBaseHttps)); return; }
+        if (string.IsNullOrEmpty(model)) { SetStatusRaw(Lang.Get(Lang.K.ChainModelRequired)); return; }
+        if (string.IsNullOrEmpty(key)) { SetStatusRaw(Lang.Get(Lang.K.ChainKeyRequired)); return; }
         try
         {
             HamNegar.Native.Chain.ChainEngine.UpsertCustomProvider(new CustomProvider { Id = id, Name = name, BaseUrl = baseUrl, Key = key, Model = model });
             CustomIdBox.Text = CustomNameBox.Text = CustomBaseBox.Text = CustomModelBox.Text = string.Empty;
             try { CustomKeyBox.Password = string.Empty; } catch { }
             RefreshPolishChain();
-            SetStatusRaw(Lang.IsFa ? "ارائه‌دهنده افزوده شد." : "Provider added.");
+            SetStatusRaw(Lang.Get(Lang.K.ChainProviderAdded));
         }
         catch (Exception ex) { var m = ex.Message ?? ex.GetType().Name; if (m.Length > 220) m = m[..220]; SetStatusRaw(m); }
     }
@@ -349,7 +347,7 @@ public partial class SettingsWindow : Window
         var id = (sender as Button)?.Tag as string ?? string.Empty;
         if (string.IsNullOrEmpty(id)) return;
         var cid = id.StartsWith("custom/", StringComparison.OrdinalIgnoreCase) ? id.Substring("custom/".Length) : id;
-        try { HamNegar.Native.Chain.ChainEngine.RemoveCustomProvider(cid); RefreshPolishChain(); SetStatusRaw(Lang.IsFa ? "حذف شد." : "Removed."); } catch { }
+        try { HamNegar.Native.Chain.ChainEngine.RemoveCustomProvider(cid); RefreshPolishChain(); SetStatusRaw(Lang.Get(Lang.K.ChainRemoved)); } catch { }
     }
 
     // ---- click-to-record hotkey capture ----

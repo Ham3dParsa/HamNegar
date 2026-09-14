@@ -267,6 +267,11 @@ public static class ChainEngine
                     Report(progress, engine, false);
                     await Task.Delay(600, ct).ConfigureAwait(false);
                 }
+                catch (ChainException e) when (e.Status is 401 or 403 or 404)
+                {
+                    last = e;
+                    Report(progress, engine, false);
+                }
                 catch (Exception e)
                 {
                     last = e;

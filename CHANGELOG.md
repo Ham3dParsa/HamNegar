@@ -2,6 +2,10 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.48] - 2026-09-14
+### Added
+- **ویرایشگر زنجیره STT/پالیش دسکتاپ:** پنجره تنظیمات ویرایشگر زنجیره رونویسی (ترتیب ▲/▼ + تیک فعال/غیرفعال، `sttChain`) و زنجیره پرداخت (`polishChain`) با ارائه‌دهنده سفارشی OpenAI-compatible (فقط https، `customProviders`)؛ ترتیب و تیک‌ها در `pill.settings.json` می‌مانند و `ChainEngine` همان fallback (401/403/404/429 → موتور بعدی) را روی ترتیب ذخیره‌شده راه می‌برد؛ همه رشته‌های ویرایشگر در `Lang.cs` (FA/EN زنده). شواهد: `docs/evidence/167/*`.
+
 ## [0.6.47] - 2026-09-13
 ### Fixed
 - **UI کهنه ( ‎#61 E7/R7/E8):** پرچم `dataset.failed` با هر رندر تازه/فیلتر پاک می‌شود (نه فقط fetch موفق) و retry روی pid تازه گیت است؛ مسیر 429 هم `Quota.render`/`Dashboard.renderOverall`/`refreshQuotaStrip` (app.js) و `refreshQuotaDot` (pill.js) را صدا می‌زند؛ بنر `file://` با shiv inline غیرماژول + CSS پیش‌فرض `display:block` حتی با بلاک ماژول دیده می‌شود و با لود موفق app دوباره مخفی می‌شود.
