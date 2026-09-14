@@ -1,5 +1,4 @@
-﻿using System.Collections.ObjectModel;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -425,4 +424,3 @@ public partial class SettingsWindow : Window
 
     private void CancelButton_Click(object sender, RoutedEventArgs e) { Disarm(restore: true); DialogResult = false; Close(); }
 }
-
