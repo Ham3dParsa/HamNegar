@@ -6,7 +6,6 @@
 # --- Type labels (from PR title prefix) ---
 "type/feat":
   - "title: /^feat(\(.*\))?: /"
-  - "path: **/js/modules/version.js"
 
 "type/fix":
   - "title: /^fix(\(.*\))?: /"
