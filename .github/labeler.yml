@@ -36,7 +36,7 @@
 # --- Priority labels (for type/fix PRs only) ---
 # critical: security/data loss/broken auth/fallback chain
 "priority/critical":
-  - 'title: /^fix.*(auth|security|secret|breach|cors|leak|exploit|bypass|inject|data\.loss)/'
+  - 'title: /^fix.*(auth|security|secret|breach|cors|leak|exploit|bypass|inject|data[ ._-]?loss)/'
 
 # high: bug affecting core transcription/recording/audio/realtime flow
 "priority/high":
@@ -110,8 +110,8 @@
   - 'path: **/desktop/**'
 
 "area/ci":
-  - 'path: **/.github/workflows/'
-  - 'path: **/.opencode/'
+  - 'path: **/.github/workflows/**'
+  - 'path: **/.opencode/**'
 
 "area/docs":
   - 'path: **/docs/'
