@@ -1,46 +1,50 @@
 # Labeler configuration for HamNegar
 # Maps PR title patterns and file paths to type/, area/, priority/ labels.
 # See AGENTS.md §1 for module seams and the labeling audit proposal.
-# Syntax: actions/labeler v5 — uses 'title:' and 'path:' qualifiers.
-# enable-versioned-regex: true allows /pattern/ regex syntax.
+# Syntax: actions/labeler v4 — uses 'title:' and 'path:' qualifiers.
 
 # --- Type labels (from PR title prefix) ---
 "type/feat":
-  - "title: /^feat(\\(.*\\))?: /"
+  - "title: /^feat(\(.*\))?: /"
+  - "path: **/js/modules/version.js"
 
 "type/fix":
-  - "title: /^fix(\\(.*\\))?: /"
+  - "title: /^fix(\(.*\))?: /"
 
 "type/refactor":
-  - "title: /^refactor(\\(.*\\))?: /"
+  - "title: /^refactor(\(.*\))?: /"
 
 "type/style":
-  - "title: /^style(\\(.*\\))?: /"
+  - "title: /^style(\(.*\))?: /"
 
 "type/perf":
-  - "title: /^perf(\\(.*\\))?: /"
+  - "title: /^perf(\(.*\))?: /"
 
 "type/chore":
-  - "title: /^chore(\\(.*\\))?: /"
+  - "title: /^chore(\(.*\))?: /"
+  - "path: **/temp/"
 
 "type/docs":
-  - "title: /^docs(\\(.*\\))?: /"
+  - "title: /^docs(\(.*\))?: /"
+  - "path: **/docs/"
+  - "path: **/tickets/"
+  - "path: **/CHANGELOG.md"
 
 "type/test":
-  - "title: /^test(\\(.*\\))?: /"
+  - "title: /^test(\(.*\))?: /"
 
 # --- Priority labels (for type/fix PRs only) ---
 # critical: security/data loss/broken auth/fallback chain
 "priority/critical":
-  - "title: /^fix.*(auth|security|secret|key|breach|cors|leak|exploit|bypass|inject|data.loss)/"
+  - "title: /^fix.*(auth|security|secret|breach|cors|leak|exploit|bypass|inject|data\.loss)/"
 
 # high: bug affecting core transcription/recording/audio/realtime flow
 "priority/high":
-  - "title: /^fix.*(transcript|transcription|recording|audio|realtime|stream|mic|rec|wave|mute|pipeline|buffer|chunk|engine|stt|polish|fallback)/"
+  - "title: /^fix.*(transcript|transcription|recording|audio|realtime|stream|mic|pipeline|buffer|chunk|engine|stt|polish|fallback|quota)/"
 
-# medium: minor UI bug, settings, stagebar, non-core functionality
+# medium: minor UI bug, settings, stagebar, mobile, ci, non-core functionality
 "priority/medium":
-  - "title: /^fix.*(settings|stagebar|button|icon|css|class|color|font|size|margin|padding|scroll|layout|modal|drawer|sheet|panel|tab|nav|menu|tooltip|hover|focus|align|position|z.index)/"
+  - "title: /^fix.*(settings|stagebar|button|icon|css|class|color|font|size|margin|padding|scroll|layout|modal|drawer|sheet|panel|tab|nav|menu|tooltip|hover|focus|align|position|z-index|ui|ci|mobile)/"
 
 # low: cosmetic, minor layout, docs, minor
 "priority/low":
@@ -56,7 +60,6 @@
 "area/transcription":
   - "path: **/js/modules/transcription.js"
   - "path: **/js/modules/provider.js"
-  - "path: **/js/modules/chains.js"
 
 "area/audio":
   - "path: **/js/modules/audio.js"
@@ -106,13 +109,6 @@
 "area/desktop":
   - "path: **/desktop/**"
 
-"area/repo":
-  - "path: **/js/modules/version.js"
-  - "path: **/CHANGELOG.md"
-  - "path: **/VERSION"
-  - "path: **/.gitignore"
-  - "path: **/.github/PULL_REQUEST_TEMPLATE.md"
-
 "area/ci":
   - "path: **/.github/workflows/"
   - "path: **/.opencode/"
@@ -121,12 +117,9 @@
   - "path: **/docs/"
   - "path: **/tickets/"
 
-# --- Chore defaults ---
-"type/chore":
-  - "path: **/temp/"
-
-# --- Docs defaults ---
-"type/docs":
-  - "path: **/docs/"
-  - "path: **/tickets/"
+"area/repo":
+  - "path: **/js/modules/version.js"
   - "path: **/CHANGELOG.md"
+  - "path: **/VERSION"
+  - "path: **/.gitignore"
+  - "path: **/.github/PULL_REQUEST_TEMPLATE.md"
