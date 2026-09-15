@@ -1,0 +1,132 @@
+# Labeler configuration for HamNegar
+# Maps PR title patterns and file paths to type/, area/, priority/ labels.
+# See AGENTS.md §1 for module seams and the labeling audit proposal.
+# Syntax: actions/labeler v5 — uses 'title:' and 'path:' qualifiers.
+# enable-versioned-regex: true allows /pattern/ regex syntax.
+
+# --- Type labels (from PR title prefix) ---
+"type/feat":
+  - "title: /^feat(\\(.*\\))?: /"
+
+"type/fix":
+  - "title: /^fix(\\(.*\\))?: /"
+
+"type/refactor":
+  - "title: /^refactor(\\(.*\\))?: /"
+
+"type/style":
+  - "title: /^style(\\(.*\\))?: /"
+
+"type/perf":
+  - "title: /^perf(\\(.*\\))?: /"
+
+"type/chore":
+  - "title: /^chore(\\(.*\\))?: /"
+
+"type/docs":
+  - "title: /^docs(\\(.*\\))?: /"
+
+"type/test":
+  - "title: /^test(\\(.*\\))?: /"
+
+# --- Priority labels (for type/fix PRs only) ---
+# critical: security/data loss/broken auth/fallback chain
+"priority/critical":
+  - "title: /^fix.*(auth|security|secret|key|breach|cors|leak|exploit|bypass|inject|data.loss)/"
+
+# high: bug affecting core transcription/recording/audio/realtime flow
+"priority/high":
+  - "title: /^fix.*(transcript|transcription|recording|audio|realtime|stream|mic|rec|wave|mute|pipeline|buffer|chunk|engine|stt|polish|fallback)/"
+
+# medium: minor UI bug, settings, stagebar, non-core functionality
+"priority/medium":
+  - "title: /^fix.*(settings|stagebar|button|icon|css|class|color|font|size|margin|padding|scroll|layout|modal|drawer|sheet|panel|tab|nav|menu|tooltip|hover|focus|align|position|z.index)/"
+
+# low: cosmetic, minor layout, docs, minor
+"priority/low":
+  - "title: /^fix.*(whitespace|indent|comment|doc|readme|typo|format|lint|spell|grammar|minor|trivial|cosmetic)/"
+
+# --- Area labels (from file paths changed) ---
+"area/storage":
+  - "path: **/js/modules/storage.js"
+  - "path: **/js/modules/stats.js"
+  - "path: **/js/modules/stats.test.mjs"
+  - "path: **/.env.example"
+
+"area/transcription":
+  - "path: **/js/modules/transcription.js"
+  - "path: **/js/modules/provider.js"
+  - "path: **/js/modules/chains.js"
+
+"area/audio":
+  - "path: **/js/modules/audio.js"
+
+"area/realtime":
+  - "path: **/js/modules/realtime.js"
+
+"area/quota":
+  - "path: **/js/modules/quota.js"
+  - "path: **/js/modules/quota-badge.js"
+
+"area/logger":
+  - "path: **/js/modules/logger.js"
+
+"area/wave":
+  - "path: **/js/modules/wave.js"
+  - "path: **/js/modules/waveTab.js"
+
+"area/stagebar":
+  - "path: **/js/modules/stagebar.js"
+
+"area/settings":
+  - "path: **/js/modules/settingsModal.js"
+
+"area/shell":
+  - "path: **/js/modules/shell.js"
+
+"area/chains":
+  - "path: **/js/modules/chains.js"
+
+"area/pill":
+  - "path: **/js/modules/pill.js"
+
+"area/guide":
+  - "path: **/js/modules/guide.js"
+
+"area/ui":
+  - "path: **/css/app.css"
+  - "path: **/pill.css"
+  - "path: **/index.html"
+  - "path: **/pill.html"
+  - "path: **/js/app.js"
+  - "path: **/js/modules/dom.js"
+  - "path: **/js/modules/format.js"
+  - "path: **/js/modules/dashboard.js"
+
+"area/desktop":
+  - "path: **/desktop/**"
+
+"area/repo":
+  - "path: **/js/modules/version.js"
+  - "path: **/CHANGELOG.md"
+  - "path: **/VERSION"
+  - "path: **/.gitignore"
+  - "path: **/.github/PULL_REQUEST_TEMPLATE.md"
+
+"area/ci":
+  - "path: **/.github/workflows/"
+  - "path: **/.opencode/"
+
+"area/docs":
+  - "path: **/docs/"
+  - "path: **/tickets/"
+
+# --- Chore defaults ---
+"type/chore":
+  - "path: **/temp/"
+
+# --- Docs defaults ---
+"type/docs":
+  - "path: **/docs/"
+  - "path: **/tickets/"
+  - "path: **/CHANGELOG.md"
