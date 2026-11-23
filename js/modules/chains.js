@@ -17,8 +17,8 @@ import { $ } from './dom.js';
 const IC_GRIP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
 const IC_UP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>';
 const IC_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
-const IC_DOTS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18.5" r="1.6"/></svg>';
 const IC_TOP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 14l5-5 5 5"/></svg>';
+const IC_BOTTOM = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 20h14"/><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/></svg>';
 const IC_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/></svg>';
 const IC_PLUS = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const IC_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
@@ -165,23 +165,13 @@ function showUndoToast(label, ms = 8000){
   undoTimer = setTimeout(()=>{ lastDeleted = null; hideUndoToast(); }, ms);
 }
 
-let chainMenuDocBound = false; // one delegated closer for all ⋮ row menus (bound lazily)
-function closeChainMenus(except, refocus){
-  document.querySelectorAll('.chain-menu-wrap.open').forEach(w=>{
-    if(w === except) return;
-    w.classList.remove('open');
-    w.querySelector('.chain-menu')?.setAttribute('hidden','');
-    w.querySelector('.chain-menubtn')?.setAttribute('aria-expanded','false');
-  });
-  if(refocus?.focus) refocus.focus();
-}
 function attachPointerDrag(handle, item, container, fromIdx, type){
   if(!handle || !item || !container) return;
   handle.addEventListener('pointerdown', (downEvt)=>{
     if(downEvt.pointerType === 'mouse' && downEvt.button !== 0) return;
     downEvt.preventDefault();
     downEvt.stopPropagation();
-    closeChainMenus();
+    const scrollHost = container.closest('.settings-panel') || container;
     const rows = [...container.querySelectorAll('.chain-item')];
     if(rows.length < 2) return;
     const rects = rows.map(r => r.getBoundingClientRect());
@@ -192,7 +182,7 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
       : (fromIdx > 0 ? Math.max(44, startRect.top - rects[fromIdx - 1].top) : startRect.height + 6);
     const mids = rects.map(r => r.top + r.height / 2);
     const startY = downEvt.clientY;
-    const startScroll = container.scrollTop;
+    const startScroll = scrollHost.scrollTop;
     const pointerId = downEvt.pointerId;
     let targetIdx = fromIdx;
     let lastClientY = downEvt.clientY;
@@ -205,7 +195,7 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
     rows.forEach((r, i) => { if(i !== fromIdx) r.classList.add('is-shifting'); });
 
     const updatePositions = () => {
-      const scrollDelta = container.scrollTop - startScroll;
+      const scrollDelta = scrollHost.scrollTop - startScroll;
       const dy = (lastClientY - startY) + scrollDelta;
       item.style.transform = `translate3d(0, ${dy}px, 0)`;
       const dragMid = startRect.top + startRect.height / 2 + dy;
@@ -230,15 +220,15 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
     const tickAutoScroll = () => {
       autoScrollRaf = 0;
       if(!active) return;
-      const box = container.getBoundingClientRect();
-      const edge = 34;
+      const box = scrollHost.getBoundingClientRect();
+      const edge = 38;
       let delta = 0;
       if(lastClientY < box.top + edge) delta = -Math.ceil((box.top + edge - lastClientY) / 4);
       else if(lastClientY > box.bottom - edge) delta = Math.ceil((lastClientY - (box.bottom - edge)) / 4);
       if(delta !== 0){
-        const before = container.scrollTop;
-        container.scrollTop += delta;
-        if(container.scrollTop !== before) updatePositions();
+        const before = scrollHost.scrollTop;
+        scrollHost.scrollTop += delta;
+        if(scrollHost.scrollTop !== before) updatePositions();
         autoScrollRaf = requestAnimationFrame(tickAutoScroll);
       }
     };
@@ -247,8 +237,8 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
       if(!active || (e.pointerId !== undefined && e.pointerId !== pointerId)) return;
       lastClientY = e.clientY;
       updatePositions();
-      const box = container.getBoundingClientRect();
-      if((lastClientY < box.top + 34 || lastClientY > box.bottom - 34) && !autoScrollRaf){
+      const box = scrollHost.getBoundingClientRect();
+      if((lastClientY < box.top + 38 || lastClientY > box.bottom - 38) && !autoScrollRaf){
         autoScrollRaf = requestAnimationFrame(tickAutoScroll);
       }
     };
@@ -299,7 +289,8 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
 
 function renderChain(container, chain, type){
   if(!container) return;
-  const prevScroll = container.scrollTop;
+  const scrollHost = container.closest('.settings-panel') || container;
+  const prevScroll = scrollHost.scrollTop;
   container.innerHTML='';
   const polishOff = type==='polish' && !els.togglePolish?.checked;
   const frag = document.createDocumentFragment();
@@ -335,7 +326,7 @@ function renderChain(container, chain, type){
     }
 
     const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
-    const menuLabel = `گزینه‌های مدل ${meta.label}: اولویت ۱، حذف`;
+    const subHtml = meta.sub ? `<span class="chain-sub">${esc(meta.sub)}</span>` : '';
     item.title = 'دستگیره را بکش یا از دکمه‌های بالا و پایین استفاده کن — Ctrl+↑/↓';
     item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
     item.innerHTML = `
@@ -351,20 +342,14 @@ function renderChain(container, chain, type){
           <span class="chain-track" aria-hidden="true"></span>
         </label>
       </div>
-      <div class="chain-row-bottom">
-        <span class="chain-sub">${esc(meta.sub || 'مدل سفارشی')}</span>
-        <div class="chain-controls">
-          <div class="chain-step-btns">
-            <button type="button" class="chain-step-btn" data-step-up aria-label="انتقال ${esc(meta.label)} به بالا" title="یک پله بالاتر" ${idx===0?'disabled':''}>${IC_UP}</button>
-            <button type="button" class="chain-step-btn" data-step-down aria-label="انتقال ${esc(meta.label)} به پایین" title="یک پله پایین‌تر" ${idx===chain.length-1?'disabled':''}>${IC_DOWN}</button>
-          </div>
-          <div class="chain-menu-wrap">
-            <button type="button" class="chain-menubtn" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}" title="گزینه‌های بیشتر">${IC_DOTS}</button>
-            <div class="chain-menu ${idx===chain.length-1?'up':''}" role="menu" aria-label="${esc(menuLabel)}" hidden>
-              <button type="button" role="menuitem" data-top aria-label="انتقال ${esc(meta.label)} به اولویت ۱" ${idx===0?'disabled':''}>${IC_TOP}<span>انتقال به اولویت ۱</span></button>
-              <button type="button" role="menuitem" class="danger" data-remove aria-label="حذف مدل ${esc(meta.label)}">${IC_TRASH}<span>حذف از زنجیره</span></button>
-            </div>
-          </div>
+      <div class="chain-row-bottom${meta.sub ? '' : ' no-sub'}">
+        ${subHtml}
+        <div class="chain-controls" role="group" aria-label="کنترل‌های ترتیب و حذف ${esc(meta.label)}">
+          <button type="button" class="chain-step-btn" data-top aria-label="انتقال ${esc(meta.label)} به اولویت ۱" title="انتقال به اولویت ۱ (ابتدا)" ${idx===0?'disabled':''}>${IC_TOP}</button>
+          <button type="button" class="chain-step-btn" data-step-up aria-label="انتقال ${esc(meta.label)} به بالا" title="یک پله بالاتر" ${idx===0?'disabled':''}>${IC_UP}</button>
+          <button type="button" class="chain-step-btn" data-step-down aria-label="انتقال ${esc(meta.label)} به پایین" title="یک پله پایین‌تر" ${idx===chain.length-1?'disabled':''}>${IC_DOWN}</button>
+          <button type="button" class="chain-step-btn" data-bottom aria-label="انتقال ${esc(meta.label)} به انتهای زنجیره" title="انتقال به انتها" ${idx===chain.length-1?'disabled':''}>${IC_BOTTOM}</button>
+          <button type="button" class="chain-step-btn chain-del-btn" data-remove aria-label="حذف مدل ${esc(meta.label)}" title="حذف از زنجیره">${IC_TRASH}</button>
         </div>
       </div>
     `;
@@ -381,7 +366,8 @@ function renderChain(container, chain, type){
       announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
       focusChainRow(type, idx, '[data-toggle]');
     });
-    item.querySelector('[data-remove]')?.addEventListener('click', ()=>{
+    item.querySelector('[data-remove]')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
       const arr = type==='stt'? sttChainState : polishChainState;
       const [removed] = arr.splice(idx,1);
       lastDeleted = { entry: removed, index: idx, type };
@@ -391,46 +377,7 @@ function renderChain(container, chain, type){
       showUndoToast(meta.label);
       focusChainRow(type, idx);
     });
-    // ⋮ menu open/close (single open at a time; Esc closes and refocuses the trigger)
-    const wrap = item.querySelector('.chain-menu-wrap');
-    const menuBtn = item.querySelector('.chain-menubtn');
-    const menu = item.querySelector('.chain-menu');
-    menuBtn?.addEventListener('click', (e)=>{
-      e.stopPropagation();
-      const willOpen = !!menu?.hasAttribute('hidden');
-      closeChainMenus();
-      if(willOpen && menu){
-        menu.removeAttribute('hidden');
-        wrap?.classList.add('open');
-        menuBtn.setAttribute('aria-expanded','true');
-        menu.querySelector('button:not([disabled])')?.focus?.();
-      }
-    });
-    menu?.addEventListener('keydown', (e)=>{
-      const items = [...menu.querySelectorAll('button:not([disabled])')];
-      const at = items.indexOf(document.activeElement);
-      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeChainMenus(null, menuBtn); }
-      else if(e.key === 'ArrowDown'){ e.preventDefault(); (items[at + 1] || items[0])?.focus?.(); }
-      else if(e.key === 'ArrowUp'){ e.preventDefault(); (items[at - 1] || items[items.length - 1])?.focus?.(); }
-      else if(e.key === 'Home'){ e.preventDefault(); items[0]?.focus?.(); }
-      else if(e.key === 'End'){ e.preventDefault(); items[items.length - 1]?.focus?.(); }
-    });
-    if(!chainMenuDocBound){
-      chainMenuDocBound = true;
-      document.addEventListener('click', (e)=>{
-        if(!e.target?.closest?.('.chain-menu-wrap')) closeChainMenus();
-      });
-      document.addEventListener('keydown', (e)=>{
-        if(e.key === 'Escape' && !e.defaultPrevented){
-          if (shortcutsOpen()) return;
-          const open = document.querySelector('.chain-menu-wrap.open .chain-menubtn');
-          if(!open) return;
-          e.preventDefault(); e.stopPropagation();
-          closeChainMenus(null, open);
-        }
-      });
-    }
-    // inline stepper ▲ / ▼ + jump-to-top ⤒
+    // direct controls: ⤒ top, ▲ up, ▼ down, ⤓ bottom
     item.querySelector('[data-step-up]')?.addEventListener('click', (e)=>{
       e.stopPropagation();
       moveChain(type, idx, -1, '[data-step-up]');
@@ -439,7 +386,14 @@ function renderChain(container, chain, type){
       e.stopPropagation();
       moveChain(type, idx, 1, '[data-step-down]');
     });
-    item.querySelector('[data-top]')?.addEventListener('click', ()=> moveChainToTop(type, idx));
+    item.querySelector('[data-top]')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      moveChainToTop(type, idx);
+    });
+    item.querySelector('[data-bottom]')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      moveChainToBottom(type, idx);
+    });
     // keyboard reorder: Ctrl+ArrowUp/Down on focused row
     item.addEventListener('keydown', (e)=>{
       if(e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
@@ -450,7 +404,7 @@ function renderChain(container, chain, type){
     frag.appendChild(item);
   });
   container.appendChild(frag);
-  container.scrollTop = prevScroll;
+  scrollHost.scrollTop = prevScroll;
 }
 
 function moveChain(type, idx, dir, focusSel){
@@ -474,7 +428,19 @@ function moveChainToTop(type, idx){
   scheduleChainsPersist();
   renderAllChains();
   announce(`«${labelOf(moved, type)}» به اولویت ۱ منتقل شد`);
-  focusChainRow(type, 0);
+  focusChainRow(type, 0, '[data-step-down]');
+}
+
+function moveChainToBottom(type, idx){
+  const arr = type==='stt'? sttChainState : polishChainState;
+  if(idx<0 || idx>=arr.length-1) return;
+  const [moved] = arr.splice(idx, 1);
+  arr.push(moved);
+  try { navigator.vibrate?.(8); } catch {}
+  scheduleChainsPersist();
+  renderAllChains();
+  announce(`«${labelOf(moved, type)}» به انتهای زنجیره منتقل شد`);
+  focusChainRow(type, arr.length - 1, '[data-step-up]');
 }
 
 export function renderAllChains(){
@@ -749,7 +715,7 @@ function renderFlowList(){
     if (disabled || !hasKey) {
       const note = document.createElement('span');
       note.className = 'mstatus';
-      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در تب «کلیدها»';
+      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در بخش «کلیدها»';
       main.appendChild(note);
     }
     const btn = document.createElement('button');
@@ -1107,7 +1073,7 @@ function renderChainPanel(target){
     if (!inTarget && (disabled || !hasKey)) {
       const note = document.createElement('span');
       note.className = 'mstatus';
-      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در تب «کلیدها»';
+      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در بخش «کلیدها»';
       main.appendChild(note);
     }
     const btn = document.createElement('button');

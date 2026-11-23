@@ -28,6 +28,15 @@ app.use('/docs', express.static(path.join(__dirname, 'docs')));
 const geminiRouter = express.Router();
 geminiRouter.use(express.json({ limit: '35mb' }));
 
+function sendApiError(res, err, forcedStatus) {
+  const logicalStatus = forcedStatus || extractHttpStatus(err);
+  const message = typeof err === 'string' ? err : safeErrorMessage(err, logicalStatus);
+  const wireStatus = (logicalStatus === 502 || logicalStatus === 503 || logicalStatus === 504)
+    ? (logicalStatus === 503 && isGeminiConfigured() ? 429 : 500)
+    : logicalStatus;
+  res.status(wireStatus).json({ error: { message, status: logicalStatus } });
+}
+
 geminiRouter.get('/status', (_req, res) => {
   res.json({
     configured: isGeminiConfigured(),
@@ -40,8 +49,7 @@ geminiRouter.get('/models', async (_req, res) => {
     const models = await listAvailableModels();
     res.json({ models });
   } catch (err) {
-    const status = extractHttpStatus(err);
-    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+    sendApiError(res, err);
   }
 });
 
@@ -50,8 +58,7 @@ geminiRouter.post('/test', async (req, res) => {
     const result = await testConnection({ model: req.body?.model });
     res.json(result);
   } catch (err) {
-    const status = extractHttpStatus(err);
-    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+    sendApiError(res, err);
   }
 });
 
@@ -61,19 +68,17 @@ geminiRouter.post('/transcribe', async (req, res) => {
     const result = await transcribeAudio({ model, mimeType, data });
     res.json(result);
   } catch (err) {
-    const status = extractHttpStatus(err);
-    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+    sendApiError(res, err);
   }
 });
 
 geminiRouter.post('/text', async (req, res) => {
   try {
-    const { model, text, system, maxOutputTokens } = req.body || {};
-    const result = await generateText({ model, text, system, maxOutputTokens });
+    const { model, text, system, maxOutputTokens, temperature } = req.body || {};
+    const result = await generateText({ model, text, system, maxOutputTokens, temperature });
     res.json(result);
   } catch (err) {
-    const status = extractHttpStatus(err);
-    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+    sendApiError(res, err);
   }
 });
 
@@ -81,10 +86,13 @@ geminiRouter.use((err, _req, res, next) => {
   if (!err) return next();
   const status = err.type === 'entity.too.large' ? 413 : extractHttpStatus(err);
   const message = status === 413 ? 'حجم درخواست بیشتر از حد مجاز است' : safeErrorMessage(err, status);
-  res.status(status).json({ error: { message, status } });
+  sendApiError(res, message, status);
 });
 
 app.use('/api/gemini', geminiRouter);
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: { message: 'مسیر API پیدا نشد', status: 404 } });
+});
 
 const rootFiles = new Set([
   '/index.html',

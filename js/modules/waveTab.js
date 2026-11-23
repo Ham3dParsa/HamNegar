@@ -110,6 +110,7 @@ function waveSlider(mount, o){
   //     get:()=>number|null, set:(v:number|null)=>void,
   //     follow?: {globalVal:()=>number}|null, onChange:()=>void}
   mount.classList.add('wslider', o.scope === 'global' ? 'wslider-global' : 'wslider-local');
+  if (o.reuseInput?.id === 'wave-aurora-hue') mount.classList.add('wslider--hue');
   mount.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'wslider-head';
@@ -126,10 +127,7 @@ function waveSlider(mount, o){
   rg.dir = 'ltr';
   rg.setAttribute('aria-label', o.label);
   if (rg.id && (o.scope === 'global')) bb.id = rg.id + '-val'; // keep waveSync txt() targets working
-  const ticks = document.createElement('div');
-  ticks.className = 'wslider-ticks'; ticks.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < 5; i++) ticks.appendChild(document.createElement('i'));
-  track.append(rg, ticks);
+  track.append(rg);
   mount.append(head, track);
   let chip = null;
   if (o.follow) {
@@ -379,14 +377,16 @@ function waveRenderList(){
     waveSeg(segT, WAVE_TYPES, wv.type, WAVE_FA.types, v => { wv.type = v; wavePersist(); waveRenderList(); });
     rType.append(tLab, segT);
     body.appendChild(rType);
-    if (wv.type === 'bars') {
-      const rBar = document.createElement('div');
-      rBar.dataset.hygiene = 'bar-opts';
-      const sLab = document.createElement('div'); sLab.className = 'wave-ctrl-label'; sLab.textContent = 'شکل ستون‌ها';
-      const segS = document.createElement('div'); segS.className = 'wave-seg';
-      waveSeg(segS, ['rounded', 'square', 'needle'], wv.barShape || 'rounded', WAVE_FA.barShapes, v => { wv.barShape = v; wavePersist(); waveRenderList(); });
-      rBar.append(sLab, segS);
-      body.appendChild(rBar);
+    if (wv.type === 'bars' || wv.type === 'capsule-eq') {
+      if (wv.type === 'bars') {
+        const rBar = document.createElement('div');
+        rBar.dataset.hygiene = 'bar-opts';
+        const sLab = document.createElement('div'); sLab.className = 'wave-ctrl-label'; sLab.textContent = 'شکل ستون‌ها';
+        const segS = document.createElement('div'); segS.className = 'wave-seg';
+        waveSeg(segS, ['rounded', 'square', 'needle'], wv.barShape || 'rounded', WAVE_FA.barShapes, v => { wv.barShape = v; wavePersist(); waveRenderList(); });
+        rBar.append(sLab, segS);
+        body.appendChild(rBar);
+      }
       [['barCount', 'تعداد ستون‌ها', 8, 48, 24], ['barGap', 'فاصله ستون‌ها', 0, 8, 2]].forEach(([k, fa, mn, mx, df]) => {
         const mount = document.createElement('div');
         mount.dataset.hygiene = k;
@@ -401,19 +401,22 @@ function waveRenderList(){
     waveSeg(segC, ['solid', 'gradient', 'rainbow'], wv.colorMode, WAVE_FA.colorModes, v => { wv.colorMode = v; dot.style.background = v === 'rainbow' ? 'conic-gradient(red,orange,yellow,green,blue,violet,red)' : wv.c1; wavePersist(); waveRenderList(); });
     rCm.append(cLab, segC);
     body.appendChild(rCm);
-    body.appendChild(buildColorRow('رنگ ۱', wv.c1, (hex, commit) => {
+    body.appendChild(buildColorRow('رنگ اصلی', wv.c1, (hex, commit) => {
       wv.c1 = hex;
       if (wv.colorMode !== 'rainbow') dot.style.background = hex;
       wavePreview();
       if (commit) waveFlushPersist(); else waveSchedulePersist();
     }));
-    [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '1', '٪', 100], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '1', '٪', 70], ...(wv.type === 'bars' ? [] : [['thick', 'ضخامت (مطلق هر موج)', 1, 6, '0.5', '', 2]])].forEach(([k, fa, mn, mx, st, u, df]) => {
+    const localGrid = document.createElement('div');
+    localGrid.className = 'wave-sliders-pair';
+    [['opacity', 'شفافیت', 0, 100, '1', '٪', 100], ['glow', 'درخشش', 0, 100, '1', '٪', 70], ...(wv.type === 'bars' || wv.type === 'capsule-eq' ? [] : [['thick', 'ضخامت خط', 1, 6, '0.5', '', 2]])].forEach(([k, fa, mn, mx, st, u, df]) => {
       const mount = document.createElement('div');
       mount.dataset.hygiene = k;
-      body.appendChild(mount);
+      localGrid.appendChild(mount);
       waveSlider(mount, { label: fa, min: mn, max: mx, step: st, unit: u, def: df, scope: 'local',
         get: () => wv[k], set: v => { wv[k] = v; }, onChange: () => wavePersist() });
     });
+    body.appendChild(localGrid);
     const rPk = document.createElement('div');
     const pLab = document.createElement('div'); pLab.className = 'wave-ctrl-label'; pLab.textContent = 'تراکم قله‌ها';
     const segP = document.createElement('div'); segP.className = 'wave-seg';
@@ -554,7 +557,7 @@ function waveEnsure(){
     wavePersist(); waveRenderList();
   });
   $('wave-reset')?.addEventListener('click', () => {
-    const id = waveCfg.starterId && starterById(waveCfg.starterId) ? waveCfg.starterId : 'classic-fade';
+    const id = waveCfg.starterId && starterById(waveCfg.starterId) ? waveCfg.starterId : 'liquid-silk';
     const fb = defaultWaveConfig();
     const keepWaves = starterById(id).stack();
     keepWaves.forEach((w, i) => { w.name = `موج ${i + 1}`; });
@@ -665,6 +668,10 @@ function bindWaveFlushHooks(){
   try{ $('btn-save-modal')?.addEventListener('click', flush); }catch{}
   try{ $('btn-close-modal')?.addEventListener('click', flush); }catch{}
   try{ els.modal?.addEventListener('click', e=>{ if(e.target===els.modal) flush(); }); }catch{}
+  try{ els.tabAi?.addEventListener('click', flush); }catch{}
+  try{ els.tabKeys?.addEventListener('click', flush); }catch{}
+  try{ els.tabBehavior?.addEventListener('click', flush); }catch{}
+  try{ els.tabTools?.addEventListener('click', flush); }catch{}
   try{ els.tabPipeline?.addEventListener('click', flush); }catch{}
   try{ els.tabWave?.addEventListener('click', flush); }catch{}
   try{ window.addEventListener('pagehide', flush); }catch{}

@@ -1,4 +1,4 @@
-// Settings modal + wiring: 4-tab studio settings (keys | behavior | pipeline | wave),
+// Settings modal + wiring: 4-tab studio settings (ai [keys | pipeline] | behavior | tools | wave),
 // key validation, provider status badges (fixes #pill-google/#pill-gemini mismatch),
 // load/save, focus trap + Esc/Tab handling, smooth open/close transitions.
 import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
@@ -36,6 +36,7 @@ let mainWaveSync = () => {};
 let isWaveMicActive = () => false;
 let onSettingsSync = () => {};
 let onPipelineOpen = () => {};
+let onToolsOpen = () => {};
 let syncCustomProviderSelects = () => {};
 
 let geminiPersonalOpen = false;
@@ -246,6 +247,7 @@ function loadSettings() {
   els.toggleRealtime.checked = s.realtime;
   els.toggleVad.checked = s.vad;
   els.toggleAutocopy.checked = s.autocopy;
+  syncTonePrefUI(s.tonePref);
   renderCustomProviders();
   flowInit();
   renderAllChains();
@@ -262,6 +264,20 @@ function loadSettings() {
   try { onSettingsSync(); } catch {}
 }
 
+function getSelectedTonePref() {
+  const active = document.querySelector('#tone-pref-group [data-tone].active');
+  return active?.dataset?.tone === 'formal' ? 'formal' : 'preserve';
+}
+
+function syncTonePrefUI(val) {
+  const tone = val === 'formal' ? 'formal' : 'preserve';
+  document.querySelectorAll('#tone-pref-group [data-tone]').forEach((btn) => {
+    const on = btn.dataset.tone === tone;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
 function saveSettings() {
   try {
     Storage.saveSettings({
@@ -273,6 +289,7 @@ function saveSettings() {
       realtime: els.toggleRealtime.checked,
       vad: els.toggleVad.checked,
       autocopy: els.toggleAutocopy.checked,
+      tonePref: getSelectedTonePref(),
       sttChain: getSttChain(),
       polishChain: getPolishChain(),
       polishEnabled: els.togglePolish?.checked ?? true,
@@ -295,23 +312,55 @@ function saveSettings() {
   try { onSettingsSync(); } catch {}
 }
 
-// --- 4-tab settings navigation (keys | behavior | pipeline | wave) ---
-const TAB_KEYS = ['keys', 'behavior', 'pipeline', 'wave'];
-let activeTab = 'keys';
+// --- 4-tab settings navigation (ai [keys | pipeline] | behavior | tools | wave) ---
+const TAB_KEYS = ['ai', 'behavior', 'tools', 'wave'];
+const AI_SUBTABS = ['keys', 'pipeline'];
+let activeTab = 'ai';
+let activeAiSubtab = 'keys';
+
+function switchAiSubtab(sub) {
+  const target = AI_SUBTABS.includes(sub) ? sub : 'keys';
+  activeAiSubtab = target;
+  const subTabs = {
+    keys: els.tabKeys,
+    pipeline: els.tabPipeline,
+  };
+  const subPanels = {
+    keys: els.panelKeys,
+    pipeline: els.panelPipeline,
+  };
+  for (const k of AI_SUBTABS) {
+    const on = k === target;
+    subTabs[k]?.classList.toggle('active', on);
+    subTabs[k]?.setAttribute('aria-selected', on ? 'true' : 'false');
+    if (subTabs[k]) subTabs[k].tabIndex = on ? 0 : -1;
+    if (subPanels[k]) subPanels[k].hidden = !on;
+  }
+  if (target === 'pipeline') {
+    try { syncCustomProviderSelects(); } catch {}
+    try { onPipelineOpen(); } catch {}
+  }
+}
 
 function switchTab(name) {
-  const target = TAB_KEYS.includes(name) ? name : 'keys';
+  let target = name;
+  if (name === 'keys' || name === 'pipeline') {
+    activeAiSubtab = name;
+    target = 'ai';
+  } else if (!TAB_KEYS.includes(target)) {
+    target = 'ai';
+  }
   activeTab = target;
   const tabs = {
-    keys: els.tabKeys,
+    ai: els.tabAi,
     behavior: els.tabBehavior,
-    pipeline: els.tabPipeline,
+    tools: els.tabTools,
     wave: els.tabWave,
   };
   const panels = {
-    keys: els.panelKeys,
+    ai: els.panelAi,
     behavior: els.panelBehavior,
-    pipeline: els.panelPipeline,
+    tools: els.panelTools,
     wave: els.panelWave,
   };
   for (const k of TAB_KEYS) {
@@ -321,9 +370,11 @@ function switchTab(name) {
     if (tabs[k]) tabs[k].tabIndex = on ? 0 : -1;
     if (panels[k]) panels[k].hidden = !on;
   }
-  if (target === 'pipeline') {
-    try { syncCustomProviderSelects(); } catch {}
-    try { onPipelineOpen(); } catch {}
+  if (target === 'ai') {
+    switchAiSubtab(activeAiSubtab);
+  }
+  if (target === 'tools') {
+    try { onToolsOpen(); } catch {}
   }
   if (target === 'wave') {
     waveEnsure();
@@ -352,7 +403,8 @@ function isModalOpen() {
 
 function openModal(initialTab) {
   lastModalFocus = document.activeElement;
-  const chosenTab = initialTab && TAB_KEYS.includes(initialTab)
+  const known = [...TAB_KEYS, ...AI_SUBTABS];
+  const chosenTab = initialTab && known.includes(initialTab)
     ? initialTab
     : (!hasAnyConfiguredKey() ? 'keys' : activeTab);
   switchTab(chosenTab);
@@ -414,6 +466,7 @@ export function mountSettingsModal(deps) {
   isWaveMicActive = deps.isWaveMicActive || isWaveMicActive;
   onSettingsSync = deps.onSettingsSync || onSettingsSync;
   onPipelineOpen = deps.onPipelineOpen || onPipelineOpen;
+  onToolsOpen = deps.onToolsOpen || onToolsOpen;
   syncCustomProviderSelects = deps.syncCustomProviderSelects || syncCustomProviderSelects;
 
   if (els.keyGroq) els.keyGroq.addEventListener('input', validate);
@@ -491,10 +544,22 @@ export function mountSettingsModal(deps) {
     });
   }
 
+  els.tabAi?.addEventListener('click', () => switchTab('ai'));
   els.tabKeys?.addEventListener('click', () => switchTab('keys'));
   els.tabBehavior?.addEventListener('click', () => switchTab('behavior'));
+  els.tabTools?.addEventListener('click', () => switchTab('tools'));
   els.tabPipeline?.addEventListener('click', () => switchTab('pipeline'));
   els.tabWave?.addEventListener('click', () => switchTab('wave'));
+
+  document.querySelectorAll('#tone-pref-group [data-tone]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tone = btn.dataset.tone === 'formal' ? 'formal' : 'preserve';
+      syncTonePrefUI(tone);
+      Storage.saveSettings({ tonePref: tone });
+      try { onSettingsSync(); } catch {}
+      Logger.toast(tone === 'formal' ? 'ترجیح لحن: رسمی و کتابی' : 'ترجیح لحن: حفظ لحن خودمانی گفتار');
+    });
+  });
 
   // Keyboard arrow navigation across settings tabs (RTL aware)
   els.modal.querySelector('.settings-tabs')?.addEventListener('keydown', (e) => {
@@ -509,11 +574,27 @@ export function mountSettingsModal(deps) {
     if (next === null) return;
     e.preventDefault();
     switchTab(TAB_KEYS[next]);
-    const tabMap = { keys: els.tabKeys, behavior: els.tabBehavior, pipeline: els.tabPipeline, wave: els.tabWave };
+    const tabMap = { ai: els.tabAi, behavior: els.tabBehavior, tools: els.tabTools, wave: els.tabWave };
     tabMap[TAB_KEYS[next]]?.focus?.();
   });
 
-  // Jump from "missing key" link inside model explorer directly to Keys tab
+  els.modal.querySelector('.ai-subtabs')?.addEventListener('keydown', (e) => {
+    if (e.target?.getAttribute?.('role') !== 'tab') return;
+    const i = AI_SUBTABS.indexOf(activeAiSubtab);
+    if (i < 0) return;
+    let next = null;
+    if (e.key === 'ArrowLeft') next = (i + 1) % AI_SUBTABS.length;
+    else if (e.key === 'ArrowRight') next = (i - 1 + AI_SUBTABS.length) % AI_SUBTABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = AI_SUBTABS.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    switchTab(AI_SUBTABS[next]);
+    const subMap = { keys: els.tabKeys, pipeline: els.tabPipeline };
+    subMap[AI_SUBTABS[next]]?.focus?.();
+  });
+
+  // Jump from "missing key" link inside model explorer directly to Keys section
   $('m-nokey-link')?.addEventListener('click', () => switchTab('keys'));
 
   els.modal.addEventListener('keydown', (e) => {

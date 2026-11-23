@@ -138,6 +138,69 @@ function normalizePolish(arr){
   return [...new Set(arr.filter(x=>typeof x==='string' && x.trim()!==''))];
 }
 
+export const BUILTIN_TOOLS = [
+  { id: 'stage-simple', builtin: true, kind: 'prompt', label: 'پالایش ساده', sub: 'املا، نیم‌فاصله و علائم', system: '', smart: false, respectTone: true, pinned: true, hidden: false },
+  { id: 'stage-advanced', builtin: true, kind: 'prompt', label: 'پالایش پیشرفته', sub: 'املا، نگارش و دستور کامل', system: '', smart: false, respectTone: true, pinned: false, hidden: false },
+  { id: 'stage-grammar', builtin: true, kind: 'prompt', label: 'پالایش دستوری', sub: 'اصلاح ساختار جمله و فعل', system: '', smart: false, respectTone: true, pinned: false, hidden: false },
+  { id: 'stage-structure', builtin: true, kind: 'prompt', label: 'ساختاردهی متن', sub: 'پاراگراف و لیست بر اساس گفته', system: '', smart: true, respectTone: true, pinned: true, hidden: false },
+  { id: 'stage-tr-quick', builtin: true, kind: 'tr-quick', label: 'ترجمه EN⇄FA', sub: 'تبدیل فوری فارسی و انگلیسی', system: '', smart: false, respectTone: false, pinned: false, hidden: false },
+  { id: 'stage-tr-panel', builtin: true, kind: 'tr-panel', label: 'سایر زبان‌ها', sub: 'آلمانی، عربی، ترکی و…', system: '', smart: false, respectTone: false, pinned: false, hidden: false },
+  { id: 'stage-raw', builtin: true, kind: 'raw', label: 'بازگشت به خام', sub: 'برگرداندن آخرین ویرایش اعمال‌شده', system: '', smart: false, respectTone: false, pinned: false, hidden: false },
+];
+
+function defaultToolsConfig(){
+  return BUILTIN_TOOLS.map(t => ({ ...t }));
+}
+
+function normalizeToolsConfig(raw){
+  const builtinsMap = new Map(BUILTIN_TOOLS.map(t => [t.id, t]));
+  const src = Array.isArray(raw) ? raw : [];
+  const out = [];
+  const seen = new Set();
+  for(const item of src){
+    if(!item || typeof item !== 'object') continue;
+    const id = typeof item.id === 'string' ? item.id.trim().slice(0, 64) : '';
+    if(!id || seen.has(id)) continue;
+    seen.add(id);
+    const base = builtinsMap.get(id);
+    if(base){
+      out.push({
+        id: base.id,
+        builtin: true,
+        kind: base.kind,
+        label: typeof item.label === 'string' && item.label.trim() ? item.label.trim().slice(0, 48) : base.label,
+        sub: typeof item.sub === 'string' ? item.sub.trim().slice(0, 90) : base.sub,
+        system: typeof item.system === 'string' ? item.system.slice(0, 4000) : base.system,
+        smart: typeof item.smart === 'boolean' ? item.smart : base.smart,
+        respectTone: base.kind === 'prompt' ? (typeof item.respectTone === 'boolean' ? item.respectTone : base.respectTone) : false,
+        pinned: !!item.pinned,
+        hidden: !!item.hidden,
+      });
+    } else {
+      const label = typeof item.label === 'string' ? item.label.trim().slice(0, 48) : '';
+      const system = typeof item.system === 'string' ? item.system.trim().slice(0, 4000) : '';
+      if(!label || !system) continue;
+      if(out.filter(x => !x.builtin).length >= 30) continue;
+      out.push({
+        id,
+        builtin: false,
+        kind: 'prompt',
+        label,
+        sub: typeof item.sub === 'string' ? item.sub.trim().slice(0, 90) : '',
+        system,
+        smart: !!item.smart,
+        respectTone: item.respectTone !== false,
+        pinned: !!item.pinned,
+        hidden: !!item.hidden,
+      });
+    }
+  }
+  for(const base of BUILTIN_TOOLS){
+    if(!seen.has(base.id)) out.push({ ...base });
+  }
+  return out;
+}
+
 const KEYS = {
   GROQ: 'KEY_GROQ',
   GROQ_BASE: 'GROQ_BASE_URL',
@@ -152,6 +215,8 @@ const KEYS = {
   STT_CHAIN: 'STT_CHAIN',
   POLISH_CHAIN: 'POLISH_CHAIN',
   POLISH_ENABLED: 'POLISH_ENABLED',
+  TONE_PREF: 'TONE_PREF',
+  TOOLS_CONFIG: 'TOOLS_CONFIG_V1',
   REALTIME: 'REALTIME',
   VAD: 'VAD',
   AUTOCOPY: 'AUTOCOPY',
@@ -294,6 +359,7 @@ function assembleSettings(sttChain, polishChain, customProviders){
     disabledProviders: readIdList(KEYS.DISABLED_PROVIDERS),
     removedProviders: readIdList(KEYS.REMOVED_PROVIDERS),
     polishEnabled: peRaw === null ? true : peRaw === '1',
+    tonePref: localStorage.getItem(KEYS.TONE_PREF) === 'formal' ? 'formal' : 'preserve',
     realtime: localStorage.getItem(KEYS.REALTIME) === '1',
     vad: localStorage.getItem(KEYS.VAD) !== '0',
     autocopy: localStorage.getItem(KEYS.AUTOCOPY) === '1',
@@ -376,7 +442,7 @@ function parsePolishChain(raw, defaults){
 // Wave personalization (ticket/50): stack model v3 under its own key. Never logs colors/keys.
 export const WAVE_KEY = 'hamnegar.wave.v3';
 export const WAVE_IDLE_KEY = 'hamnegar.wave.idle';
-export const WAVE_TYPES = ['sine', 'mirror-sine', 'dash', 'steps', 'ribbon', 'flat-glow-line', 'bars'];
+export const WAVE_TYPES = ['silk', 'droplet', 'pulse-orb', 'capsule-eq', 'bars', 'sine', 'mirror-sine', 'ribbon', 'dash', 'steps', 'flat-glow-line'];
 export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
 export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
 export const WAVE_PROFILES = ['flat', 'center', 'edges', 'bands'];
@@ -458,21 +524,30 @@ function normalizeWaveList(arr) {
 export function defaultWaveConfig() {
   return {
     version: 3,
-    starterId: 'classic-fade',
+    starterId: 'liquid-silk',
     sensitivity: 50,
-    attack: 50,
+    attack: 52,
     speed: 50,
-    intensity: 50,
-    smooth: 50,
-    particles: 12,
+    intensity: 54,
+    smooth: 58,
+    particles: 10,
     aurora: { on: false, hue: 220 },
-    waves: [{
-      id: 'w1', name: 'موج ۱', type: 'sine', colorMode: 'solid',
-      c1: '#8ab4f8', c2: '#c4b5fd', opacity: 100, glow: 70, thick: 2,
-      peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
-      barShape: 'rounded', barCount: 24, barGap: 2,
-      ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
-    }],
+    waves: [
+      {
+        id: 'w1', name: 'موج ۱', type: 'silk', colorMode: 'gradient',
+        c1: '#6ea0ff', c2: '#5eead4', opacity: 96, glow: 72, thick: 2,
+        peaks: 'mid', band: 'rms', profile: 'center', mute: false,
+        barShape: 'rounded', barCount: 24, barGap: 2,
+        ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
+      },
+      {
+        id: 'w2', name: 'موج ۲', type: 'silk', colorMode: 'solid',
+        c1: '#c4b5fd', c2: '#8ab4f8', opacity: 52, glow: 48, thick: 1.5,
+        peaks: 'high', band: 'mid', profile: 'center', mute: false,
+        barShape: 'rounded', barCount: 24, barGap: 2,
+        ov: { speed: 62, intensity: null, attack: null, smooth: null, sensitivity: null },
+      },
+    ],
   };
 }
 function normalizeWaveConfig(raw) {
@@ -556,6 +631,7 @@ export const Storage = {
     if ('disabledProviders' in patch) writeIdList(KEYS.DISABLED_PROVIDERS, patch.disabledProviders);
     if ('removedProviders' in patch) writeIdList(KEYS.REMOVED_PROVIDERS, patch.removedProviders);
     if ('polishEnabled' in patch) localStorage.setItem(KEYS.POLISH_ENABLED, patch.polishEnabled ? '1' : '0');
+    if ('tonePref' in patch) localStorage.setItem(KEYS.TONE_PREF, patch.tonePref === 'formal' ? 'formal' : 'preserve');
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');
     if ('vad' in patch) localStorage.setItem(KEYS.VAD, patch.vad ? '1' : '0');
     if ('autocopy' in patch) localStorage.setItem(KEYS.AUTOCOPY, patch.autocopy ? '1' : '0');
@@ -721,6 +797,25 @@ export const Storage = {
     localStorage.setItem(DICT_KEY, JSON.stringify(norm));
     return norm;
   },
+  getToolsConfig() {
+    try {
+      const raw = localStorage.getItem(KEYS.TOOLS_CONFIG);
+      if (!raw) return defaultToolsConfig();
+      const parsed = JSON.parse(raw);
+      return normalizeToolsConfig(parsed);
+    } catch {
+      return defaultToolsConfig();
+    }
+  },
+  saveToolsConfig(items) {
+    const norm = normalizeToolsConfig(items);
+    localStorage.setItem(KEYS.TOOLS_CONFIG, JSON.stringify(norm));
+    return norm;
+  },
+  resetToolsConfig() {
+    localStorage.removeItem(KEYS.TOOLS_CONFIG);
+    return defaultToolsConfig();
+  },
   getPrefs() {
     const s = Storage.getSettings();
     return {
@@ -729,11 +824,13 @@ export const Storage = {
         sttChain: s.sttChain,
         polishChain: s.polishChain,
         polishEnabled: s.polishEnabled,
+        tonePref: s.tonePref,
         realtime: s.realtime,
         vad: s.vad,
         autocopy: s.autocopy,
         wave: Storage.getWave(),
         dict: Storage.getDict(),
+        tools: Storage.getToolsConfig(),
       },
     };
   },
@@ -758,9 +855,11 @@ export const Storage = {
     for (const k of ['polishEnabled', 'realtime', 'vad', 'autocopy']) {
       if (typeof p[k] === 'boolean') patch[k] = p[k];
     }
+    if (p.tonePref === 'formal' || p.tonePref === 'preserve') patch.tonePref = p.tonePref;
     Storage.saveSettings(patch);
     if (p.wave !== undefined) Storage.saveWave(p.wave);
     if (Array.isArray(p.dict)) Storage.saveDict(p.dict);
+    if (Array.isArray(p.tools)) Storage.saveToolsConfig(p.tools);
     return Storage.getPrefs().prefs;
   },
   getModelCatalog() {

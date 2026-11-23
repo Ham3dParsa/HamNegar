@@ -1,11 +1,8 @@
-// Stagebar: manual polish/translate stages on current text + per-run log groups.
-// Extracted verbatim from js/app.js (ticket 29-stagebar-extract) — logic, order,
-// strings, aria and timers unchanged. Only wrappers added: module imports/exports
-// plus dependency injection (see mountStagebar). Seam: Logger/UI vitrine region.
+// Stagebar: customizable polish/structure/translate/raw tools + favorite quick strip + diff review gate.
 import { Storage } from './storage.js';
 import { hasKeyById } from './provider.js';
 import { Logger } from './logger.js';
-import { Transcription, smartModelScore } from './transcription.js';
+import { Transcription, smartModelScore, applyTonePreference } from './transcription.js';
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
 import { $ } from './dom.js';
@@ -29,32 +26,55 @@ let openDiffRunning = () => {};
 let fillDiffSheet = () => {};
 let closeDiffSheet = () => {};
 let onActionTriggered = () => {};
+let onManageTools = () => {};
 
-// --- stagebar (ticket/16): manual polish/translate stages on current text + per-run log groups ---
-// Behavior adapted from temp/hamnegar-demo runStage/runTranslate (same owner labels, scope,
-// raw stack, language combo); pipelines use the production polish chain + Transcription.translate.
 const STAGE_LANGS = [
   ['🇮🇷 فارسی', 'fa'], ['🇬🇧 English', 'en'], ['🇩🇪 Deutsch', 'de'], ['🇫🇷 Français', 'fr'],
   ['🇪🇸 Español', 'es'], ['🇮🇹 Italiano', 'it'], ['🇹🇷 Türkçe', 'tr'], ['🇸🇦 العربية', 'ar'],
   ['🇷🇺 Русский', 'ru'], ['🇨🇳 中文', 'zh'],
 ];
-const SYS_SIMPLE = 'You are a proofreader. Fix only spelling, orthography and punctuation in the SAME language as the input text; never change the language, meaning or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
-const SYS_ADV = 'You are a proofreader. Fix spelling, punctuation and grammar together in the SAME language as the input text; preserve meaning, numbers and names, never change the language or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
-const SYS_GRAMMAR = 'Fix only grammar and word inflection in the SAME language as the input text. Do not change spelling, style or punctuation, do not rewrite, never change the language. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
-const SYS_STRUCTURE = 'You are an expert editor and information architect. Organize and structure the spoken/dictated text according to what was said, in the SAME language as the input text (preserve Persian, English, or mixed technical terms accurately). Divide long continuous speech into clear logical paragraphs separated by a blank line. ONLY when the speaker enumerates items, steps, tasks, reasons, options, or distinct points, convert them into a clean bulleted list using "• " (or simple numbered lines when order clearly matters); do not force bullet lists on ordinary narrative prose. Fix minor spoken stutters, missing punctuation, and Persian orthography/ZWNJ (e.g. «رابطه کاربری» -> «رابط کاربری») while preserving ALL facts, numbers, names, and intended meaning verbatim. Do not invent new facts, headings that contradict the speech, or noisy Markdown (#, **, code fences). Never emit timestamps, timecodes, or commentary. Return ONLY the structured text.';
-// --- phantom-timestamp guard (#144, app-side column): STT rarely leaks lone
-// timecodes (۰:۲۴، 12:34، ۰۱:۱۵) that polish would otherwise pass through to
-// display/apply. Strip standalone mm:ss tokens; colon-less numbers (ورژن ۱۳،
-// ۱۰۰ کارت، ۱۲ نسخه، years) never match, and real clock times after «ساعت»
-// are kept. Pure (DOM-free; verified under node by slicing
-// __TS_GUARD_START__..__TS_GUARD_END__).
+
+export const SYS_SIMPLE = 'You are a careful proofreader. Fix only spelling, ZWNJ spacing within words, and punctuation in the SAME language as the input text. Preserve all facts, names, numbers, and the speaker\'s register verbatim. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+export const SYS_ADV = 'You are an experienced copy editor. Fix spelling, punctuation, sentence clarity, and agreement errors together in the SAME language as the input text; preserve all facts, numbers, and names. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
+export const SYS_GRAMMAR = 'Fix only grammatical agreement and obvious inflection slips in the SAME language as the input text. Do not rewrite sentences or change vocabulary or register. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
+export const SYS_STRUCTURE = 'You are an information architect organizing speech or written notes cleanly. CRITICAL LANGUAGE RULE: Keep the EXACT original language of every sentence (if the input is English, keep it 100% English; if Persian, keep Persian; if mixed, keep each phrase in its original language — NEVER translate). Structure the content logically according to what the user actually said: group related narrative prose into clear paragraphs separated by a blank line, and ONLY when the text contains explicit lists, tasks, steps, options, or distinct items, format them as clean bullets using "• " (or simple numbered lines when ordered). Keep ALL facts, numbers, names, and the speaker\'s exact wording/register intact; never rewrite colloquial phrasing into formal/bookish style unless instructed. Clean only obvious stutters or punctuation without dropping content. Do not invent facts or noisy Markdown (#, **, code fences). If the text is already clearly structured, return it cleanly as-is — never reply with explanations or commentary. Return ONLY the structured text.';
+
+export const BUILTIN_PROMPTS = {
+  'stage-simple': SYS_SIMPLE,
+  'stage-advanced': SYS_ADV,
+  'stage-grammar': SYS_GRAMMAR,
+  'stage-structure': SYS_STRUCTURE,
+};
+
+export function resolveToolSystem(tool, tonePrefOverride, inputText = ''){
+  const custom = typeof tool?.system === 'string' ? tool.system.trim() : '';
+  const base = custom || BUILTIN_PROMPTS[tool?.id] || SYS_SIMPLE;
+  return applyTonePreference(base, {
+    respectTone: tool?.respectTone !== false,
+    ...(tonePrefOverride ? { tonePref: tonePrefOverride } : {}),
+    ...(inputText ? { text: inputText } : {}),
+  });
+}
+
+// --- Icons per tool kind / id ---
+const TOOL_ICONS = {
+  'stage-simple': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+  'stage-advanced': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 3l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/><path d="M3 9h8M3 15h8"/><circle cx="15" cy="9" r="2"/><circle cx="15" cy="15" r="2"/><path d="M17 9h4M17 15h4"/></svg>',
+  'stage-grammar': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 10h11M4 14h6"/><path d="M13 17l2.2 2.2L20.5 14"/></svg>',
+  'stage-structure': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 10h11"/><path d="M9 15h11M9 19h8"/><circle cx="5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="5" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg>',
+  'stage-tr-quick': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg>',
+  'stage-tr-panel': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg>',
+  'stage-raw': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg>',
+  'custom': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+};
+
+// --- phantom-timestamp guard (#144, app-side column) ---
 // __TS_GUARD_START__
 function stripLoneTimecodes(text){
   const s0 = String(text ?? '');
   if(!s0 || (s0.indexOf(':') < 0 && s0.indexOf('：') < 0)) return s0;
   const D = '[0-9۰-۹٠-٩]';
   const E = '[\\s\\u200C()\\[\\]{}«»"\'“”‘’،,;.!؟?—–\\-…/\\\\|]';
-  // Protect real clock times («ساعت ۱۲:۳۰») with placeholders first.
   const kept = [];
   let s = s0.replace(new RegExp('ساعت\\s+' + D + '{1,2}[:：]' + D + '{2}', 'g'), (m) => {
     kept.push(m);
@@ -67,27 +87,35 @@ function stripLoneTimecodes(text){
   return s;
 }
 // __TS_GUARD_END__
+
 let stageRawStack = [];
 const STAGE_RAW_MAX = 25;
-// Slice-scoped undo: push the pre-stage scope slice (not the whole doc) so خام
-// splices just that slice back — earlier stages' results and foreign edits outside
-// the range survive. newEnd is filled in after apply (post-stage range).
+let stageBusyState = false;
+
 function stagePushRaw(scope){
   const entry = { start: scope.start, end: scope.end, text: scope.text, newEnd: scope.end };
   stageRawStack.push(entry);
   while (stageRawStack.length > STAGE_RAW_MAX) stageRawStack.shift();
-  const rawBtn = $('stage-raw');
-  if (rawBtn) rawBtn.disabled = false;
+  syncRawButtonsDisabled();
   return entry;
 }
+
+function syncRawButtonsDisabled(){
+  const noRaw = !stageRawStack.length;
+  document.querySelectorAll('#stage-raw, [data-tool-id="stage-raw"]').forEach(el => {
+    el.disabled = stageBusyState || noRaw;
+  });
+}
+
 let langHi = 0, langView = STAGE_LANGS.slice();
 function stageScope(){
-  const selStart = _getSelStart(), selEnd = _getSelEnd(); // injected: live-read app.js-owned cursor
+  const selStart = _getSelStart(), selEnd = _getSelEnd();
   const v = els.output.value;
   const a = Math.min(selStart, v.length), b = Math.min(selEnd, v.length);
   if (b > a) return { text: v.slice(a, b), start: a, end: b, kind: 'selection', sel: v.slice(a, b) };
   return { text: v, start: 0, end: v.length, kind: 'full' };
 }
+
 function updateStageScope(){
   const g = stageScope();
   const base = g.kind === 'selection'
@@ -104,44 +132,26 @@ function updateStageScope(){
     toolsScope.textContent = `اعمال روی: ${base} · ${eng.text}`;
   }
 }
-// stagebar button visibility (session-only: storage seam is locked, so no persistence here)
-const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-structure', 'ساختاردهی متن'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…']];
-function stageBarApplyVisibility(){
-  const menu = $('stage-edit-menu');
-  if (menu && !menu.dataset.built) {
-    menu.dataset.built = '1';
-    for (const [id, label] of STAGE_BTNS) {
-      const lab = document.createElement('label');
-      lab.className = 'switch';
-      lab.title = 'برداشتن تیک فقط دکمه را پنهان می‌کند؛ ابزار غیرفعال نمی‌شود';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.checked = true;
-      cb.setAttribute('aria-label', 'نمایش دکمه ' + label);
-      cb.addEventListener('change', () => { const btn = $(id); if (btn) btn.hidden = !cb.checked; });
-      lab.append(cb, document.createTextNode(' نمایش: ' + label));
-      menu.appendChild(lab);
-    }
-  }
-}
+
 function stageModelPick(){
   const sel = $('stage-model');
-  const polishChainState = _getPolishChain(); // injected: live-read (app.js reassigns on load)
+  const polishChainState = _getPolishChain();
   try { const o = sel?.value && JSON.parse(sel.value); if (o?.id) return o; } catch {}
   const first = polishChainState.find(e => e.enabled !== false);
   if (!first) return null;
   return { id: entryIdOf(first), providerId: providerIdOf(first, 'groq') };
 }
+
 function renderStageModelOptions(){
-  const polishChainState = _getPolishChain(); // injected: live-read (app.js reassigns on load)
+  const polishChainState = _getPolishChain();
   const sel = $('stage-model');
   if (!sel) return;
   const prev = sel.value;
   sel.innerHTML = '';
   const head = document.createElement('option');
   head.value = '';
-  head.textContent = 'خودکار: زنجیره پالایش (مدل هوشمند برای ساختاردهی)';
-  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه در پالایش زنجیره به‌ترتیب و در ساختاردهی متن قوی‌ترین مدل فعال زنجیره اجرا می‌شود.';
+  head.textContent = 'خودکار: زنجیره پالایش (مدل هوشمند برای ابزارهای تحلیلی)';
+  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه در ابزارهای ساده زنجیره به‌ترتیب و در ابزارهای هوشمند قوی‌ترین مدل فعال زنجیره اجرا می‌شود.';
   sel.appendChild(head);
   const seen = new Set();
   const chainGroup = document.createElement('optgroup');
@@ -188,6 +198,7 @@ function renderStageModelOptions(){
   } catch {}
   if (prev) sel.value = prev;
 }
+
 function stageApply(scope, next){
   const v = els.output.value;
   els.output.value = v.slice(0, scope.start) + next + v.slice(scope.end);
@@ -197,6 +208,7 @@ function stageApply(scope, next){
   editorHistory.push(els.output.value);
   updateStageScope(); syncActionbar();
 }
+
 function stageQuotaSplit(model, words, chars){
   try {
     Quota.record(model, { durationMs: 0, words, chars, kind: 'postprocess' });
@@ -204,36 +216,38 @@ function stageQuotaSplit(model, words, chars){
     Dashboard.renderOverall();
   } catch {}
 }
-function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-structure','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } if(!b){ const raw = $('stage-raw'); if(raw) raw.disabled = !stageRawStack.length; } }
+
+function setStageBusy(b){
+  stageBusyState = !!b;
+  document.querySelectorAll('#tools-grid .tool-card, #fav-tools-bar .fav-tool-btn').forEach(el => {
+    el.disabled = !!b;
+  });
+  if (!b) syncRawButtonsDisabled();
+}
+
 async function runStage(kind, faLabel, sysPrompt, logTitle, opts = {}){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای پردازش نیست'); return; }
   onActionTriggered();
   const invoker = document.activeElement;
-  const _dpGuard = _getDiffPending(); // injected: live-read app.js-owned diff gate
+  const _dpGuard = _getDiffPending();
   if (_dpGuard && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
   const vlen = els.output.value.length;
   Logger.groupRun(logTitle);
   Logger.setStatus('✨ ' + faLabel + '…', 'warn');
   setStageBusy(true);
   openDiffRunning(faLabel, scope, invoker);
-  const _dpSeq = _getDiffPending(); // injected: re-read after open (app.js owns the token)
+  const _dpSeq = _getDiffPending();
   const mySeq = _dpSeq ? _dpSeq.seq : -1;
   try {
-    // Explicit stage-model choice (dropdown) goes first, rest of the enabled chain
-    // stays as fallback; default (head option) follows chain order (or smart order when opts.smart).
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
     const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
-    const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: opts.layer || 'polish', smart: !!opts.smart, ...(explicit ? { prefer: explicit } : {}) });
-    // phantom-timestamp guard (#144, app-side column): strip lone STT timecodes
-    // from the output before display/apply (sibling column owns the STT half).
+    const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: opts.layer || 'polish', smart: !!opts.smart, ...(preferOk ? { prefer: explicit } : {}) });
     const cleanText = stripLoneTimecodes(out.text);
     if(cleanText !== out.text) Logger.log('info','phantom timecode stripped',{before:out.text.length, after:cleanText.length});
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
-    // apply-diff-confirm (#49): gate the result behind the bottom sheet instead of
-    // direct-apply — Apply replays stagePushRaw+stageApply verbatim; quota fires there.
     fillDiffSheet({ kind: 'polish', scope, text: cleanText, model: out.model, faLabel, logTitle,
       okStatus: '✅ ' + faLabel + ' نشست',
       okToast: faLabel + (scope.kind === 'selection' ? ' روی انتخاب ✓' : ' روی کل ✓'),
@@ -248,19 +262,20 @@ async function runStage(kind, faLabel, sysPrompt, logTitle, opts = {}){
     Logger.clearRun();
   } finally { setStageBusy(false); }
 }
+
 async function runTranslate(code){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
   onActionTriggered();
   const invoker = document.activeElement;
-  const _dpGuard = _getDiffPending(); // injected: live-read app.js-owned diff gate
+  const _dpGuard = _getDiffPending();
   if (_dpGuard && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
   const vlen = els.output.value.length;
   Logger.groupRun('🌐 ترجمه → ' + code);
   Logger.setStatus('🌐 ترجمه → ' + code + '…', 'warn');
   setStageBusy(true);
   openDiffRunning('ترجمه → ' + code, scope, invoker);
-  const _dpSeq = _getDiffPending(); // injected: re-read after open (app.js owns the token)
+  const _dpSeq = _getDiffPending();
   const mySeq = _dpSeq ? _dpSeq.seq : -1;
   try {
     const pick = stageModelPick();
@@ -270,8 +285,6 @@ async function runTranslate(code){
     const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const out = res.text;
-    // apply-diff-confirm (#49): gate the result behind the bottom sheet instead of
-    // direct-apply — Apply replays stagePushRaw+stageApply verbatim; quota fires there.
     fillDiffSheet({ kind: 'translate', scope, text: out, model: res.model, faLabel: 'ترجمه → ' + code, logTitle: '🌐 ترجمه → ' + code,
       okStatus: '✅ ترجمه نشست',
       okToast: 'ترجمه → ' + code + ' ✓',
@@ -286,7 +299,156 @@ async function runTranslate(code){
     Logger.clearRun();
   } finally { setStageBusy(false); }
 }
-// searchable language combo (~10 langs, filter + ↑↓ + Enter, outside-click/Esc close)
+
+function executeRawUndo(){
+  const prev = stageRawStack.pop();
+  if (prev == null) return;
+  const v = els.output.value;
+  const start = Math.max(0, Math.min(prev.start, v.length));
+  const newEnd = Math.max(start, Math.min(prev.newEnd ?? prev.end, v.length));
+  const restored = v.slice(0, start) + prev.text + v.slice(newEnd);
+  els.output.value = restored;
+  els.output.focus();
+  try { els.output.setSelectionRange(start + prev.text.length, start + prev.text.length); } catch {}
+  saveCursor(); updateCounts(); Storage.saveDraft(restored);
+  editorHistory.push(restored);
+  syncRawButtonsDisabled();
+  updateStageScope(); syncActionbar();
+  onActionTriggered();
+  Logger.log('info', '↩ برگشت به خام (دامنه)', { chars: prev.text.length });
+  Logger.toast('به خام برگشت');
+}
+
+function triggerToolAction(tool, btn){
+  if (!tool) return;
+  if (tool.kind === 'tr-quick') {
+    const t = stageScope().text.trim();
+    let code = 'en';
+    if (/[A-Za-z]/.test(t) && !/[^\x00-\x7F]/.test(t)) code = 'fa';
+    runTranslate(code);
+    return;
+  }
+  if (tool.kind === 'tr-panel') {
+    const p = $('tr-panel');
+    if (!p) return;
+    p.hidden = !p.hidden;
+    btn?.setAttribute('aria-pressed', String(!p.hidden));
+    if (!p.hidden) { $('stage-lang-search')?.focus(); renderLangs(); }
+    return;
+  }
+  if (tool.kind === 'raw') {
+    executeRawUndo();
+    return;
+  }
+  const scope = stageScope();
+  const sys = resolveToolSystem(tool, undefined, scope.text);
+  const layer = tool.smart || tool.id === 'stage-structure' ? 'structure' : 'polish';
+  runStage(tool.id, tool.label, sys, '✨ ' + tool.label, { layer, smart: !!tool.smart });
+}
+
+function renderToolsUI(){
+  const grid = $('tools-grid') || document.querySelector('#tools-pop .tools-grid');
+  const favBar = $('fav-tools-bar');
+  const tools = Storage.getToolsConfig();
+  const visibleTools = tools.filter(t => !t.hidden);
+
+  if (grid) {
+    grid.innerHTML = '';
+    const nonRawCount = visibleTools.filter(t => t.kind !== 'raw').length;
+    visibleTools.forEach((tool, idx) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      if (tool.builtin) b.id = tool.id;
+      b.dataset.toolId = tool.id;
+      const isLastSolo = idx === visibleTools.length - 1 && visibleTools.length % 2 === 1;
+      const shouldSpan2 = tool.kind === 'raw' ? (nonRawCount % 2 === 0 || isLastSolo) : false;
+      b.className = 'tool-card'
+        + (tool.smart ? ' tool-card--smart' : '')
+        + (shouldSpan2 ? ' tool-card--span2' : '');
+      if (tool.kind === 'tr-panel') {
+        const trOpen = !$('tr-panel')?.hidden;
+        b.setAttribute('aria-pressed', String(!!trOpen));
+      }
+      if (tool.kind === 'raw') {
+        b.disabled = stageBusyState || !stageRawStack.length;
+      } else {
+        b.disabled = stageBusyState;
+      }
+
+      const ic = document.createElement('span');
+      ic.className = 'tool-card__ic';
+      ic.setAttribute('aria-hidden', 'true');
+      ic.innerHTML = TOOL_ICONS[tool.id] || TOOL_ICONS.custom;
+
+      const copy = document.createElement('span');
+      copy.className = 'tool-card__copy';
+      const titleRow = document.createElement('span');
+      titleRow.className = 'tool-card__title-row';
+      const st = document.createElement('strong');
+      st.textContent = tool.label;
+      titleRow.appendChild(st);
+      if (tool.pinned) {
+        const star = document.createElement('span');
+        star.className = 'tool-card__pin';
+        star.textContent = '★';
+        star.title = 'محبوب و پین‌شده در نوار پایین کادر';
+        star.setAttribute('aria-hidden', 'true');
+        titleRow.appendChild(star);
+      }
+      const sm = document.createElement('small');
+      sm.textContent = tool.sub || (tool.builtin ? '' : 'ابزار سفارشی');
+      copy.append(titleRow, sm);
+
+      b.append(ic, copy);
+      b.addEventListener('click', (e) => {
+        if (tool.kind === 'tr-panel') e.stopPropagation();
+        triggerToolAction(tool, b);
+      });
+      grid.appendChild(b);
+    });
+  }
+
+  if (favBar) {
+    const pinnedTools = visibleTools.filter(t => t.pinned && t.kind !== 'tr-panel');
+    favBar.innerHTML = '';
+    if (!pinnedTools.length) {
+      favBar.hidden = true;
+    } else {
+      favBar.hidden = false;
+      const listWrap = document.createElement('div');
+      listWrap.className = 'fav-tools-bar__list';
+      for (const tool of pinnedTools) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'fav-tool-btn' + (tool.smart ? ' is-smart' : '');
+        btn.dataset.toolId = tool.id;
+        btn.title = tool.sub ? `${tool.label} — ${tool.sub}` : tool.label;
+        if (tool.kind === 'raw') btn.disabled = stageBusyState || !stageRawStack.length;
+        else btn.disabled = stageBusyState;
+        const ic = document.createElement('span');
+        ic.className = 'fav-tool-btn__ic';
+        ic.setAttribute('aria-hidden', 'true');
+        ic.innerHTML = TOOL_ICONS[tool.id] || TOOL_ICONS.custom;
+        const lbl = document.createElement('span');
+        lbl.textContent = tool.label;
+        btn.append(ic, lbl);
+        btn.addEventListener('click', () => triggerToolAction(tool, btn));
+        listWrap.appendChild(btn);
+      }
+      const gearBtn = document.createElement('button');
+      gearBtn.type = 'button';
+      gearBtn.id = 'btn-fav-manage';
+      gearBtn.className = 'fav-manage-btn';
+      gearBtn.title = 'شخصی‌سازی ابزارها و محبوب‌ها';
+      gearBtn.setAttribute('aria-label', 'شخصی‌سازی ابزارها');
+      gearBtn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+      gearBtn.addEventListener('click', () => onManageTools());
+      favBar.append(listWrap, gearBtn);
+    }
+  }
+}
+
+// searchable language combo
 function renderLangs(){
   const box = $('stage-lang-opts');
   if (!box) return;
@@ -315,9 +477,6 @@ function paintLangHi(){
   [...box.children].forEach((x, i) => x.classList.toggle('hl', i === langHi));
 }
 
-// Thin wiring entry: registers listeners in the original order, then runs the
-// original end-of-file init (visibility → model options → scope). Returns the
-// handles app.js still needs (updateBadge, diffApply, renderAllChains wrap).
 export function mountStagebar(deps){
   els = { output: $('output'), quotaGrid: $('quota-grid') };
   saveCursor = deps.saveCursor;
@@ -337,48 +496,11 @@ export function mountStagebar(deps){
   fillDiffSheet = deps.fillDiffSheet;
   closeDiffSheet = deps.closeDiffSheet;
   onActionTriggered = deps.onActionTriggered || (() => {});
+  onManageTools = deps.onManageTools || (() => {});
+
   ['select', 'keyup', 'mouseup'].forEach(ev => els.output.addEventListener(ev, updateStageScope));
   els.output.addEventListener('focus', updateStageScope);
-  $('stage-simple')?.addEventListener('click', () => runStage('simple', 'پالایش ساده', SYS_SIMPLE, '✨ پالایش ساده'));
-  $('stage-advanced')?.addEventListener('click', () => runStage('advanced', 'پالایش پیشرفته', SYS_ADV, '✨ پالایش پیشرفته'));
-  $('stage-grammar')?.addEventListener('click', () => runStage('grammar', 'پالایش دستوری', SYS_GRAMMAR, '📝 پالایش دستوری'));
-  $('stage-structure')?.addEventListener('click', () => runStage('structure', 'ساختاردهی متن', SYS_STRUCTURE, '📐 ساختاردهی متن', { layer: 'structure', smart: true }));
-  $('stage-tr-quick')?.addEventListener('click', () => {
-    const t = els.output.value.trim();
-    // Rationale: ASCII-only Latin text is most likely English → 'fa'. Latin with
-    // diacritics (äöüßéèêàçñ…) is likely another European language → 'en', and
-    // non-Latin scripts (Persian/Arabic/CJK…) → 'en'. Heuristic only — the
-    // «ترجمه…» panel is the escape hatch for misses.
-    let code = 'en';
-    if (/[A-Za-z]/.test(t) && !/[^\x00-\x7F]/.test(t)) code = 'fa';
-    runTranslate(code);
-  });
-  $('stage-tr-panel')?.addEventListener('click', (e) => {
-    const p = $('tr-panel');
-    if (!p) return;
-    p.hidden = !p.hidden;
-    e.currentTarget.setAttribute('aria-pressed', String(!p.hidden));
-    if (!p.hidden) { $('stage-lang-search')?.focus(); renderLangs(); }
-  });
-  $('stage-raw')?.addEventListener('click', () => {
-    const prev = stageRawStack.pop();
-    if (prev == null) return;
-    const v = els.output.value;
-    const start = Math.max(0, Math.min(prev.start, v.length));
-    const newEnd = Math.max(start, Math.min(prev.newEnd ?? prev.end, v.length));
-    const restored = v.slice(0, start) + prev.text + v.slice(newEnd);
-    els.output.value = restored;
-    els.output.focus();
-    try { els.output.setSelectionRange(start + prev.text.length, start + prev.text.length); } catch {}
-    saveCursor(); updateCounts(); Storage.saveDraft(restored);
-    editorHistory.push(restored);
-    const rawBtn = $('stage-raw');
-    if (rawBtn) rawBtn.disabled = !stageRawStack.length;
-    updateStageScope(); syncActionbar();
-    onActionTriggered();
-    Logger.log('info', '↩ برگشت به خام (دامنه)', { chars: prev.text.length });
-    Logger.toast('به خام برگشت');
-  });
+
   $('stage-lang-search')?.addEventListener('input', (e) => {
     const q = e.target.value.trim().toLowerCase();
     langView = STAGE_LANGS.filter(([l, c]) => l.toLowerCase().includes(q) || c.includes(q));
@@ -389,7 +511,7 @@ export function mountStagebar(deps){
     if (e.key === 'ArrowDown') { e.preventDefault(); langHi = Math.min(langView.length - 1, langHi + 1); paintLangHi(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); langHi = Math.max(0, langHi - 1); paintLangHi(); }
     else if (e.key === 'Enter' && langView[langHi]) { const p = $('tr-panel'); if (p) p.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); runTranslate(langView[langHi][1]); }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const p = $('tr-panel'); if (p) p.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); } // consume: topmost layer owns Esc — must never reach recording-cancel
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const p = $('tr-panel'); if (p) p.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); }
   });
   document.addEventListener('click', (e) => {
     const panel = $('tr-panel');
@@ -400,8 +522,9 @@ export function mountStagebar(deps){
     const det = $('stage-settings');
     if (det && det.open && !e.target.closest('#stage-settings')) det.removeAttribute('open');
   });
-  stageBarApplyVisibility();
+
+  renderToolsUI();
   renderStageModelOptions();
   updateStageScope();
-  return { updateStageScope, stagePushRaw, stageApply, stageQuotaSplit, renderStageModelOptions, runStage, runTranslate };
+  return { updateStageScope, stagePushRaw, stageApply, stageQuotaSplit, renderStageModelOptions, renderToolsUI, runStage, runTranslate };
 }

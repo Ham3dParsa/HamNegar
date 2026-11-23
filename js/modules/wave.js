@@ -8,8 +8,20 @@
 import { defaultWaveConfig } from './storage.js';
 
 export const WAVE_FA = {
-  types: { sine: 'سینوسی', 'mirror-sine': 'آینه‌ای', dash: 'خط‌چین', steps: 'پله‌ای', ribbon: 'نواری', 'flat-glow-line': 'خط تخت درخشان', bars: 'ستون‌ها (اکولایزر)' },
-  colorModes: { solid: 'تک‌رنگ', gradient: 'گرادیان عمودی', rainbow: 'رنگین‌کمان جاری' },
+  types: {
+    silk: 'ابریشم جاری',
+    droplet: 'قطره شیشه‌ای',
+    'pulse-orb': 'نبض هاله',
+    'capsule-eq': 'کپسولی',
+    bars: 'اکولایزر',
+    sine: 'سینوسی',
+    'mirror-sine': 'آینه‌ای',
+    ribbon: 'نواری',
+    dash: 'خط‌چین',
+    steps: 'پله‌ای',
+    'flat-glow-line': 'خط درخشان',
+  },
+  colorModes: { solid: 'تک‌رنگ', gradient: 'گرادیان', rainbow: 'طیف جاری' },
   bands: { low: 'بم', mid: 'میانی', high: 'زیر', rms: 'کل' },
   profiles: { flat: 'یکنواخت', center: 'مرکز-شدید', edges: 'لبه-شدید', bands: 'تفکیک باندی' },
   peaks: { low: 'کم', mid: 'متوسط', high: 'زیاد' },
@@ -25,8 +37,8 @@ const nid = () => `w${Date.now().toString(36)}${(++_wid).toString(36)}`;
 
 function W(o) {
   const w = {
-    id: nid(), name: '', type: 'sine', colorMode: 'solid', c1: '#8ab4f8', c2: '#c4b5fd',
-    opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'flat', mute: false,
+    id: nid(), name: '', type: 'silk', colorMode: 'solid', c1: '#8ab4f8', c2: '#c4b5fd',
+    opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'center', mute: false,
     barShape: 'rounded', barCount: 24, barGap: 2,
     ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
   };
@@ -39,39 +51,123 @@ function W(o) {
 }
 
 export const STARTERS = [
-  { id: 'classic-fade', n: 'محو کلاسیک', d: 'سینوس + محو؛ مبنای مقایسه.', stack: () => [W({ type: 'ribbon', c1: '#8ab4f8', opacity: 90, glow: 50, thick: 2, peaks: 'mid', band: 'rms' })] },
-  { id: 'warm-presence', n: 'حضور گرم', d: 'تک‌موج گرم پرذره.', stack: () => [W({ type: 'sine', c1: '#f6b17a', opacity: 100, glow: 70, thick: 2, peaks: 'high', band: 'mid' })] },
-  { id: 'perc-pop', n: 'ضربه‌ای', d: 'اتک تند؛ باند زیر.', stack: () => [W({ type: 'sine', c1: '#f9a8d4', opacity: 100, glow: 80, thick: 2, peaks: 'high', band: 'high' })] },
-  { id: 'edge-whisper', n: 'زمزمه لبه', d: 'داش کم‌رنگ + سینوس.', stack: () => [W({ type: 'sine', c1: '#8ab4f8', opacity: 80, glow: 50, thick: 1.5, peaks: 'mid', band: 'rms' }), W({ type: 'dash', c1: '#e3ecfd', opacity: 50, glow: 30, thick: 1.5, peaks: 'mid', band: 'high' })] },
-  { id: 'mirror-lake', n: 'دریاچه آینه‌ای', d: 'mirror-sine تکی.', stack: () => [W({ type: 'mirror-sine', c1: '#5eead4', opacity: 90, glow: 60, thick: 2, peaks: 'mid', band: 'low' })] },
-  { id: 'aurora-wash', n: 'شفق زمینه', d: 'خط تخت درخشان + زمینه روشن.', stack: () => [W({ type: 'flat-glow-line', c1: '#c4b5fd', colorMode: 'gradient', c2: '#5eead4', opacity: 80, glow: 90, thick: 1.5, peaks: 'low', band: 'low' })], aurora: true },
-  { id: 'dash-ticker', n: 'خط‌چین جاری', d: 'داش پررنگ + شبح سینوسی.', stack: () => [W({ type: 'dash', c1: '#8ab4f8', opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'mid' }), W({ type: 'sine', c1: '#8ab4f8', opacity: 30, glow: 20, thick: 1, peaks: 'mid', band: 'rms' })] },
-  { id: 'quantum-steps', n: 'پله‌های کوانتومی', d: 'پله + شبح.', stack: () => [W({ type: 'steps', c1: '#fde68a', opacity: 100, glow: 60, thick: 2, peaks: 'mid', band: 'mid' }), W({ type: 'sine', c1: '#fde68a', opacity: 25, glow: 20, thick: 1, peaks: 'mid', band: 'rms' })] },
-  { id: 'ice-glow', n: 'درخشش یخی', d: 'گرادیان عمودی + گلو قوی.', stack: () => [W({ type: 'sine', colorMode: 'gradient', c1: '#bfe3ff', c2: '#8ab4f8', opacity: 100, glow: 100, thick: 2, peaks: 'mid', band: 'rms' })] },
-  { id: 'heartbeat', n: 'نبض قلب', d: 'سینوس + ریبون رنگین‌کمانی.', stack: () => [W({ type: 'sine', c1: '#fca5a5', opacity: 100, glow: 60, thick: 2, peaks: 'high', band: 'mid' }), W({ type: 'ribbon', colorMode: 'rainbow', c1: '#fca5a5', opacity: 45, glow: 40, thick: 2, peaks: 'low', band: 'low' })] },
-  { id: 'eq-bars', n: 'اکولایزر ستونی', d: 'ستون‌های گرد؛ تفکیک باندی.', stack: () => [W({ type: 'bars', colorMode: 'gradient', c1: '#5eead4', c2: '#8ab4f8', opacity: 100, glow: 70, thick: 2, peaks: 'mid', band: 'rms', profile: 'bands', barShape: 'rounded', barCount: 24, barGap: 2 })] },
+  {
+    id: 'liquid-silk',
+    n: 'ابریشم مایع',
+    d: 'موج‌های روان دولایه با محو شیشه‌ای.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'silk', colorMode: 'gradient', c1: '#6ea0ff', c2: '#5eead4', opacity: 96, glow: 72, thick: 2, peaks: 'mid', band: 'rms', profile: 'center' }),
+      W({ type: 'silk', colorMode: 'solid', c1: '#c4b5fd', opacity: 52, glow: 48, thick: 1.5, peaks: 'high', band: 'mid', profile: 'center', ov: { speed: 62 } }),
+    ],
+  },
+  {
+    id: 'apple-droplet',
+    n: 'قطره شیشه‌ای',
+    d: 'برجستگی نرم و شیشه‌ای زیر نور هاله.',
+    aurora: true,
+    stack: () => [
+      W({ type: 'droplet', colorMode: 'gradient', c1: '#8ab4f8', c2: '#c4b5fd', opacity: 94, glow: 76, thick: 2, peaks: 'low', band: 'rms', profile: 'center' }),
+      W({ type: 'droplet', colorMode: 'solid', c1: '#5eead4', opacity: 44, glow: 54, thick: 1.5, peaks: 'mid', band: 'high', profile: 'center', ov: { speed: 68 } }),
+    ],
+  },
+  {
+    id: 'horizon-pulse',
+    n: 'نبض افق',
+    d: 'هسته نورانی هم‌ضربان با موج افقی.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'pulse-orb', colorMode: 'gradient', c1: '#5eead4', c2: '#6ea0ff', opacity: 95, glow: 82, thick: 2, peaks: 'mid', band: 'mid', profile: 'center' }),
+      W({ type: 'silk', colorMode: 'solid', c1: '#9adcff', opacity: 42, glow: 40, thick: 1.5, peaks: 'low', band: 'low', profile: 'flat' }),
+    ],
+  },
+  {
+    id: 'glass-capsules',
+    n: 'کپسول‌های زنده',
+    d: 'ستون‌های کپسولی تفکیک باند با کلاهک نور.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'capsule-eq', colorMode: 'gradient', c1: '#5eead4', c2: '#8ab4f8', opacity: 96, glow: 68, thick: 2, peaks: 'mid', band: 'rms', profile: 'bands', barCount: 22, barGap: 3 }),
+    ],
+  },
+  {
+    id: 'aurora-veil',
+    n: 'شفق لطیف',
+    d: 'پرده رنگی ملایم + خط افق درخشان.',
+    aurora: true,
+    stack: () => [
+      W({ type: 'ribbon', colorMode: 'gradient', c1: '#c4b5fd', c2: '#5eead4', opacity: 85, glow: 64, thick: 1.8, peaks: 'low', band: 'low', profile: 'center' }),
+      W({ type: 'flat-glow-line', colorMode: 'solid', c1: '#bfe3ff', opacity: 70, glow: 85, thick: 1.5, peaks: 'low', band: 'rms', profile: 'flat' }),
+    ],
+  },
+  {
+    id: 'warm-amber',
+    n: 'موج کهربایی',
+    d: 'طیف گرم و آرام برای نگارش طولانی.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'silk', colorMode: 'gradient', c1: '#f6b17a', c2: '#f9a8d4', opacity: 94, glow: 66, thick: 2, peaks: 'mid', band: 'mid', profile: 'center' }),
+      W({ type: 'droplet', colorMode: 'solid', c1: '#fde68a', opacity: 38, glow: 42, thick: 1.5, peaks: 'low', band: 'low', profile: 'center' }),
+    ],
+  },
+  {
+    id: 'eq-needle',
+    n: 'اکولایزر سوزنی',
+    d: 'خطوط دقیق فرکانسی + شبح آرام.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'bars', colorMode: 'gradient', c1: '#8ab4f8', c2: '#5eead4', opacity: 95, glow: 56, thick: 2, peaks: 'high', band: 'rms', profile: 'bands', barShape: 'needle', barCount: 28, barGap: 2 }),
+      W({ type: 'sine', colorMode: 'solid', c1: '#8ab4f8', opacity: 26, glow: 20, thick: 1, peaks: 'low', band: 'low', profile: 'center' }),
+    ],
+  },
+  {
+    id: 'classic-fade',
+    n: 'محو کلاسیک',
+    d: 'نوار کلاسیک هم‌نگار؛ ساده و کم‌مصرف.',
+    aurora: false,
+    stack: () => [
+      W({ type: 'ribbon', c1: '#8ab4f8', opacity: 90, glow: 50, thick: 2, peaks: 'mid', band: 'rms', profile: 'flat' }),
+    ],
+  },
 ];
-export const starterById = id => STARTERS.find(s => s.id === id) || STARTERS[0];
 
-const FAMILIES = [['#8ab4f8', '#c4b5fd'], ['#5eead4', '#8ab4f8'], ['#f6b17a', '#f9a8d4'], ['#bfe3ff', '#5eead4'], ['#c4b5fd', '#f9a8d4'], ['#e3ecfd', '#8ab4f8']];
+const LEGACY_STARTER_ALIAS = {
+  'warm-presence': 'warm-amber',
+  'perc-pop': 'horizon-pulse',
+  'edge-whisper': 'liquid-silk',
+  'mirror-lake': 'apple-droplet',
+  'aurora-wash': 'aurora-veil',
+  'dash-ticker': 'horizon-pulse',
+  'quantum-steps': 'glass-capsules',
+  'ice-glow': 'apple-droplet',
+  'heartbeat': 'warm-amber',
+  'eq-bars': 'glass-capsules',
+};
+export const starterById = id => STARTERS.find(s => s.id === (LEGACY_STARTER_ALIAS[id] || id)) || STARTERS[0];
+
+const FAMILIES = [['#6ea0ff', '#5eead4'], ['#8ab4f8', '#c4b5fd'], ['#f6b17a', '#f9a8d4'], ['#bfe3ff', '#5eead4'], ['#c4b5fd', '#f9a8d4'], ['#9adcff', '#8ab4f8']];
 export function randomStack() {
   const fam = FAMILIES[Math.floor(Math.random() * FAMILIES.length)];
-  const n = 1 + Math.floor(Math.random() * 3);
-  const allowRainbow = Math.random() < 0.25;
-  const types = ['sine', 'sine', 'mirror-sine', 'ribbon', 'dash', 'steps', 'flat-glow-line', 'bars'];
-  const barShapes = ['rounded', 'rounded', 'square', 'needle'];
-  const bands = ['low', 'mid', 'high', 'rms'], pks = ['low', 'mid', 'mid', 'high'], profs = ['flat', 'flat', 'center', 'edges', 'bands'];
+  const n = 1 + Math.floor(Math.random() * 2);
+  const allowRainbow = Math.random() < 0.2;
+  const types = ['silk', 'silk', 'droplet', 'pulse-orb', 'capsule-eq', 'ribbon', 'bars', 'mirror-sine'];
+  const barShapes = ['rounded', 'needle', 'square'];
+  const bands = ['low', 'mid', 'high', 'rms'], pks = ['low', 'mid', 'high'], profs = ['center', 'center', 'flat', 'bands'];
   const out = [];
   for (let i = 0; i < n; i++) {
-    const cm = i === 0 && allowRainbow ? 'rainbow' : (Math.random() < 0.3 ? 'gradient' : 'solid');
+    const cm = i === 0 && allowRainbow ? 'rainbow' : (i === 0 ? 'gradient' : 'solid');
     out.push(W({
       type: types[Math.floor(Math.random() * types.length)], colorMode: cm,
       c1: fam[i % fam.length], c2: fam[(i + 1) % fam.length],
-      opacity: 60 + Math.floor(Math.random() * 41), glow: 30 + Math.floor(Math.random() * 51),
-      thick: [1.5, 2, 2.5][Math.floor(Math.random() * 3)], peaks: pks[Math.floor(Math.random() * pks.length)],
-      band: bands[Math.floor(Math.random() * bands.length)], profile: profs[Math.floor(Math.random() * profs.length)],
+      opacity: i === 0 ? 92 : 48 + Math.floor(Math.random() * 25),
+      glow: 48 + Math.floor(Math.random() * 38),
+      thick: [1.5, 2][Math.floor(Math.random() * 2)],
+      peaks: pks[Math.floor(Math.random() * pks.length)],
+      band: bands[Math.floor(Math.random() * bands.length)],
+      profile: profs[Math.floor(Math.random() * profs.length)],
       barShape: barShapes[Math.floor(Math.random() * barShapes.length)],
-      barCount: 12 + Math.floor(Math.random() * 21), barGap: 1 + Math.floor(Math.random() * 3),
+      barCount: 16 + Math.floor(Math.random() * 14),
+      barGap: 2 + Math.floor(Math.random() * 2),
     }));
   }
   return out;
@@ -577,6 +673,271 @@ export function createWaveRenderer(canvas) {
     g.fillStyle = gr; g.fillRect(0, 0, Wd, H);
   }
 
+  function drawSilkWave(t, wv, bl) {
+    if (wv.mute || wv.opacity <= 0) return;
+    const cyc = PEAK_CYC[wv.peaks] || 3;
+    const rate = 0.14 + 2.6 * (eff(wv, 'speed') / 100);
+    const s = t / 1000;
+    const avgL = bl[wv.band] ?? bl.rms;
+    const N = Math.max(64, Math.floor(Wd / 2));
+    ensureYBuf(N + 1);
+    const ph1 = s * 2.8 * rate;
+    const ph2 = -s * 1.9 * rate + 1.1;
+    const cy = H / 2;
+
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const win = Math.pow(Math.sin(Math.PI * u), 1.35);
+      const a = ampAtU(u, bl, wv) * (0.35 + 0.65 * win);
+      const disp = a * (
+        0.74 * Math.sin(2 * Math.PI * cyc * u - ph1) +
+        0.26 * Math.sin(2 * Math.PI * (cyc * 1.75) * u + ph2)
+      );
+      yBuf[i] = cy + disp;
+      yMirrorBuf[i] = cy - disp * 0.42;
+    }
+
+    const col = strokeFor(wv, t);
+    const colSolid = wv.colorMode === 'rainbow' ? '#9adcff' : wv.c1;
+    const colSec = wv.colorMode === 'gradient' ? wv.c2 : colSolid;
+    const lwBase = +wv.thick || 2;
+    const op = wv.opacity / 100, gl = wv.glow / 100;
+    const thick = lwBase + 1.0 * sm(avgL);
+
+    // Translucent silk glass ribbon between upper wave and counter-phase undertone
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const x = (i / N) * Wd;
+      i ? g.lineTo(x, yBuf[i]) : g.moveTo(x, yBuf[i]);
+    }
+    for (let i = N; i >= 0; i--) {
+      const x = (i / N) * Wd;
+      g.lineTo(x, yMirrorBuf[i]);
+    }
+    g.closePath();
+    const fillGr = g.createLinearGradient(0, cy - H * 0.4, 0, cy + H * 0.4);
+    fillGr.addColorStop(0, rgba(colSolid, 0.24));
+    fillGr.addColorStop(0.5, rgba(colSec, 0.08));
+    fillGr.addColorStop(1, rgba(colSec, 0.2));
+    g.globalAlpha = op * 0.85;
+    g.fillStyle = wv.colorMode === 'rainbow' ? col : fillGr;
+    g.fill();
+
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    traceBuf(N, yMirrorBuf);
+    g.strokeStyle = wv.colorMode === 'gradient' ? colSec : col;
+    g.globalAlpha = op * 0.38;
+    g.lineWidth = Math.max(1, thick * 0.72);
+    g.stroke();
+
+    traceBuf(N, yBuf);
+    g.strokeStyle = col;
+    if (gl > 0) {
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = op * sm(0.28 * gl);
+      g.lineWidth = thick + 4 + gl * 10;
+      g.stroke();
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.globalAlpha = op;
+    g.lineWidth = thick;
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+
+  function drawDropletWave(t, wv, bl) {
+    if (wv.mute || wv.opacity <= 0) return;
+    const cyc = (PEAK_CYC[wv.peaks] || 3) * 0.75;
+    const rate = 0.14 + 2.4 * (eff(wv, 'speed') / 100);
+    const s = t / 1000;
+    const avgL = bl[wv.band] ?? bl.rms;
+    const N = Math.max(64, Math.floor(Wd / 2));
+    ensureYBuf(N + 1);
+    const cy = H / 2;
+    const ph = s * 2.2 * rate;
+
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const lens = Math.sin(Math.PI * u);
+      const lobe = 0.55 + 0.45 * Math.cos(Math.PI * (2 * u - 1) * cyc - ph * 0.5);
+      const ripple = 0.18 * Math.sin(2 * Math.PI * (cyc * 1.9) * u + ph);
+      const rad = Math.max(1.2, ampAtU(u, bl, wv) * lens * (0.45 + 0.55 * lobe + ripple));
+      yBuf[i] = cy - rad;
+      yMirrorBuf[i] = cy + rad;
+    }
+
+    const col = strokeFor(wv, t);
+    const colSolid = wv.colorMode === 'rainbow' ? '#9adcff' : wv.c1;
+    const colSec = wv.colorMode === 'gradient' ? wv.c2 : colSolid;
+    const op = wv.opacity / 100, gl = wv.glow / 100;
+    const thick = (+wv.thick || 2) + 0.8 * sm(avgL);
+
+    // Filled closed droplet capsule
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const x = (i / N) * Wd;
+      i ? g.lineTo(x, yBuf[i]) : g.moveTo(x, yBuf[i]);
+    }
+    for (let i = N; i >= 0; i--) {
+      g.lineTo((i / N) * Wd, yMirrorBuf[i]);
+    }
+    g.closePath();
+
+    const bodyGr = g.createLinearGradient(0, cy - H * 0.38, 0, cy + H * 0.38);
+    bodyGr.addColorStop(0, rgba(colSolid, 0.34));
+    bodyGr.addColorStop(0.5, rgba(colSec, 0.12));
+    bodyGr.addColorStop(1, rgba(colSec, 0.32));
+    g.globalAlpha = op;
+    g.fillStyle = wv.colorMode === 'rainbow' ? col : bodyGr;
+    g.fill();
+
+    // Specular rim top & soft bottom rim
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    if (gl > 0) {
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = op * sm(0.24 * gl);
+      g.lineWidth = thick + 4 + gl * 9;
+      g.strokeStyle = col;
+      g.stroke();
+      g.globalCompositeOperation = 'source-over';
+    }
+    traceBuf(N, yBuf);
+    g.strokeStyle = col;
+    g.globalAlpha = op * 0.95;
+    g.lineWidth = thick;
+    g.stroke();
+
+    traceBuf(N, yMirrorBuf);
+    g.globalAlpha = op * 0.65;
+    g.lineWidth = Math.max(1, thick * 0.8);
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+
+  function drawPulseOrb(t, wv, bl) {
+    if (wv.mute || wv.opacity <= 0) return;
+    const s = t / 1000;
+    const rate = 0.2 + 2.4 * (eff(wv, 'speed') / 100);
+    const avgL = bl[wv.band] ?? bl.rms;
+    const cy = H / 2, cx = Wd / 2;
+    const col = strokeFor(wv, t);
+    const colSolid = wv.colorMode === 'rainbow' ? '#9adcff' : wv.c1;
+    const colSec = wv.colorMode === 'gradient' ? wv.c2 : colSolid;
+    const op = wv.opacity / 100, gl = wv.glow / 100;
+    const baseR = Math.max(5, Math.min(H * 0.36, 6 + ampOf(H, avgL, wv) * 0.85));
+
+    // Horizon line with center swell
+    const N = Math.max(64, Math.floor(Wd / 3));
+    ensureYBuf(N + 1);
+    const ph = s * 3.1 * rate;
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const dist = Math.abs(u - 0.5) * 2;
+      const centerEnv = Math.exp(-dist * dist * 5.5);
+      yBuf[i] = cy + Math.sin(u * Math.PI * 6 - ph) * baseR * 0.45 * centerEnv;
+    }
+    traceBuf(N, yBuf);
+    g.strokeStyle = col;
+    g.lineCap = 'round';
+    g.globalAlpha = op * 0.72;
+    g.lineWidth = Math.max(1.2, (+wv.thick || 2) * 0.85);
+    g.stroke();
+
+    // Glowing breathing core + outer ring
+    const orbGr = g.createRadialGradient(cx, cy, 1, cx, cy, baseR * 1.45);
+    orbGr.addColorStop(0, rgba('#ffffff', 0.92));
+    orbGr.addColorStop(0.32, rgba(colSolid, 0.72));
+    orbGr.addColorStop(0.7, rgba(colSec, 0.22));
+    orbGr.addColorStop(1, 'rgba(0,0,0,0)');
+    if (gl > 0) g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = op * (0.75 + 0.25 * sm(avgL));
+    g.fillStyle = orbGr;
+    g.beginPath();
+    g.arc(cx, cy, baseR * 1.45, 0, Math.PI * 2);
+    g.fill();
+    g.globalCompositeOperation = 'source-over';
+
+    // Traveling concentric pulse halo
+    const ringPhase = (s * 0.65 * rate) % 1;
+    const ringR = baseR * (0.7 + ringPhase * (1.1 + sm(avgL) * 0.7));
+    g.beginPath();
+    g.arc(cx, cy, ringR, 0, Math.PI * 2);
+    g.strokeStyle = col;
+    g.globalAlpha = op * (1 - ringPhase) * (0.35 + 0.45 * sm(avgL));
+    g.lineWidth = 1.4;
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+
+  function drawCapsuleEq(t, wv, bl) {
+    if (wv.mute || wv.opacity <= 0) return;
+    const count = Math.max(8, Math.min(48, Math.round(wv.barCount ?? 22)));
+    const gap = Math.max(1, Math.min(8, +(wv.barGap ?? 3)));
+    const cyc = PEAK_CYC[wv.peaks] || 3;
+    const rate = 0.14 + 2.6 * (eff(wv, 'speed') / 100);
+    const s = t / 1000;
+    const wob = 0.74 + 0.26 * Math.sin(2 * Math.PI * 0.9 * rate * s + 0.7) * Math.sin(2 * Math.PI * 1.3 * rate * s);
+    const slot = Wd / count;
+    const bw = Math.max(2.2, slot - gap);
+    const col = strokeFor(wv, t);
+    const colSolid = wv.colorMode === 'rainbow' ? '#9adcff' : wv.c1;
+    const op = wv.opacity / 100, gl = wv.glow / 100;
+
+    for (let i = 0; i < count; i++) {
+      const u = (i + 0.5) / count;
+      const win = 0.32 + 0.68 * Math.sin(Math.PI * u);
+      const amp = ampOf(H, sm(barBase(u, bl, wv)), wv);
+      const mod = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * u - s * 2.4 * rate + Math.sin(s * 1.4 * rate + u * 4)));
+      const h = Math.max(bw, Math.min(H * 0.9, amp * 1.9 * mod * win * profMul(wv.profile || 'flat', u) * wob));
+      barGeoX[i] = i * slot + (slot - bw) / 2;
+      barGeoY[i] = H / 2 - h / 2;
+      barGeoH[i] = h;
+    }
+
+    if (gl > 0) {
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = op * 0.2 * gl;
+      g.fillStyle = rgba(colSolid, 0.55);
+      const rHalo = Math.min((bw + 4) / 2, 6);
+      g.beginPath();
+      for (let i = 0; i < count; i++) {
+        if (g.roundRect) { g.moveTo(barGeoX[i] - 1.5, barGeoY[i] - 1.5); g.roundRect(barGeoX[i] - 1.5, barGeoY[i] - 1.5, bw + 3, barGeoH[i] + 3, rHalo); }
+        else g.rect(barGeoX[i] - 1.5, barGeoY[i] - 1.5, bw + 3, barGeoH[i] + 3);
+      }
+      g.fill();
+      g.globalCompositeOperation = 'source-over';
+    }
+
+    g.globalAlpha = op * 0.92;
+    g.fillStyle = col;
+    const r = bw / 2;
+    g.beginPath();
+    for (let i = 0; i < count; i++) {
+      if (g.roundRect) { g.moveTo(barGeoX[i], barGeoY[i]); g.roundRect(barGeoX[i], barGeoY[i], bw, barGeoH[i], r); }
+      else g.rect(barGeoX[i], barGeoY[i], bw, barGeoH[i]);
+    }
+    g.fill();
+
+    // Tiny luminous peak dots at top of active capsules
+    if (bw >= 3) {
+      g.globalAlpha = op * 0.72;
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      const dotR = Math.min(1.4, bw * 0.24);
+      for (let i = 0; i < count; i++) {
+        if (barGeoH[i] <= bw * 1.6) continue;
+        const cx = barGeoX[i] + bw / 2;
+        const cyTop = barGeoY[i] + bw * 0.42;
+        g.moveTo(cx + dotR, cyTop);
+        g.arc(cx, cyTop, dotR, 0, Math.PI * 2);
+      }
+      g.fill();
+    }
+    g.globalAlpha = 1;
+  }
+
   function drawStack(t, dt, bl0) {
     drawAurora();
     const bl = bl0 || { low: 0, mid: 0, high: 0, rms: 0 };
@@ -593,6 +954,10 @@ export function createWaveRenderer(canvas) {
       if (!top) top = wv;
       const smBl = fillSmBl(wv, bl);
       if (wv.type === 'bars') drawBars(t, wv, smBl);
+      else if (wv.type === 'capsule-eq') drawCapsuleEq(t, wv, smBl);
+      else if (wv.type === 'silk') drawSilkWave(t, wv, smBl);
+      else if (wv.type === 'droplet') drawDropletWave(t, wv, smBl);
+      else if (wv.type === 'pulse-orb') drawPulseOrb(t, wv, smBl);
       else drawWave(t, wv, smBl);
     }
     // Note: top-most visible wave is index 0

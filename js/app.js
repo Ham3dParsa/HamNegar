@@ -11,6 +11,7 @@ import { VERSION, BUILD } from './modules/version.js';
 import { mountStagebar } from './modules/stagebar.js';
 import { mountSettingsModal } from './modules/settingsModal.js';
 import { mountWaveTab } from './modules/waveTab.js';
+import { mountToolsTab, refreshToolsTab } from './modules/toolsTab.js';
 import {
   mountChains, getSttChain, setSttChain, getPolishChain, setPolishChain,
   renderAllChains, renderFlowListSoon, renderCustomProviders, flowInit, persistChains,
@@ -36,8 +37,10 @@ const els = {
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
   btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'),
+  tabAi: $('tab-ai'), panelAi: $('panel-ai'),
   tabKeys: $('tab-keys'), panelKeys: $('panel-keys'),
   tabBehavior: $('tab-behavior'), panelBehavior: $('panel-behavior'),
+  tabTools: $('tab-tools'), panelTools: $('panel-tools'),
   tabPipeline: $('tab-pipeline'), panelPipeline: $('panel-pipeline'),
   tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   btnExpandStt: $('btn-expand-stt'), btnExpandPolish: $('btn-expand-polish'),
@@ -272,8 +275,9 @@ const Settings = mountSettingsModal({
   waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, mainWaveSync,
   isWaveMicActive,
   onPipelineOpen: () => ensureLiveCatalog(),
+  onToolsOpen: () => mountToolsTab({ onToolsChanged: () => Stagebar?.renderToolsUI?.() }),
   syncCustomProviderSelects,
-  onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); },
+  onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); try { refreshToolsTab(); } catch {} },
 });
 const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey } = Settings;
 $('btn-x-modal')?.addEventListener('click', () => closeModal());
@@ -283,7 +287,7 @@ $('btn-x-modal')?.addEventListener('click', () => closeModal());
 // chains.js owns labels, chain state, flow cache/filters and all row/panel behavior verbatim.
 mountChains({
   els, updateBadge, saveSettings, shortcutsOpen, renderProvidersStatus,
-  onChainsRendered: () => { try { Stagebar.renderStageModelOptions(); } catch {} },
+  onChainsRendered: () => { try { Stagebar.renderStageModelOptions(); } catch {} try { refreshToolsTab(); } catch {} },
   onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); },
 });
 
@@ -1948,8 +1952,8 @@ const GUIDE = {
     { id:'g-diffapply', title:'اعمال نتیجه', body:'نتیجه بازبینی‌شده را روی متن می‌نشاند.', ref:'diff-apply' },
   ],
   config: [
-    { id:'g-settings', title:'تنظیمات استودیو', body:'آیکون چرخ‌دنده در نوار بالا تنظیمات ۴بخشی را باز می‌کند: کلیدها، رفتار، مدل‌ها و موج صدا.', ref:'btn-settings' },
-    { id:'g-keys', title:'تب کلیدها', body:'کلیدهای Groq، Google AI Studio (Gemini)، OpenRouter و ارائه‌دهنده سفارشی را اینجا وارد کن. اگر سرور میزبان فعال باشد Google Gemini خودکار در دسترس است. هر ارائه‌دهنده را می‌توانی موقت خاموش کنی یا حذف کنی و بعداً برگردانی.', ref:'provider-drawer' },
+    { id:'g-settings', title:'تنظیمات استودیو', body:'آیکون چرخ‌دنده در نوار بالا تنظیمات ۴بخشی را باز می‌کند: پیکربندی هوش مصنوعی (کلیدها و مدل‌ها)، رفتار، ابزارها و موج صدا.', ref:'btn-settings' },
+    { id:'g-keys', title:'کلیدها و ارائه‌دهندگان', body:'کلیدهای Groq، Google AI Studio (Gemini)، OpenRouter و ارائه‌دهنده سفارشی را اینجا وارد کن. اگر سرور میزبان فعال باشد Google Gemini خودکار در دسترس است. هر ارائه‌دهنده را می‌توانی موقت خاموش کنی یا حذف کنی و بعداً برگردانی.', ref:'provider-drawer' },
     { id:'g-realtime', title:'حالت آنی', body:'نمایش زنده کلمات حین صحبت و سپس جایگزینی با متن دقیق و پالایش‌شده.', ref:'toggle-realtime' },
     { id:'g-vad', title:'توقف خودکار در سکوت (VAD)', body:'برای پیام‌های سریع روشن بگذار و برای ضبط کلاس و سخنرانی خاموش کن.', ref:'toggle-vad' },
     { id:'g-polish', title:'پالیش خودکار فارسی', body:'اصلاح خودکار نیم‌فاصله و نگارش پس از هر رونویسی.', ref:'toggle-polish' },
@@ -2203,6 +2207,11 @@ els.modeLecture?.addEventListener('click', () => applyPresetMode('lecture'));
 els.presetQuick?.addEventListener('click', () => applyPresetMode('quick'));
 els.presetLecture?.addEventListener('click', () => applyPresetMode('lecture'));
 
+$('btn-manage-tools')?.addEventListener('click', () => {
+  setToolsOpen(false);
+  openModal('tools');
+});
+
 // stagebar run/wiring lives in js/modules/stagebar.js
 Stagebar = mountStagebar({
   getSelStart: () => selStart, getSelEnd: () => selEnd,
@@ -2211,6 +2220,7 @@ Stagebar = mountStagebar({
   saveCursor, updateCounts, editorHistory, syncActionbar, engineInfo,
   entryIdOf, providerIdOf, sanitizeMsg, diffEls, openDiffRunning, fillDiffSheet, closeDiffSheet,
   onActionTriggered: () => setToolsOpen(false),
+  onManageTools: () => { setToolsOpen(false); openModal('tools'); },
 });
 mainWaveInit();
 waveKillApply();

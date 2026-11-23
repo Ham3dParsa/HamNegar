@@ -150,7 +150,7 @@ export async function transcribeAudio({ model, mimeType, data }) {
   };
 }
 
-export async function generateText({ model, text, system, maxOutputTokens }) {
+export async function generateText({ model, text, system, maxOutputTokens, temperature }) {
   const ai = getClient();
   const resolvedModel = resolveTextModel(model);
 
@@ -180,6 +180,10 @@ export async function generateText({ model, text, system, maxOutputTokens }) {
   if (Number.isFinite(parsedBudget) && parsedBudget >= 64) {
     config.maxOutputTokens = Math.min(8192, Math.round(parsedBudget));
   }
+  const parsedTemp = Number(temperature);
+  if (Number.isFinite(parsedTemp) && parsedTemp >= 0 && parsedTemp <= 1) {
+    config.temperature = parsedTemp;
+  }
 
   let activeModel = resolvedModel;
   let response;
@@ -189,8 +193,17 @@ export async function generateText({ model, text, system, maxOutputTokens }) {
       contents: text,
       config,
     });
+    if (!(response?.text || '').trim() && activeModel !== FAST_LITE_MODEL) {
+      activeModel = FAST_LITE_MODEL;
+      response = await ai.models.generateContent({
+        model: activeModel,
+        contents: text,
+        config,
+      });
+    }
   } catch (err) {
-    if (extractHttpStatus(err) === 503 && activeModel !== FAST_LITE_MODEL) {
+    const code = extractHttpStatus(err);
+    if ((code === 503 || code === 429) && activeModel !== FAST_LITE_MODEL) {
       activeModel = FAST_LITE_MODEL;
       response = await ai.models.generateContent({
         model: activeModel,

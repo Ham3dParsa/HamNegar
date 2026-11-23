@@ -103,6 +103,7 @@
       <!-- Hero Writing & Transcript Canvas -->
       <section class="tcard" aria-label="بوم متن">
         <textarea id="output" rows="6" placeholder="دکمه ضبط پایین را بزن، فایل صوتی کلاس را بیار، یا همین‌جا بنویس…"></textarea>
+        <div id="fav-tools-bar" class="fav-tools-bar" hidden aria-label="ابزارهای محبوب"></div>
         <div class="tfoot">
           <div class="editor-history">
             <button type="button" id="btn-undo" class="tfoot-btn" data-act="undo" title="واگرد" aria-label="واگرد" disabled>
@@ -232,41 +233,15 @@
       <strong>ابزارهای متن و صوت</strong>
       <span class="tools-scope" id="tools-scope-info">کل متن</span>
     </div>
-    <button type="button" id="tools-close" class="icon-btn icon-btn--xs" aria-label="بستن ابزارها">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-    </button>
+    <div class="tools-pop__head-acts">
+      <button type="button" id="btn-manage-tools" class="btn-ghost btn-xs" title="ویرایش ترتیب، محبوب‌ها و پرامپت ابزارها">شخصی‌سازی</button>
+      <button type="button" id="tools-close" class="icon-btn icon-btn--xs" aria-label="بستن ابزارها">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
   </div>
 
-  <div class="tools-grid" role="toolbar" aria-label="مراحل پالایش و ترجمه">
-    <button type="button" id="stage-simple" class="tool-card">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span>
-      <span class="tool-card__copy"><strong>پالایش ساده</strong><small>املا، نیم‌فاصله و علائم</small></span>
-    </button>
-    <button type="button" id="stage-advanced" class="tool-card">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 3l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/><path d="M3 9h8M3 15h8"/><circle cx="15" cy="9" r="2"/><circle cx="15" cy="15" r="2"/><path d="M17 9h4M17 15h4"/></svg></span>
-      <span class="tool-card__copy"><strong>پالایش پیشرفته</strong><small>املا، نگارش و دستور کامل</small></span>
-    </button>
-    <button type="button" id="stage-grammar" class="tool-card">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 10h11M4 14h6"/><path d="M13 17l2.2 2.2L20.5 14"/></svg></span>
-      <span class="tool-card__copy"><strong>پالایش دستوری</strong><small>اصلاح ساختار جمله و فعل</small></span>
-    </button>
-    <button type="button" id="stage-structure" class="tool-card tool-card--smart">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 10h11"/><path d="M9 15h11M9 19h8"/><circle cx="5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="5" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg></span>
-      <span class="tool-card__copy"><strong>ساختاردهی متن</strong><small>پاراگراف و لیست بر اساس گفته</small></span>
-    </button>
-    <button type="button" id="stage-tr-quick" class="tool-card">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg></span>
-      <span class="tool-card__copy"><strong>ترجمه <span dir="ltr">EN⇄FA</span></strong><small>تبدیل فوری فارسی و انگلیسی</small></span>
-    </button>
-    <button type="button" id="stage-tr-panel" class="tool-card" aria-pressed="false">
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
-      <span class="tool-card__copy"><strong>سایر زبان‌ها</strong><small>آلمانی، عربی، ترکی و…</small></span>
-    </button>
-    <button type="button" id="stage-raw" class="tool-card tool-card--span2" disabled>
-      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg></span>
-      <span class="tool-card__copy"><strong>بازگشت به خام</strong><small>برگرداندن آخرین ویرایش اعمال‌شده</small></span>
-    </button>
-  </div>
+  <div id="tools-grid" class="tools-grid" role="toolbar" aria-label="مراحل پالایش و ترجمه"></div>
 
   <div class="combo" id="tr-panel" hidden>
     <input id="stage-lang-search" placeholder="جست‌وجوی زبان… (مثلاً انگلیسی، عربی، آلمانی)" role="combobox" aria-expanded="true" aria-controls="stage-lang-opts" autocomplete="off" aria-label="جست‌وجوی زبان">
@@ -330,20 +305,26 @@
     </header>
 
     <div class="settings-tabs" role="tablist" aria-label="بخش‌های تنظیمات">
-      <button type="button" class="settings-tab active" id="tab-keys" role="tab" aria-selected="true" aria-controls="panel-keys">کلیدها</button>
+      <button type="button" class="settings-tab active" id="tab-ai" role="tab" aria-selected="true" aria-controls="panel-ai">پیکربندی هوش مصنوعی</button>
       <button type="button" class="settings-tab" id="tab-behavior" role="tab" aria-selected="false" aria-controls="panel-behavior" tabindex="-1">رفتار</button>
-      <button type="button" class="settings-tab" id="tab-pipeline" role="tab" aria-selected="false" aria-controls="panel-pipeline" tabindex="-1">مدل‌ها</button>
+      <button type="button" class="settings-tab" id="tab-tools" role="tab" aria-selected="false" aria-controls="panel-tools" tabindex="-1">ابزارها</button>
       <button type="button" class="settings-tab" id="tab-wave" role="tab" aria-selected="false" aria-controls="panel-wave" tabindex="-1">موج صدا</button>
     </div>
 
-    <!-- TAB 1: Keys & Quick Setup -->
-    <section id="panel-keys" class="settings-panel" role="tabpanel" aria-labelledby="tab-keys">
+    <!-- TAB 1: AI Config (Keys & Providers + Models & Chains) -->
+    <section id="panel-ai" class="settings-panel" role="tabpanel" aria-labelledby="tab-ai">
+      <div class="ai-subtabs" role="tablist" aria-label="بخش‌های پیکربندی هوش مصنوعی">
+        <button type="button" class="ai-subtab active" id="tab-keys" role="tab" aria-selected="true" aria-controls="panel-keys">کلیدها و ارائه‌دهندگان</button>
+        <button type="button" class="ai-subtab" id="tab-pipeline" role="tab" aria-selected="false" aria-controls="panel-pipeline" tabindex="-1">مدل‌ها و زنجیره</button>
+      </div>
+
+      <section id="panel-keys" class="ai-subpanel" role="tabpanel" aria-labelledby="tab-keys">
       <div class="setup-intro">
         <p>فقط وارد کردن <strong>یک کلید رایگان</strong> (Groq برای سرعت و دقت فارسی، یا Google AI Studio) کافیست. کلیدها روی دستگاه خودت ذخیره می‌شوند و هر ارائه‌دهنده را می‌توانی هر زمان روشن، خاموش یا حذف کنی.</p>
       </div>
 
       <div id="provider-drawer" class="providers-stack">
-        <details class="provider-card" id="provider-card-groq" data-provider="groq" open>
+        <details class="provider-card" id="provider-card-groq" data-provider="groq">
           <summary class="provider-head">
             <label class="prov-switch" title="روشن یا خاموش کردن Groq">
               <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="groq" checked aria-label="فعال بودن Groq">
@@ -385,7 +366,7 @@
           </div>
         </details>
 
-        <details class="provider-card" id="provider-card-gemini" data-provider="google" open>
+        <details class="provider-card" id="provider-card-gemini" data-provider="google">
           <summary class="provider-head">
             <label class="prov-switch" title="روشن یا خاموش کردن Google Gemini">
               <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="google" checked aria-label="فعال بودن Google Gemini">
@@ -472,49 +453,9 @@
 
         <div id="restore-providers-bar" class="restore-providers-bar" hidden></div>
       </div>
-    </section>
-
-    <!-- TAB 2: Behavior & Presets -->
-    <section id="panel-behavior" class="settings-panel" role="tabpanel" aria-labelledby="tab-behavior" hidden>
-      <section class="pref-section">
-        <div class="pref-head"><h4>حالت آماده کار</h4></div>
-        <div class="preset-grid">
-          <button type="button" class="preset-card" id="preset-quick">
-            <strong>روزمره و سریع</strong>
-            <span>توقف خودکار پس از سکوت (VAD)؛ ایده‌آل برای پیام‌های کوتاه و تایپ یک‌دستی روی موبایل.</span>
-          </button>
-          <button type="button" class="preset-card" id="preset-lecture">
-            <strong>کلاس و نگارش طولانی</strong>
-            <span>ضبط پیوسته بدون قطع در مکث‌های استاد یا هنگام فکر کردن؛ توقف فقط با لمس خودت.</span>
-          </button>
-        </div>
       </section>
 
-      <section class="pref-section">
-        <div class="pref-head"><h4>تنظیمات دقیق رفتار</h4></div>
-        <div class="behavior-chips">
-          <label class="chip">
-            <input type="checkbox" id="toggle-realtime">
-            <span class="chip-copy"><strong>حالت آنی (پیش‌نمایش زنده)</strong><span>نمایش کلمات در لحظه صحبت با موتور مرورگر، سپس جایگزینی با متن دقیق نهایی</span></span>
-          </label>
-          <label class="chip">
-            <input type="checkbox" id="toggle-vad" checked>
-            <span class="chip-copy"><strong>توقف خودکار پس از سکوت (VAD)</strong><span>پس از ۱.۵ ثانیه سکوت، ضبط را خودکار می‌بندد و به متن تبدیل می‌کند</span></span>
-          </label>
-          <label class="chip">
-            <input type="checkbox" id="toggle-polish" checked>
-            <span class="chip-copy"><strong>پالیش خودکار فارسی</strong><span>اصلاح نیم‌فاصله، علائم نگارشی و غلط‌های املایی پس از هر رونویسی</span></span>
-          </label>
-          <label class="chip">
-            <input type="checkbox" id="toggle-autocopy">
-            <span class="chip-copy"><strong>کپی خودکار پس از تبدیل</strong><span>متن نهایی را بلافاصله در کلیپ‌بورد قرار می‌دهد</span></span>
-          </label>
-        </div>
-      </section>
-    </section>
-
-    <!-- TAB 3: Pipeline & Models -->
-    <section id="panel-pipeline" class="settings-panel" role="tabpanel" aria-labelledby="tab-pipeline" hidden>
+      <section id="panel-pipeline" class="ai-subpanel" role="tabpanel" aria-labelledby="tab-pipeline" hidden>
       <div class="catalog-toolbar">
         <div class="catalog-toolbar__info">
           <strong>کاتالوگ زنده مدل‌ها</strong>
@@ -531,7 +472,7 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-stt-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره کنار ردیف را بکش یا با دکمه‌های بالا و پایین کارت‌ها جایگاه را عوض کن.</p>
+        <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره کنار ردیف را بکش یا از دکمه‌های مستقیم اولویت ۱ (⤒)، پله‌ای (▲/▼)، انتها (⤓) و حذف (🗑) استفاده کن.</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
           <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-expanded="false" aria-controls="stt-add-panel">
@@ -560,7 +501,7 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-polish-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود؛ ابزار «ساختاردهی متن» به‌طور هوشمند قوی‌ترین مدل فعال زنجیره را در اولویت قرار می‌دهد.</p>
+        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود (ابزارهای هوشمند مدل قوی‌تر را در اولویت می‌گذارند)؛ با ⤒/▲/▼/⤓ و 🗑 جایگاه هر مدل را تنظیم کن.</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
           <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">
@@ -585,7 +526,7 @@
       <details class="provider-card" id="models-explorer-card">
         <summary class="provider-head"><b>کاوشگر کامل و افزودن مدل دلخواه</b></summary>
         <div class="provider-body">
-          <div class="state-card state-warn" id="m-nokey" hidden>کلید این ارائه‌دهنده ثبت نشده — <a href="#" id="m-nokey-link">رفتن به تب کلیدها</a></div>
+          <div class="state-card state-warn" id="m-nokey" hidden>کلید این ارائه‌دهنده ثبت نشده — <a href="#" id="m-nokey-link">رفتن به بخش کلیدها</a></div>
           <div class="fetch-bar">
             <div class="fchips" id="m-prov-chips" role="group" aria-label="فیلتر ارائه‌دهنده">
               <button type="button" class="fchip active" data-prov="all" aria-pressed="true">همه</button>
@@ -602,7 +543,7 @@
               <button type="button" class="fchip" data-cap="free" aria-pressed="false">رایگان</button>
             </div>
             <div class="count hint-inline" id="m-count" aria-live="polite"></div>
-            <div class="hint" id="easy-models-hint">برای دریافت جدیدترین مدل‌های هر ارائه‌دهنده، دکمه «بروزرسانی کاتالوگ زنده» در بالای همین تب را بزن.</div>
+            <div class="hint" id="easy-models-hint">برای دریافت جدیدترین مدل‌های هر ارائه‌دهنده، دکمه «بروزرسانی کاتالوگ زنده» در بالای همین بخش را بزن.</div>
           </div>
 
           <div class="manual-model-box" id="m-manual-wrap">
@@ -634,63 +575,192 @@
           <div class="state-card state-empty" id="m-empty" hidden>مدلی با این فیلترها پیدا نشد — از بخش «افزودن مستقیم مدل دلخواه» بالا می‌توانی هر مدلی را اضافه کنی.</div>
         </div>
       </details>
+      </section>
     </section>
 
-    <!-- TAB 4: Wave Studio -->
+    <!-- TAB 2: Behavior & Presets -->
+    <section id="panel-behavior" class="settings-panel" role="tabpanel" aria-labelledby="tab-behavior" hidden>
+      <section class="pref-section">
+        <div class="pref-head"><h4>حالت آماده کار</h4></div>
+        <div class="preset-grid">
+          <button type="button" class="preset-card" id="preset-quick">
+            <strong>روزمره و سریع</strong>
+            <span>توقف خودکار پس از سکوت (VAD)؛ ایده‌آل برای پیام‌های کوتاه و تایپ یک‌دستی روی موبایل.</span>
+          </button>
+          <button type="button" class="preset-card" id="preset-lecture">
+            <strong>کلاس و نگارش طولانی</strong>
+            <span>ضبط پیوسته بدون قطع در مکث‌های استاد یا هنگام فکر کردن؛ توقف فقط با لمس خودت.</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="pref-section">
+        <div class="pref-head"><h4>ترجیح لحن متن و پالیش</h4></div>
+        <div class="preset-grid" id="tone-pref-group" role="group" aria-label="ترجیح لحن متن">
+          <button type="button" class="preset-card active" data-tone="preserve" aria-pressed="true">
+            <strong>حفظ لحن خودمانی و گفتاری (پیش‌فرض)</strong>
+            <span>«می‌خوام بگم» ← همان «می‌خوام بگم» می‌ماند؛ بدون تبدیل خودسرانه به لحن کتابی و خشک.</span>
+          </button>
+          <button type="button" class="preset-card" data-tone="formal" aria-pressed="false">
+            <strong>تبدیل به نثر رسمی و کتابی</strong>
+            <span>«می‌خوام بگم» ← به «می‌خواهم بگویم» ویرایش می‌شود؛ مناسب گزارش و نامه اداری.</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="pref-section">
+        <div class="pref-head"><h4>تنظیمات دقیق رفتار</h4></div>
+        <div class="behavior-chips">
+          <label class="chip">
+            <input type="checkbox" id="toggle-realtime">
+            <span class="chip-copy"><strong>حالت آنی (پیش‌نمایش زنده)</strong><span>نمایش کلمات در لحظه صحبت با موتور مرورگر، سپس جایگزینی با متن دقیق نهایی</span></span>
+          </label>
+          <label class="chip">
+            <input type="checkbox" id="toggle-vad" checked>
+            <span class="chip-copy"><strong>توقف خودکار پس از سکوت (VAD)</strong><span>پس از ۱.۵ ثانیه سکوت، ضبط را خودکار می‌بندد و به متن تبدیل می‌کند</span></span>
+          </label>
+          <label class="chip">
+            <input type="checkbox" id="toggle-polish" checked>
+            <span class="chip-copy"><strong>پالیش خودکار فارسی</strong><span>اصلاح نیم‌فاصله، علائم نگارشی و غلط‌های املایی پس از هر رونویسی</span></span>
+          </label>
+          <label class="chip">
+            <input type="checkbox" id="toggle-autocopy">
+            <span class="chip-copy"><strong>کپی خودکار پس از تبدیل</strong><span>متن نهایی را بلافاصله در کلیپ‌بورد قرار می‌دهد</span></span>
+          </label>
+        </div>
+      </section>
+    </section>
+
+    <!-- TAB 3: Tools Studio (Customize, Favorite Pin, Edit/Create Prompts, Live Tester) -->
+    <section id="panel-tools" class="settings-panel" role="tabpanel" aria-labelledby="tab-tools" hidden>
+      <section class="pref-section">
+        <div class="pref-head">
+          <h4>ترتیب و محبوب‌سازی ابزارها</h4>
+          <div class="row-actions">
+            <button type="button" class="btn-ghost btn-xs" id="btn-tools-reset-all">بازنشانی پیش‌فرض</button>
+            <button type="button" class="btn-primary btn-xs" id="btn-tool-new">＋ ابزار جدید</button>
+          </div>
+        </div>
+        <p class="pref-sub">ابزارهای ستاره‌دار (★) به شکل دم‌دستی پایین کادر متن هم ظاهر می‌شوند. می‌توانی ترتیب، عنوان، پرامپت و نمایش هر ابزار را تغییر دهی.</p>
+        <div id="tools-manager-list" class="tools-mgr-list" role="list" aria-label="فهرست ابزارها"></div>
+      </section>
+
+      <section class="tool-editor-card" id="tool-editor-card" hidden aria-label="ویرایشگر ابزار و پرامپت سیستمی">
+        <div class="pref-head">
+          <h4 id="tool-editor-heading">ویرایش ابزار</h4>
+          <button type="button" class="btn-ghost btn-xs" id="btn-tool-reset-one" hidden>بازگردانی پرامپت پیش‌فرض</button>
+        </div>
+        <div class="tool-editor-grid">
+          <div>
+            <label for="tool-ed-label">نام ابزار</label>
+            <input type="text" id="tool-ed-label" placeholder="مثلاً خلاصه‌ساز جلسه" maxlength="48">
+          </div>
+          <div>
+            <label for="tool-ed-sub">توضیح کوتاه</label>
+            <input type="text" id="tool-ed-sub" placeholder="مثلاً ۳ نکته کلیدی با بولت" maxlength="90">
+          </div>
+        </div>
+        <div>
+          <label for="tool-ed-system">پرامپت سیستمی (<span dir="ltr">System Prompt</span>)</label>
+          <textarea id="tool-ed-system" class="tool-prompt-area" rows="4" dir="auto" placeholder="دستور دقیق به مدل را بنویس…"></textarea>
+        </div>
+        <div class="tool-editor-checks">
+          <label class="chip-inline"><input type="checkbox" id="tool-ed-tone" checked><span>پیروی از ترجیح لحن گفتار (خودمانی / کتابی)</span></label>
+          <label class="chip-inline"><input type="checkbox" id="tool-ed-smart"><span>اولویت هوشمند (اجرا با قوی‌ترین مدل متنی فعال)</span></label>
+        </div>
+        <div class="row-actions tool-editor-actions">
+          <button type="button" class="btn-ghost btn-sm" id="btn-tool-cancel">بستن</button>
+          <button type="button" class="btn-primary btn-sm" id="btn-tool-save">ذخیره ابزار</button>
+        </div>
+      </section>
+
+      <section class="tool-sandbox" id="tool-sandbox" aria-label="آزمایشگاه زنده پرامپت">
+        <div class="pref-head">
+          <h4>آزمایشگاه زنده پرامپت</h4>
+          <span class="hint-inline" id="tool-test-tone-note"></span>
+        </div>
+        <p class="pref-sub">پیش از ذخیره می‌توانی پرامپت بالا را با متن آماده یا متن دلخواه خودت تست کنی.</p>
+        <div class="sandbox-samples" role="group" aria-label="متن‌های آماده تست">
+          <button type="button" class="fchip" data-sandbox-sample="casual">نمونه خودمانی روزمره</button>
+          <button type="button" class="fchip" data-sandbox-sample="tasks">نمونه نکات و لیست کارها</button>
+          <button type="button" class="fchip" data-sandbox-sample="tech">نمونه فنی دوزبانه</button>
+          <button type="button" class="fchip" data-sandbox-sample="en">نمونه انگلیسی</button>
+        </div>
+        <textarea id="tool-test-input" class="tool-sandbox-area" rows="3" dir="auto" placeholder="متن نمونه برای تست پرامپت…" aria-label="متن نمونه برای تست پرامپت"></textarea>
+        <div class="sandbox-run-bar">
+          <select id="tool-test-model" aria-label="مدل تست پرامپت"></select>
+          <button type="button" class="btn-primary btn-sm" id="btn-tool-test">اجرای تست پرامپت</button>
+        </div>
+        <div id="tool-test-output" class="sandbox-output" dir="auto" hidden></div>
+        <div id="tool-test-meta" class="hint-inline sandbox-meta"></div>
+      </section>
+    </section>
+
+
+    <!-- TAB 5: Wave Studio -->
     <section id="panel-wave" class="settings-panel" role="tabpanel" aria-labelledby="tab-wave" hidden>
-      <div class="wave-sticky" aria-label="پیش‌نمایش زنده موج">
+      <div class="wave-sticky wave-stage" aria-label="پیش‌نمایش زنده موج">
         <div class="wave-preview-wrap"><canvas id="wave-preview"></canvas></div>
-        <div class="wave-sticky-meta">
-          <span class="pref-sub" id="wave-count">۱ موج</span>
-          <span class="pref-sub" id="wave-name"></span>
+        <div class="wave-stage-bar">
+          <div class="wave-sticky-meta">
+            <span class="wave-meta-name" id="wave-name"></span>
+            <span class="wave-meta-sep" aria-hidden="true">·</span>
+            <span class="wave-meta-count" id="wave-count">۱ موج</span>
+          </div>
+          <div class="wave-stage-actions">
+            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-xs">مصنوعی: روشن</button>
+            <button type="button" id="wave-mic-test" class="btn-ghost btn-xs">تست با صدای من</button>
+          </div>
         </div>
+        <div class="wslider-mount wslider-compact" data-label="حساسیت ورودی پیش‌نمایش" data-unit="٪" data-def="50"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="50" aria-label="حساسیت پیش‌نمایش"></div>
       </div>
 
-      <div class="pref-section" aria-label="منبع پیش‌نمایش">
-        <div class="pref-head"><h4>منبع پیش‌نمایش</h4></div>
-        <div class="wave-row-btns">
-          <button type="button" id="wave-mic-test" class="btn-ghost btn-sm">تست با صدای من</button>
-          <button type="button" id="wave-fake-toggle" class="btn-ghost btn-sm">مصنوعی: روشن</button>
-        </div>
-        <div class="wslider-mount" data-label="حساسیت پیش‌نمایش" data-unit="٪" data-def="50"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="50" aria-label="حساسیت پیش‌نمایش"></div>
-      </div>
-
-      <div class="pref-section" aria-label="طرح‌های آماده">
-        <div class="pref-head"><h4>طرح‌های آماده موج</h4><span class="pref-sub">یک لمس برای تغییر سبک</span></div>
+      <div class="wave-section" aria-label="طرح‌های آماده">
+        <div class="pref-head"><h4>طرح‌های آماده</h4><span class="pref-sub">لمس برای اعمال فوری</span></div>
         <div class="wave-cards" id="wave-starters"></div>
       </div>
 
-      <div class="pref-section" aria-label="پشته موج">
-        <div class="pref-head"><h4>لایه‌های موج (تا ۵ لایه)</h4><span class="pref-sub">بالاترین ردیف در جلو</span></div>
-        <div id="wave-list" class="wave-list"></div>
-        <div class="wave-row-btns">
-          <button type="button" id="wave-add" class="btn-ghost btn-sm">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span>افزودن موج</span>
-          </button>
-          <button type="button" id="wave-dice" class="btn-ghost btn-sm">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
-            <span>ترکیب تصادفی</span>
-          </button>
+      <div class="wave-section" aria-label="پشته موج">
+        <div class="pref-head">
+          <h4>لایه‌های موج</h4>
+          <div class="row-actions">
+            <button type="button" id="wave-dice" class="btn-ghost btn-xs" title="ترکیب تصادفی رنگ و موج">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+              <span>تصادفی</span>
+            </button>
+            <button type="button" id="wave-add" class="btn-ghost btn-xs">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+              <span>لایه جدید</span>
+            </button>
+          </div>
         </div>
+        <div id="wave-list" class="wave-list"></div>
       </div>
 
-      <div class="pref-section wave-globals" aria-label="تنظیمات سراسری موج">
-        <div class="pref-head"><h4>تنظیمات سراسری پشته</h4><button type="button" id="wave-reset" class="btn-ghost btn-xs">بازنشانی</button></div>
-        <p class="pref-sub wave-group-note">مبنای همه لایه‌ها؛ هر لایه در بخش پیشرفته می‌تواند مقدار مستقل داشته باشد.</p>
-        <div class="wslider-mount" data-label="حساسیت" data-unit="٪" data-def="50"><input type="range" id="wave-sens" min="0" max="100" step="1" value="50" aria-label="حساسیت"></div>
-        <div class="wslider-mount" data-label="سرعت پاسخ (اتک)" data-unit="٪" data-def="50"><input type="range" id="wave-atk" min="0" max="100" step="1" value="50" aria-label="سرعت پاسخ"></div>
-        <div class="wslider-mount" data-label="سرعت جریان" data-unit="٪" data-def="50"><input type="range" id="wave-spd" min="0" max="100" step="1" value="50" aria-label="سرعت"></div>
-        <div class="wslider-mount" data-label="شدت نوسان" data-unit="٪" data-def="50"><input type="range" id="wave-int" min="0" max="100" step="1" value="50" aria-label="شدت"></div>
-        <div class="wslider-mount" data-label="نرمی محو شدن" data-unit="٪" data-def="50"><input type="range" id="wave-sm" min="0" max="100" step="1" value="50" aria-label="نرمی"></div>
-        <div class="wslider-mount" data-label="تعداد ذرات" data-unit="" data-def="12"><input type="range" id="wave-parts" min="0" max="24" step="1" value="12" aria-label="ذرات"></div>
-        <div class="behavior-chips">
-          <label class="chip"><input type="checkbox" id="wave-aurora"><span class="chip-copy"><strong>هاله زمینه (Aurora)</strong><span>نورپردازی ملایم پشت موج صوتی</span></span></label>
+      <div class="wave-section wave-globals" aria-label="تنظیمات سراسری موج">
+        <div class="pref-head">
+          <h4>تنظیمات کلی و نورپردازی</h4>
+          <button type="button" id="wave-reset" class="btn-ghost btn-xs">بازنشانی</button>
+        </div>
+        <div class="wave-globals-grid">
+          <div class="wslider-mount" data-label="حساسیت" data-unit="٪" data-def="50"><input type="range" id="wave-sens" min="0" max="100" step="1" value="50" aria-label="حساسیت"></div>
+          <div class="wslider-mount" data-label="سرعت پاسخ (اتک)" data-unit="٪" data-def="50"><input type="range" id="wave-atk" min="0" max="100" step="1" value="50" aria-label="سرعت پاسخ"></div>
+          <div class="wslider-mount" data-label="سرعت جریان" data-unit="٪" data-def="50"><input type="range" id="wave-spd" min="0" max="100" step="1" value="50" aria-label="سرعت"></div>
+          <div class="wslider-mount" data-label="شدت نوسان" data-unit="٪" data-def="50"><input type="range" id="wave-int" min="0" max="100" step="1" value="50" aria-label="شدت"></div>
+          <div class="wslider-mount" data-label="نرمی محو شدن" data-unit="٪" data-def="50"><input type="range" id="wave-sm" min="0" max="100" step="1" value="50" aria-label="نرمی"></div>
+          <div class="wslider-mount" data-label="تعداد ذرات" data-unit="" data-def="12"><input type="range" id="wave-parts" min="0" max="24" step="1" value="12" aria-label="ذرات"></div>
+        </div>
+        <div class="wave-toggles-strip">
+          <label class="wave-switch-row">
+            <input type="checkbox" id="wave-aurora">
+            <span class="wave-switch-copy"><strong>هاله زمینه (Aurora)</strong><small>درخشش ملایم پشت موج</small></span>
+          </label>
+          <label class="wave-switch-row">
+            <input type="checkbox" id="wave-hide">
+            <span class="wave-switch-copy"><strong>پنهان‌سازی نوار موج</strong><small>مصرف باتری کمتر</small></span>
+          </label>
         </div>
         <div class="wslider-mount" data-label="ته‌رنگ هاله زمینه" data-unit="°" data-def="220"><input type="range" id="wave-aurora-hue" min="0" max="360" step="1" value="220" aria-label="ته‌رنگ زمینه"></div>
-        <div class="behavior-chips">
-          <label class="chip"><input type="checkbox" id="wave-hide"><span class="chip-copy"><strong>پنهان‌سازی نوار موج</strong><span>حذف انیمیشن موج برای مصرف باتری کمتر</span></span></label>
-        </div>
       </div>
     </section>
 
