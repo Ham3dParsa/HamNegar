@@ -145,6 +145,8 @@ const KEYS = {
   OPENROUTER: 'KEY_OPENROUTER',
   OPENROUTER_BASE: 'OPENROUTER_BASE_URL',
   CUSTOM_PROVIDERS: 'CUSTOM_PROVIDERS',
+  DISABLED_PROVIDERS: 'DISABLED_PROVIDERS',
+  REMOVED_PROVIDERS: 'REMOVED_PROVIDERS',
   PRIMARY: 'PRIMARY_ENGINE',
   MODEL: 'GEMINI_MODEL',
   STT_CHAIN: 'STT_CHAIN',
@@ -179,6 +181,21 @@ let _settingsCache = null;
 let _settingsDirty = true;
 let _serverGeminiAvailable = false;
 
+function readIdList(key){
+  try{
+    const raw = localStorage.getItem(key);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    if(!Array.isArray(arr)) return [];
+    return [...new Set(arr.map(x => migrateProviderId(x) || String(x || '').trim()).filter(Boolean))];
+  }catch{ return []; }
+}
+function writeIdList(key, list){
+  const clean = [...new Set((Array.isArray(list) ? list : []).map(x => migrateProviderId(x) || String(x || '').trim()).filter(Boolean))];
+  try{ localStorage.setItem(key, JSON.stringify(clean)); }catch{}
+  return clean;
+}
+
 function cloneSettings(s){
   if(typeof structuredClone === 'function'){
     try{ return structuredClone(s); }catch{}
@@ -188,12 +205,16 @@ function cloneSettings(s){
     sttChain: s.sttChain.map(e => ({ ...e })),
     polishChain: s.polishChain.map(e => ({ ...e })),
     customProviders: s.customProviders.map(e => ({ ...e })),
+    disabledProviders: [...(s.disabledProviders || [])],
+    removedProviders: [...(s.removedProviders || [])],
   };
 }
 
 function hasKeyInSettings(s, pid){
+  if((s.removedProviders || []).includes(pid)) return false;
+  if((s.disabledProviders || []).includes(pid)) return false;
   if(pid === 'groq') return !!s.groqKey;
-  if(pid === 'google') return _serverGeminiAvailable;
+  if(pid === 'google') return _serverGeminiAvailable || !!(s.googleKey || s.geminiKey);
   if(pid === 'openrouter') return !!s.openrouterKey;
   const c = s.customProviders.find(x => x.id === pid);
   return !!(c && c.key);
@@ -204,7 +225,8 @@ function hasKeyInSettings(s, pid){
 // Anything else → null → full legacy normalize on read. Output on accept is built
 // in canonical key order, byte-identical to the normalize path.
 function verifyChainList(arr){
-  if(!Array.isArray(arr) || !arr.length) return null;
+  if(!Array.isArray(arr)) return null;
+  if(arr.length === 0) return [];
   const seen = new Set(); const out = [];
   for(const x of arr){
     if(!x || typeof x !== 'object' || Array.isArray(x)) return null;
@@ -267,6 +289,8 @@ function assembleSettings(sttChain, polishChain, customProviders){
     sttChain,
     polishChain,
     customProviders,
+    disabledProviders: readIdList(KEYS.DISABLED_PROVIDERS),
+    removedProviders: readIdList(KEYS.REMOVED_PROVIDERS),
     polishEnabled: peRaw === null ? true : peRaw === '1',
     realtime: localStorage.getItem(KEYS.REALTIME) === '1',
     vad: localStorage.getItem(KEYS.VAD) !== '0',
@@ -317,12 +341,10 @@ function refreshSettingsCache(){
 }
 
 function parseSTTChain(raw, defaults){
-  if(!raw) return normalizeSTTChain(defaults);
+  if(raw == null) return normalizeSTTChain(defaults);
   try{
     const arr=JSON.parse(raw);
-    if(Array.isArray(arr) && arr.length){
-      const norm=normalizeSTTChain(arr); if(norm.length) return norm;
-    }
+    if(Array.isArray(arr)) return normalizeSTTChain(arr);
   }catch{}
   return normalizeSTTChain(defaults);
 }
@@ -341,13 +363,10 @@ function checkHttpsBaseURL(v, label, field){
   return v.replace(/\/+$/,'');
 }
 function parsePolishChain(raw, defaults){
-  if(!raw) return defaults.map(e=>({ ...e }));
+  if(raw == null) return defaults.map(e=>({ ...e }));
   try{
     const arr = JSON.parse(raw);
-    if(Array.isArray(arr) && arr.length){
-      const norm = normalizePolishChain(arr);
-      if(norm.length) return norm;
-    }
+    if(Array.isArray(arr)) return normalizePolishChain(arr);
   }catch{}
   return defaults.map(e=>({ ...e }));
 }
@@ -532,6 +551,8 @@ export const Storage = {
     if ('sttChain' in patch) localStorage.setItem(KEYS.STT_CHAIN, JSON.stringify(normalizeSTTChain(patch.sttChain)));
     if ('polishChain' in patch) localStorage.setItem(KEYS.POLISH_CHAIN, JSON.stringify(normalizePolishChain(patch.polishChain)));
     if ('customProviders' in patch) localStorage.setItem(KEYS.CUSTOM_PROVIDERS, JSON.stringify(customsNorm));
+    if ('disabledProviders' in patch) writeIdList(KEYS.DISABLED_PROVIDERS, patch.disabledProviders);
+    if ('removedProviders' in patch) writeIdList(KEYS.REMOVED_PROVIDERS, patch.removedProviders);
     if ('polishEnabled' in patch) localStorage.setItem(KEYS.POLISH_ENABLED, patch.polishEnabled ? '1' : '0');
     if ('realtime' in patch) localStorage.setItem(KEYS.REALTIME, patch.realtime ? '1' : '0');
     if ('vad' in patch) localStorage.setItem(KEYS.VAD, patch.vad ? '1' : '0');
@@ -550,23 +571,87 @@ export const Storage = {
   isServerGeminiAvailable() {
     return _serverGeminiAvailable;
   },
-  getProviders() {
-    // built-ins (key presence only — never leaks key values) + customs
+  isProviderDisabled(providerId) {
+    const pid = migrateProviderId(providerId) || String(providerId || '').trim();
+    if (!pid) return false;
+    return readIdList(KEYS.DISABLED_PROVIDERS).includes(pid);
+  },
+  setProviderDisabled(providerId, disabled) {
+    const pid = migrateProviderId(providerId) || String(providerId || '').trim();
+    if (!pid) return;
+    const set = new Set(readIdList(KEYS.DISABLED_PROVIDERS));
+    if (disabled) set.add(pid);
+    else set.delete(pid);
+    writeIdList(KEYS.DISABLED_PROVIDERS, [...set]);
+    refreshSettingsCache();
+  },
+  isProviderRemoved(providerId) {
+    const pid = migrateProviderId(providerId) || String(providerId || '').trim();
+    if (!pid) return false;
+    return readIdList(KEYS.REMOVED_PROVIDERS).includes(pid);
+  },
+  getRemovedBuiltIns() {
+    const removed = new Set(readIdList(KEYS.REMOVED_PROVIDERS));
+    return BUILTIN_PROVIDER_IDS.filter(id => removed.has(id));
+  },
+  removeProvider(providerId) {
+    const pid = migrateProviderId(providerId) || String(providerId || '').trim();
+    if (!pid) return;
     const s = Storage.getSettings();
-    return [
-      { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
-      { id: 'google', name: 'Google', baseURL: '', hasKey: _serverGeminiAvailable },
-      { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
-      ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
-    ];
+    const sttChain = (s.sttChain || []).filter(e => inferSTTProviderId(typeof e === 'object' ? e.id : e, typeof e === 'object' ? (e.providerId || e.provider || '') : '') !== pid);
+    const polishChain = (s.polishChain || []).filter(e => {
+      const p = normalizePolishEntry(e);
+      return p ? p.providerId !== pid : true;
+    });
+    const disabled = (s.disabledProviders || []).filter(id => id !== pid);
+    if (BUILTIN_PROVIDER_IDS.includes(pid)) {
+      const removed = [...new Set([...(s.removedProviders || []), pid])];
+      Storage.saveSettings({ removedProviders: removed, disabledProviders: disabled, sttChain, polishChain });
+    } else {
+      const customProviders = (s.customProviders || []).filter(c => c.id !== pid);
+      Storage.saveSettings({ customProviders, disabledProviders: disabled, sttChain, polishChain });
+    }
+  },
+  restoreProvider(providerId) {
+    const pid = migrateProviderId(providerId) || String(providerId || '').trim();
+    if (!pid) return;
+    const removed = readIdList(KEYS.REMOVED_PROVIDERS).filter(id => id !== pid);
+    writeIdList(KEYS.REMOVED_PROVIDERS, removed);
+    refreshSettingsCache();
+  },
+  restoreAllBuiltInProviders() {
+    writeIdList(KEYS.REMOVED_PROVIDERS, []);
+    refreshSettingsCache();
+  },
+  getProviders() {
+    // built-ins (key presence only — never leaks key values) + customs, excluding removed
+    const s = Storage.getSettings();
+    const removed = new Set(s.removedProviders || []);
+    const disabled = new Set(s.disabledProviders || []);
+    const builtins = [
+      { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey, disabled: disabled.has('groq'), builtin: true },
+      { id: 'google', name: 'Google Gemini', baseURL: '', hasKey: _serverGeminiAvailable || !!(s.googleKey || s.geminiKey), disabled: disabled.has('google'), builtin: true },
+      { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey, disabled: disabled.has('openrouter'), builtin: true },
+    ].filter(p => !removed.has(p.id));
+    const customs = s.customProviders.map(c => ({
+      id: c.id,
+      name: c.name || c.id,
+      baseURL: c.baseURL || '',
+      hasKey: !!c.key,
+      disabled: disabled.has(c.id),
+      builtin: false,
+    }));
+    return [...builtins, ...customs];
   },
   hasKeyForProvider(providerId) {
     const pid = migrateProviderId(providerId);
     if(pid === null || !pid) return false;
-    if(pid === 'google') return _serverGeminiAvailable;
+    if(readIdList(KEYS.REMOVED_PROVIDERS).includes(pid)) return false;
+    if(readIdList(KEYS.DISABLED_PROVIDERS).includes(pid)) return false;
     if(!_settingsDirty && _settingsCache) return hasKeyInSettings(_settingsCache, pid);
     // Cheap key-only fast path on a cold cache: 1–2 reads, no chain parsing.
     if(pid === 'groq') return !!localStorage.getItem(KEYS.GROQ);
+    if(pid === 'google') return _serverGeminiAvailable || !!localStorage.getItem(KEYS.GEMINI);
     if(pid === 'openrouter') return !!localStorage.getItem(KEYS.OPENROUTER);
     const c = parseCustomProviders(localStorage.getItem(KEYS.CUSTOM_PROVIDERS)).find(x => x.id === pid);
     return !!(c && c.key);
@@ -665,10 +750,8 @@ export const Storage = {
       throw Object.assign(new Error('نسخه طرح ناسازگار — version باید 1 باشد'), { status: 400 });
     }
     const p = parsed.prefs;
-    let sttChain = Array.isArray(p.sttChain) ? normalizeSTTChain(p.sttChain) : [];
-    if (!sttChain.length) sttChain = normalizeSTTChain(STT_DEFAULTS);
-    let polishChain = Array.isArray(p.polishChain) ? normalizePolishChain(p.polishChain) : [];
-    if (!polishChain.length) polishChain = POLISH_DEFAULTS.map(e => ({ ...e }));
+    let sttChain = Array.isArray(p.sttChain) ? normalizeSTTChain(p.sttChain) : normalizeSTTChain(STT_DEFAULTS);
+    let polishChain = Array.isArray(p.polishChain) ? normalizePolishChain(p.polishChain) : POLISH_DEFAULTS.map(e => ({ ...e }));
     const patch = { sttChain, polishChain };
     for (const k of ['polishEnabled', 'realtime', 'vad', 'autocopy']) {
       if (typeof p[k] === 'boolean') patch[k] = p[k];

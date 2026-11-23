@@ -301,18 +301,23 @@
     <!-- TAB 1: Keys & Quick Setup -->
     <section id="panel-keys" class="settings-panel" role="tabpanel" aria-labelledby="tab-keys">
       <div class="setup-intro">
-        <p>فقط وارد کردن <strong>یک کلید رایگان</strong> (پیشنهاد اول: Groq برای سرعت و دقت فارسی، یا Google AI Studio) کافیست. کلیدها صرفاً در حافظه محلی مرورگر خودت ذخیره می‌شوند.</p>
+        <p>فقط وارد کردن <strong>یک کلید رایگان</strong> (Groq برای سرعت و دقت فارسی، یا Google AI Studio) کافیست. کلیدها روی دستگاه خودت ذخیره می‌شوند و هر ارائه‌دهنده را می‌توانی هر زمان روشن، خاموش یا حذف کنی.</p>
       </div>
 
       <div id="provider-drawer" class="providers-stack">
-        <details class="provider-card" id="provider-card-groq" open>
+        <details class="provider-card" id="provider-card-groq" data-provider="groq" open>
           <summary class="provider-head">
+            <label class="prov-switch" title="روشن یا خاموش کردن Groq">
+              <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="groq" checked aria-label="فعال بودن Groq">
+              <span class="prov-track" aria-hidden="true"></span>
+            </label>
             <div class="provider-title-wrap">
               <b>Groq</b>
               <span class="provider-rec">پیشنهادی برای سرعت فارسی</span>
             </div>
             <span class="provider-status" id="pill-groq">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست اتصال</button>
+            <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="groq" title="حذف Groq" aria-label="حذف ارائه‌دهنده Groq">حذف</button>
           </summary>
           <div class="provider-body">
             <label for="key-groq">کلید API سرویس Groq</label>
@@ -342,32 +347,53 @@
           </div>
         </details>
 
-        <details class="provider-card" id="provider-card-gemini" open>
+        <details class="provider-card" id="provider-card-gemini" data-provider="google" open>
           <summary class="provider-head">
+            <label class="prov-switch" title="روشن یا خاموش کردن Google Gemini">
+              <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="google" checked aria-label="فعال بودن Google Gemini">
+              <span class="prov-track" aria-hidden="true"></span>
+            </label>
             <div class="provider-title-wrap">
               <b>Google Gemini</b>
-              <span class="provider-rec">متصل از طریق سرور</span>
+              <span class="provider-rec" id="gemini-rec">کلید Google AI Studio</span>
             </div>
-            <span class="provider-status" id="pill-google">در حال بررسی…</span>
+            <span class="provider-status" id="pill-google">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-gemini">تست اتصال</button>
+            <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="google" title="حذف Google Gemini" aria-label="حذف ارائه‌دهنده Google Gemini">حذف</button>
           </summary>
           <div class="provider-body">
-            <div class="key-row">
-              <div id="hint-gemini" class="hint">مدل‌های Google Gemini به‌صورت خودکار از طریق سرور اجرا می‌شوند و نیازی به وارد کردن کلید در مرورگر نیست.</div>
-              <button type="button" class="btn-ghost btn-sm" id="btn-gemini-models">بروزرسانی مدل‌ها</button>
+            <div id="gemini-server-bar" class="gemini-server-bar" hidden>
+              <span class="hint-inline">سرویس Google Gemini از طریق سرور فعال است.</span>
+              <button type="button" class="btn-ghost btn-xs" id="btn-gemini-personal">افزودن کلید شخصی</button>
             </div>
+            <div id="gemini-key-block">
+              <label for="key-gemini" id="key-gemini-label">کلید API سرویس Google AI Studio</label>
+              <div class="key-row">
+                <input type="password" id="key-gemini" placeholder="AIza... یا AQ...." autocomplete="off" dir="ltr">
+                <button type="button" class="btn-ghost btn-sm" id="btn-gemini-models">بروزرسانی مدل‌ها</button>
+              </div>
+            </div>
+            <div id="gemini-models-row" class="row-actions" hidden>
+              <button type="button" class="btn-ghost btn-sm" id="btn-gemini-models-srv">بروزرسانی مدل‌ها</button>
+            </div>
+            <div id="hint-gemini" class="hint">برای اجرا در مرورگر (مانند GitHub Pages)، کلید رایگان Google AI Studio را وارد کن. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></div>
             <div class="hint-inline cacheline" id="cache-gemini">مدل‌ها هنوز دریافت نشده‌اند</div>
           </div>
         </details>
 
-        <details class="provider-card" id="provider-card-openrouter">
+        <details class="provider-card" id="provider-card-openrouter" data-provider="openrouter">
           <summary class="provider-head">
+            <label class="prov-switch" title="روشن یا خاموش کردن OpenRouter">
+              <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="openrouter" checked aria-label="فعال بودن OpenRouter">
+              <span class="prov-track" aria-hidden="true"></span>
+            </label>
             <div class="provider-title-wrap">
               <b>OpenRouter</b>
               <span class="provider-rec">اختیاری برای پالیش</span>
             </div>
             <span class="provider-status" id="pill-openrouter">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-polish">تست پالیش</button>
+            <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="openrouter" title="حذف OpenRouter" aria-label="حذف ارائه‌دهنده OpenRouter">حذف</button>
           </summary>
           <div class="provider-body">
             <label for="key-openrouter">کلید API سرویس OpenRouter</label>
@@ -375,7 +401,7 @@
               <input type="password" id="key-openrouter" placeholder="sk-or-v1-..." autocomplete="off" dir="ltr">
               <button type="button" class="btn-ghost btn-sm" id="btn-or-models">بروزرسانی مدل‌ها</button>
             </div>
-            <div id="hint-openrouter" class="hint">اختیاری — اگر خالی باشد پالیش با Groq انجام می‌شود.</div>
+            <div id="hint-openrouter" class="hint">اختیاری — اگر خالی باشد پالیش با مدل‌های دیگر زنجیره یا قانون محلی انجام می‌شود.</div>
             <div class="hint-inline cacheline" id="cache-openrouter">مدل‌ها هنوز دریافت نشده‌اند</div>
             <details class="sub-accordion">
               <summary>تنظیمات پیشرفته (Base URL)</summary>
@@ -405,6 +431,8 @@
             </div>
           </div>
         </details>
+
+        <div id="restore-providers-bar" class="restore-providers-bar" hidden></div>
       </div>
     </section>
 
@@ -457,7 +485,7 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-stt-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولویت از بالا به پایین است؛ اگر مدلی کلید نداشته باشد یا سهمیه‌اش پر شود، خودکار سراغ بعدی می‌رود.</p>
+        <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره <code>⠿</code> را بکش یا از دکمه‌های <code>▲</code>/<code>▼</code> هر ردیف استفاده کن.</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
           <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-expanded="false" aria-controls="stt-add-panel">＋ افزودن مدل صوتی</button>
@@ -478,7 +506,7 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-polish-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود؛ تغییر ترتیب یا حذف از منوی ⋮ هر ردیف.</p>
+        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود؛ ترتیب را با <code>⠿</code> یا <code>▲</code>/<code>▼</code> عوض کن.</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
           <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">＋ افزودن ویرایشگر</button>
@@ -511,7 +539,7 @@
             <summary>نکات انتخاب مدل</summary>
             <ul>
               <li>مدل‌های <code>lite</code> سهمیه روزانه بیشتری دارند.</li>
-              <li><code>gemini-flash-latest</code> گزینه پیشنهادی برای پشتیبانی گوگل است.</li>
+              <li><code>gemini-3.5-transcribe</code> و <code>gemini-3.1-flash-lite</code> گزینه‌های پیشنهادی Google هستند.</li>
               <li>مدل‌های با پسوند <code>:free</code> از سهمیه رایگان OpenRouter استفاده می‌کنند.</li>
             </ul>
           </details>

@@ -257,6 +257,7 @@ function waveRenderList(){
   const alive = new Set(waveCfg.waves.map(w => w.id));
   [...waveOpenIds].forEach(id => { if (!alive.has(id)) waveOpenIds.delete(id); });
   [...waveAdvIds].forEach(id => { if (!alive.has(id)) waveAdvIds.delete(id); });
+  const frag = document.createDocumentFragment();
   waveCfg.waves.forEach((wv, idx) => {
     const row = document.createElement('div');
     row.className = 'wave-item' + (wv.mute ? ' muted' : '');
@@ -428,8 +429,9 @@ function waveRenderList(){
     body.appendChild(adv);
     det.appendChild(body);
     row.appendChild(det);
-    list.appendChild(row);
+    frag.appendChild(row);
   });
+  list.appendChild(frag);
   const addBtn = $('wave-add');
   if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
 }

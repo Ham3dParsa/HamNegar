@@ -25,7 +25,7 @@ import { VoiceQueue } from './modules/voiceQueue.js';
 const els = {
   btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
-  modal: $('settings-modal'), keyGroq: $('key-groq'), keyOpenrouter: $('key-openrouter'),
+  modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'), keyOpenrouter: $('key-openrouter'),
   groqBaseUrl: $('groq-base-url'), openrouterBaseUrl: $('openrouter-base-url'),
   toggleRealtime: $('toggle-realtime'), toggleVad: $('toggle-vad'), toggleAutocopy: $('toggle-autocopy'),
   togglePolish: $('toggle-polish'),
@@ -274,6 +274,7 @@ $('btn-x-modal')?.addEventListener('click', () => closeModal());
 mountChains({
   els, updateBadge, saveSettings, shortcutsOpen, renderProvidersStatus,
   onChainsRendered: () => { try { Stagebar.renderStageModelOptions(); } catch {} },
+  onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); },
 });
 
 // --- settings wiring + tabs live in js/modules/settingsModal.js (ticket 31; mounted above) ---
@@ -552,11 +553,11 @@ function mainWaveInit(){
     mainWave = createWaveRenderer(els.wave);
     mainWave.setConfig(Storage.getWave());
     mainWave.setFakeEnabled(false); // main strip only: never dance without real voice
-    if (!isWaveHidden()) mainWave.start(); // T3 (#109): hidden → strip stays stopped until re-enabled
+    if (!isWaveHidden()) mainWave.start(); // draws static line synchronously, zero idle rAF
   }catch{ mainWave = null; }
 }
-function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); }catch{} syncRecStrip(); }
-function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); }catch{} syncRecStrip(); } // detach → static line (fake stays OFF)
+function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); if (!isWaveHidden()) mainWave?.start(); }catch{} syncRecStrip(); }
+function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); mainWave?.stop(); }catch{} syncRecStrip(); } // detach → static line, zero rAF
 function mainWaveSync(){ try{ mainWave?.setConfig(Storage.getWave()); }catch{} }
 function syncRecStrip(){
   const strip = $('rec-strip');
@@ -1801,13 +1802,13 @@ const GUIDE = {
   ],
   config: [
     { id:'g-settings', title:'تنظیمات استودیو', body:'آیکون چرخ‌دنده در نوار بالا تنظیمات ۴بخشی را باز می‌کند: کلیدها، رفتار، مدل‌ها و موج صدا.', ref:'btn-settings' },
-    { id:'g-keys', title:'تب کلیدها', body:'مدل‌های Google Gemini به‌صورت خودکار از طریق سرور فعال هستند؛ کلیدهای Groq و OpenRouter اختیاری بوده و فقط روی مرورگر خودت ذخیره می‌شوند.', ref:'provider-drawer' },
+    { id:'g-keys', title:'تب کلیدها', body:'کلیدهای Groq، Google AI Studio (Gemini)، OpenRouter و ارائه‌دهنده سفارشی را اینجا وارد کن. اگر سرور میزبان فعال باشد Google Gemini خودکار در دسترس است. هر ارائه‌دهنده را می‌توانی موقت خاموش کنی یا حذف کنی و بعداً برگردانی.', ref:'provider-drawer' },
     { id:'g-realtime', title:'حالت آنی', body:'نمایش زنده کلمات حین صحبت و سپس جایگزینی با متن دقیق و پالایش‌شده.', ref:'toggle-realtime' },
     { id:'g-vad', title:'توقف خودکار در سکوت (VAD)', body:'برای پیام‌های سریع روشن بگذار و برای ضبط کلاس و سخنرانی خاموش کن.', ref:'toggle-vad' },
     { id:'g-polish', title:'پالیش خودکار فارسی', body:'اصلاح خودکار نیم‌فاصله و نگارش پس از هر رونویسی.', ref:'toggle-polish' },
     { id:'g-autocopy', title:'کپی خودکار', body:'متن نهایی پس از تبدیل بلافاصله در کلیپ‌بورد کپی می‌شود.', ref:'toggle-autocopy' },
-    { id:'g-stt', title:'زنجیره صوت به متن', body:'ترتیب اولویت مدل‌های STT؛ اگر مدلی بی‌کلید یا پر باشد خودکار سراغ بعدی می‌رود.', ref:'stt-chain' },
-    { id:'g-polishchain', title:'زنجیره پالیش', body:'ترتیب ویرایشگرهای متنی برای پالیش و ترجمه.', ref:'polish-chain' },
+    { id:'g-stt', title:'زنجیره صوت به متن', body:'ترتیب اولویت مدل‌های STT؛ با کشیدن دستگیره ⠿ یا دکمه‌های ▲/▼ جایگاه را عوض کن.', ref:'stt-chain' },
+    { id:'g-polishchain', title:'زنجیره پالیش', body:'ترتیب ویرایشگرهای متنی برای پالیش و ترجمه؛ با کشیدن دستگیره ⠿ یا دکمه‌های ▲/▼ مرتب کن.', ref:'polish-chain' },
     { id:'g-wavehide', title:'پنهان‌سازی نوار موج', body:'نوار موج را می‌بندد و حلقه رندر را متوقف می‌کند تا باتری کمتری مصرف شود.', ref:'wave-hide' },
   ],
   quota: [
@@ -2036,21 +2037,25 @@ syncQuickToggles();
 refreshPendingVoices();
 
 async function initServerGeminiStatus() {
+  let available = false;
   try {
-    const res = await fetch('/api/gemini/status', { cache: 'no-store' });
-    if (!res.ok) return;
-    const j = await res.json();
-    Storage.setServerGeminiAvailable(Boolean(j?.configured));
-    Settings.validate();
-    updateBadge();
-    syncOnboarding();
-    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
-    Dashboard.renderOverall();
-    if (hasAnyConfiguredKey()) {
-      Logger.setStatus('آماده ضبط', 'info');
+    const res = await fetch('./api/gemini/status', { cache: 'no-store' });
+    const ct = res.headers.get('content-type') || '';
+    if (res.ok && ct.includes('application/json')) {
+      const j = await res.json();
+      available = Boolean(j?.configured);
     }
-  } catch (e) {
-    Logger.log('warn', 'بررسی وضعیت سرور Gemini ناموفق بود', { msg: e?.message || String(e) });
+  } catch {
+    available = false;
+  }
+  Storage.setServerGeminiAvailable(available);
+  Settings.validate();
+  updateBadge();
+  syncOnboarding();
+  Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+  Dashboard.renderOverall();
+  if (hasAnyConfiguredKey()) {
+    Logger.setStatus('آماده ضبط', 'info');
   }
 }
 initServerGeminiStatus();

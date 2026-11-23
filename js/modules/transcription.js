@@ -61,6 +61,7 @@ export function applyPersonalDictionary(text, entries){
 }
 
 async function queryGroq(blob, externalSignal){
+  if(Storage.isProviderRemoved('groq') || Storage.isProviderDisabled('groq')) throw Object.assign(new Error('ارائه‌دهنده Groq خاموش یا حذف شده است'),{status:401});
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} نیست`),{status:401});
   if(!k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} باید gsk_ باشد`),{status:401});
@@ -76,14 +77,60 @@ async function queryGroq(blob, externalSignal){
   if(!res.ok){ const er=await parseErr(res); Logger.log('error',`${displayPair('groq', STT_GROQ_MODEL)} fail`,{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
   const j=await res.json(); Logger.log('info',`${displayPair('groq', STT_GROQ_MODEL)} ok`,j); return (j.text||'').trim();
 }
-async function queryGemini(blob, model, externalSignal){
+const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+function getGeminiKey(){
+  try { return (Storage.getSettings().geminiKey || '').trim(); } catch { return ''; }
+}
+function shouldUseServerGemini(){
+  return Storage.isServerGeminiAvailable() && !getGeminiKey();
+}
+function assertGoogleActive(){
+  if (Storage.isProviderRemoved('google')) throw Object.assign(new Error('ارائه‌دهنده Google Gemini حذف شده است'), { status: 401 });
+  if (Storage.isProviderDisabled('google')) throw Object.assign(new Error('ارائه‌دهنده Google Gemini خاموش است'), { status: 401 });
+}
+
+async function queryGeminiDirect(blob, model, externalSignal, k){
+  if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
   if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+  const b64 = await blobToB64(blob);
+  Logger.log('info',`به ${displayPair('google', model)} (مستقیم)...`,{size:blob.size});
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
+  if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  const mimeType = (blob.type || 'audio/webm').split(';')[0].trim() || 'audio/webm';
+  const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
+  let res; try{
+    res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':k},
+      body:JSON.stringify({
+        contents:[{ parts:[
+          { inline_data:{ mime_type:mimeType, data:b64 } },
+          { text:'Transcribe verbatim in original language(s). Only transcription, no summary.' },
+        ] }],
+      }),
+      signal:ctrl.signal,
+    });
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0}); }
+  clearTimeout(to);
+  if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text}); throw err; }
+  const j=await res.json();
+  const text=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+  Logger.log('debug',`${displayPair('google', model)} raw`,{model, len:text.length});
+  return text;
+}
+
+async function queryGemini(blob, model, externalSignal){
+  assertGoogleActive();
+  if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+  const personalKey = getGeminiKey();
+  if(!shouldUseServerGemini()) return queryGeminiDirect(blob, model, externalSignal, personalKey);
   const b64=await blobToB64(blob);
   Logger.log('info',`به ${displayPair('google', model)} (سرور)...`,{size:blob.size});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   let res; try{
-    res=await fetch('/api/gemini/transcribe',{
+    res=await fetch('./api/gemini/transcribe',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ model, mimeType: blob.type || 'audio/webm', data: b64 }),
@@ -91,6 +138,7 @@ async function queryGemini(blob, model, externalSignal){
     });
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0}); }
   clearTimeout(to);
+  if((res.status===404 || res.status===503) && personalKey) return queryGeminiDirect(blob, model, externalSignal, personalKey);
   if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text}); throw err; }
   const j=await res.json(); Logger.log('debug',`${displayPair('google', model)} raw`,{model:j.model||model, len:(j.text||'').length}); return (j.text||'').trim();
 }
@@ -160,6 +208,8 @@ function hasKeyForProviderId(providerId){
 // Resolve OpenAI-compatible credentials for providerId: built-ins groq/openrouter from fixed
 // keys+bases, customs by id from Storage. Never logs key material — callers must not log the result.
 function resolveChatProvider(providerId){
+  if(Storage.isProviderRemoved(providerId)) throw Object.assign(new Error(`ارائه‌دهنده ${providerId} حذف شده است`),{status:401});
+  if(Storage.isProviderDisabled(providerId)) throw Object.assign(new Error(`ارائه‌دهنده ${providerId} خاموش است`),{status:401});
   const s = Storage.getSettings();
   if(providerId === 'groq') return { key: s.groqKey, base: (s.groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,''), trusted: ['api.groq.com'], extraHeaders: {} };
   if(providerId === 'openrouter') return { key: s.openrouterKey, base: (s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT).replace(/\/+$/,''), trusted: ['api.openrouter.ai','openrouter.ai'], extraHeaders: { 'HTTP-Referer': 'https://hamnegar.local', 'X-Title': 'HamNegar' } };
@@ -193,10 +243,39 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${displayPair(providerId, model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
 }
+async function queryPolishViaGeminiDirect(text, model, layer, system, k){
+  if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const sys = system || DEFAULT_POLISH_SYSTEM;
+  const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
+  let res; try{
+    res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-goog-api-key':k},
+      body:JSON.stringify({
+        system_instruction:{ parts:[{ text: sys }] },
+        contents:[{ parts:[{ text }] }],
+        generationConfig:{ temperature:0.2, maxOutputTokens:polishOutputBudget(text) },
+      }),
+      signal:ctrl.signal,
+    });
+  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
+  clearTimeout(to);
+  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model}); throw err; }
+  const j=await res.json();
+  const cand = j.candidates?.[0];
+  const out = (cand?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+  Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  if(cand?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
+  return validatePolishOutput(out, text, model, layer);
+}
 async function queryPolishViaGemini(text, model, layer = 'polish', system = null){
+  assertGoogleActive();
+  const personalKey = getGeminiKey();
+  if(!shouldUseServerGemini()) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
   let res; try{
-    res=await fetch('/api/gemini/text',{
+    res=await fetch('./api/gemini/text',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ model, text, system: system || DEFAULT_POLISH_SYSTEM, maxOutputTokens: polishOutputBudget(text) }),
@@ -204,6 +283,7 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
     });
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
+  if((res.status===404 || res.status===503) && personalKey) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
   if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model}); throw err; }
   const j=await res.json(); const out=(j.text||'').trim();
   Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model:j.model||model, inLen:text.length, out:out.slice(0,200)});
@@ -231,14 +311,14 @@ async function queryPolish(text, entry, layer = 'polish'){
 
 // Full-chain text op (ticket/16 chain fallback): iterates ENABLED polishChain entries
 // that have keys, dispatching per provider through the existing adapters (no new
-// seam). Default single qwen entry when the chain is empty, mirroring polishText.
+// seam). Respects intentionally empty chains without forcing defaults.
 // layer names the op in logs ('polish' keeps polish guards in validatePolishOutput,
 // 'translate' skips them). 401/403 entries are skipped with a warn log; 429 backs
 // off before the next entry. All throws are typed (err.status set).
 async function textChain(text, { system, layer = 'polish', prefer } = {}){
   if(!text || !text.trim()) throw Object.assign(new Error(layer==='translate' ? 'متنی برای ترجمه نیست' : 'متنی برای پالایش نیست'),{status:400});
   const { polishChain } = Storage.getSettings();
-  const rawChain = (polishChain && polishChain.length) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
+  const rawChain = Array.isArray(polishChain) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
   const chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
   if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
     // explicit dropdown picks carry no enabled flag — resolve it from the chain itself
@@ -246,10 +326,7 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
     if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: canonicalize(prefer.providerId), enabled: true });
     else Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
   }
-  if(chain.length===0 && hasKeyForProviderId('google')){
-    chain.push({ id: 'gemini-4-hydrogen', providerId: 'google', enabled: true });
-  }
-  if(chain.length===0) throw Object.assign(new Error('مدل متنی در زنجیره نیست'),{status:401});
+  if(chain.length===0) throw Object.assign(new Error('مدل متنی فعال و دارای کلید در زنجیره نیست'),{status:401});
   let lastErr=null;
   for(let i=0;i<chain.length;i++){
     const entry = chain[i];
@@ -319,12 +396,18 @@ export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = (sttChain && sttChain.length) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-3.5-transcribe',providerId:'google',enabled:true}];
+    const rawChain = Array.isArray(sttChain) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-3.5-transcribe',providerId:'google',enabled:true}];
+    if(rawChain.length === 0){
+      throw Object.assign(new Error('زنجیره صوت به متن خالی است — از تب «مدل‌ها» یک مدل اضافه کن'),{status:400});
+    }
     // support both string[] legacy and object[] new
     const enabledChain = rawChain.filter(e=> typeof e==='object' ? e.enabled!==false : true);
+    if(enabledChain.length === 0){
+      throw Object.assign(new Error('همه مدل‌های زنجیره صوت به متن خاموش هستند'),{status:400});
+    }
     let chain = enabledChain.filter(id => hasKeyFor(id));
     if(chain.length===0){
-      throw Object.assign(new Error('کلید STT نیست — تنظیمات را چک کن'),{status:401});
+      throw Object.assign(new Error('هیچ مدل فعال و دارای کلید در زنجیره نیست — تب «کلیدها» را چک کن'),{status:401});
     }
     if(chain.length !== rawChain.length){
       const skipped = rawChain.filter(id => !hasKeyFor(id));
@@ -392,13 +475,10 @@ export const Transcription = {
       let usablePolish = enabledChain.filter(e => hasKeyForPolish(e));
       if(usablePolish.length !== enabledChain.length){
         const skippedP = enabledChain.filter(e => !hasKeyForPolish(e)).map(e=>displayPair(polishTargetOf(e).providerId, polishTargetOf(e).model));
-        if(skippedP.length) Logger.log('info','پالیش بی‌کلید حذف شد', { skipped: skippedP });
+        if(skippedP.length) Logger.log('info','پالیش بی‌کلید یا خاموش حذف شد', { skipped: skippedP });
       }
-      if(usablePolish.length === 0 && hasKeyForProviderId('google')){
-        usablePolish = [{ id: 'gemini-4-hydrogen', providerId: 'google', enabled: true }];
-      }
-      if(usablePolish.length === 0 && enabledChain.length>0){
-        Logger.log('info','پالیش همه خاموش یا بی‌کلید — قانون محلی اعمال شد',{before:rawText.slice(0,60), after:ruleFixed.slice(0,60)});
+      if(usablePolish.length === 0){
+        if(enabledChain.length>0) Logger.log('info','پالیش همه خاموش یا بی‌کلید — قانون محلی اعمال شد',{before:rawText.slice(0,60), after:ruleFixed.slice(0,60)});
         finalText = ruleFixed;
       } else {
         let polished=null;
@@ -436,12 +516,9 @@ export const Transcription = {
     const ruleFixed = rulePolish(text);
     const { polishChain, polishEnabled } = Storage.getSettings();
     if(!polishEnabled) return ruleFixed;
-    const rawChain = polishChain?.length ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
+    const rawChain = Array.isArray(polishChain) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
     const enabledChain = rawChain.filter(e=>e && e.enabled!==false);
     const chain = enabledChain.filter(e => hasKeyForPolish(e));
-    if(chain.length===0 && hasKeyForProviderId('google')){
-      chain.push({ id: 'gemini-4-hydrogen', providerId: 'google', enabled: true });
-    }
     if(chain.length===0) return ruleFixed;
     for(const entry of chain){
       try{ const out=await queryPolish(text,entry); if(out){ const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : []; return applyPersonalDictionary(rulePolish(out), dict).text; } }catch{}
@@ -450,15 +527,41 @@ export const Transcription = {
   },
   async listModels(providerId){
     const pid = canonicalize(providerId);
+    if(Storage.isProviderRemoved(pid)) throw Object.assign(new Error(`ارائه‌دهنده ${pid} حذف شده است`),{status:401});
+    if(Storage.isProviderDisabled(pid)) throw Object.assign(new Error(`ارائه‌دهنده ${pid} خاموش است`),{status:401});
     if(pid === 'google'){
+      assertGoogleActive();
+      const personalKey = getGeminiKey();
+      if(shouldUseServerGemini()){
+        const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+        let r; try{
+          r=await fetch('./api/gemini/models',{signal:ctrl.signal});
+        }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?'تایم‌اوت لیست مدل‌ها':'شبکه لیست مدل‌ها: '+e.message),{status:e.name==='AbortError'?408:0}); }
+        clearTimeout(to);
+        const ct = r.headers.get('content-type') || '';
+        if(r.ok && ct.includes('application/json')){
+          const j=await r.json();
+          return Array.isArray(j.models) ? j.models : [];
+        }
+        if(!personalKey){
+          const e=await parseErr(r);
+          throw Object.assign(new Error(`${fmt(r.status)} — ${e.msg}`),{status:r.status});
+        }
+      }
+      if(!personalKey) throw Object.assign(new Error('کلید Google AI Studio وارد نشده است'),{status:401});
       const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
       let r; try{
-        r=await fetch('/api/gemini/models',{signal:ctrl.signal});
+        r=await fetch(`${GOOGLE_API_BASE}/models?pageSize=200`,{
+          headers:{'x-goog-api-key':personalKey},
+          signal:ctrl.signal,
+        });
       }catch(e){ clearTimeout(to); throw Object.assign(new Error(e.name==='AbortError'?'تایم‌اوت لیست مدل‌ها':'شبکه لیست مدل‌ها: '+e.message),{status:e.name==='AbortError'?408:0}); }
       clearTimeout(to);
       if(!r.ok){ const e=await parseErr(r); throw Object.assign(new Error(`${fmt(r.status)} — ${e.msg}`),{status:r.status}); }
       const j=await r.json();
-      return Array.isArray(j.models) ? j.models : [];
+      return (j.models || [])
+        .map(m => String(m?.name || '').replace(/^models\//i, '').trim())
+        .filter(id => /^gemini/i.test(id) && !/embedding|imagen|veo|lyria|aqa|robotics/i.test(id));
     }
     let resolved;
     try{ resolved = resolveChatProvider(pid); }
@@ -473,6 +576,7 @@ export const Transcription = {
   },
   // provider model lists: single path is listModels(providerId); app.js calls it via fetchAndShowModels/loadEasyModels
   async testGroq(){
+    if(Storage.isProviderRemoved('groq') || Storage.isProviderDisabled('groq')) throw new Error('ارائه‌دهنده Groq خاموش یا حذف شده است');
     const { groqKey: k, groqBaseURL }=Storage.getSettings();
     if(!k) throw new Error('خالیه'); if(!k.startsWith('gsk_')) throw new Error('باید gsk_ باشد');
     const base = (groqBaseURL || GROQ_BASE_DEFAULT).replace(/\/+$/,'');
@@ -482,16 +586,30 @@ export const Transcription = {
     return true;
   },
   async testGemini(){
+    assertGoogleActive();
     const { sttChain } = Storage.getSettings();
-    const found = sttChain.find(m=> (typeof m==='object'?m.id:m)!=='groq');
+    const found = sttChain.find(m=> sttProviderOf(m)==='google');
     const model = (typeof found==='object'?found.id:found) || 'gemini-3.5-transcribe';
-    const r=await fetch('/api/gemini/test',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ model }),
+    const personalKey = getGeminiKey();
+    if(shouldUseServerGemini()){
+      const r=await fetch('./api/gemini/test',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ model }),
+      });
+      const ct = r.headers.get('content-type') || '';
+      if(r.ok && ct.includes('application/json')) return r.json();
+      if(!personalKey){
+        const e=await parseErr(r);
+        throw new Error(`${fmt(r.status)} — ${e.msg}`);
+      }
+    }
+    if(!personalKey) throw new Error('کلید Google AI Studio خالی است');
+    const r=await fetch(`${GOOGLE_API_BASE}/models?pageSize=5`,{
+      headers:{'x-goog-api-key':personalKey},
     });
     if(!r.ok){ const e=await parseErr(r); throw new Error(`${fmt(r.status)} — ${e.msg}`); }
-    return r.json();
+    return { ok: true, mode: 'direct' };
   },
   async queryChat(providerId, text, opts){ return queryChat(canonicalize(providerId), text, opts); },
   async textChain(text, opts){ return textChain(text, opts); },

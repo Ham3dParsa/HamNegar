@@ -25,6 +25,7 @@ let saveSettings = () => {};
 let shortcutsOpen = () => false;
 let renderProvidersStatus = () => {};
 let onChainsRendered = null;
+let onSettingsSync = () => {};
 
 // --- preference chains UI ---
 const STT_LABELS = {
@@ -105,12 +106,15 @@ function focusChainRow(type, idx, innerSelector){
   const container = type === 'stt' ? els.sttChain : els.polishChain;
   const rows = container?.querySelectorAll('.chain-item');
   if(!rows || !rows.length){
-    (type === 'stt' ? $('btn-reset-stt') : $('btn-reset-polish'))?.focus?.();
+    (type === 'stt' ? $('btn-reset-stt') : $('btn-reset-polish'))?.focus?.({ preventScroll: true });
     return;
   }
   const row = rows[Math.max(0, Math.min(idx, rows.length - 1))];
-  const inner = innerSelector ? row.querySelector(innerSelector) : null;
-  (inner || row).focus?.();
+  let inner = innerSelector ? row.querySelector(innerSelector) : null;
+  if (inner && inner.disabled) {
+    inner = row.querySelector('.chain-step-btn:not([disabled])') || row;
+  }
+  try { (inner || row).focus?.({ preventScroll: true }); } catch { (inner || row).focus?.(); }
 }
 let lastDeleted = null; // {entry, index, type}
 let undoTimer = null;
@@ -129,6 +133,7 @@ function undoDelete(){
   const arr = type === 'stt' ? sttChainState : polishChainState;
   arr.splice(Math.min(index, arr.length), 0, entry);
   scheduleChainsPersist();
+  renderAllChains();
   announce(`«${labelOf(entry, type)}» بازگردانده شد`);
   focusChainRow(type, Math.min(index, arr.length - 1));
 }
@@ -160,34 +165,170 @@ function closeChainMenus(except, refocus){
   });
   if(refocus?.focus) refocus.focus();
 }
+function attachPointerDrag(handle, item, container, fromIdx, type){
+  if(!handle || !item || !container) return;
+  handle.addEventListener('pointerdown', (downEvt)=>{
+    if(downEvt.pointerType === 'mouse' && downEvt.button !== 0) return;
+    downEvt.preventDefault();
+    downEvt.stopPropagation();
+    closeChainMenus();
+    const rows = [...container.querySelectorAll('.chain-item')];
+    if(rows.length < 2) return;
+    const rects = rows.map(r => r.getBoundingClientRect());
+    const startRect = rects[fromIdx];
+    if(!startRect) return;
+    const pitch = fromIdx + 1 < rects.length
+      ? Math.max(44, rects[fromIdx + 1].top - startRect.top)
+      : (fromIdx > 0 ? Math.max(44, startRect.top - rects[fromIdx - 1].top) : startRect.height + 6);
+    const mids = rects.map(r => r.top + r.height / 2);
+    const startY = downEvt.clientY;
+    const startScroll = container.scrollTop;
+    const pointerId = downEvt.pointerId;
+    let targetIdx = fromIdx;
+    let lastClientY = downEvt.clientY;
+    let autoScrollRaf = 0;
+    let active = true;
+
+    try { handle.setPointerCapture(pointerId); } catch {}
+    container.classList.add('is-reordering');
+    item.classList.add('is-dragging');
+    rows.forEach((r, i) => { if(i !== fromIdx) r.classList.add('is-shifting'); });
+
+    const updatePositions = () => {
+      const scrollDelta = container.scrollTop - startScroll;
+      const dy = (lastClientY - startY) + scrollDelta;
+      item.style.transform = `translate3d(0, ${dy}px, 0)`;
+      const dragMid = startRect.top + startRect.height / 2 + dy;
+      let nextIdx = fromIdx;
+      for(let i = 0; i < mids.length; i++){
+        if(i < fromIdx && dragMid < mids[i]) { nextIdx = i; break; }
+        if(i > fromIdx && dragMid > mids[i]) nextIdx = i;
+      }
+      if(nextIdx !== targetIdx){
+        targetIdx = nextIdx;
+        try { navigator.vibrate?.(8); } catch {}
+      }
+      rows.forEach((r, i) => {
+        if(i === fromIdx) return;
+        let shift = 0;
+        if(targetIdx > fromIdx && i > fromIdx && i <= targetIdx) shift = -pitch;
+        else if(targetIdx < fromIdx && i >= targetIdx && i < fromIdx) shift = pitch;
+        r.style.transform = shift ? `translate3d(0, ${shift}px, 0)` : '';
+      });
+    };
+
+    const tickAutoScroll = () => {
+      autoScrollRaf = 0;
+      if(!active) return;
+      const box = container.getBoundingClientRect();
+      const edge = 34;
+      let delta = 0;
+      if(lastClientY < box.top + edge) delta = -Math.ceil((box.top + edge - lastClientY) / 4);
+      else if(lastClientY > box.bottom - edge) delta = Math.ceil((lastClientY - (box.bottom - edge)) / 4);
+      if(delta !== 0){
+        const before = container.scrollTop;
+        container.scrollTop += delta;
+        if(container.scrollTop !== before) updatePositions();
+        autoScrollRaf = requestAnimationFrame(tickAutoScroll);
+      }
+    };
+
+    const onMove = (e) => {
+      if(!active || (e.pointerId !== undefined && e.pointerId !== pointerId)) return;
+      lastClientY = e.clientY;
+      updatePositions();
+      const box = container.getBoundingClientRect();
+      if((lastClientY < box.top + 34 || lastClientY > box.bottom - 34) && !autoScrollRaf){
+        autoScrollRaf = requestAnimationFrame(tickAutoScroll);
+      }
+    };
+
+    const cleanup = (commit) => {
+      if(!active) return;
+      active = false;
+      if(autoScrollRaf) cancelAnimationFrame(autoScrollRaf);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onCancel);
+      handle.removeEventListener('lostpointercapture', onCancel);
+      try { handle.releasePointerCapture(pointerId); } catch {}
+      container.classList.remove('is-reordering');
+      item.classList.remove('is-dragging');
+      rows.forEach((r) => {
+        r.classList.remove('is-shifting');
+        r.style.transform = '';
+      });
+      if(commit && targetIdx !== fromIdx){
+        const arr = type === 'stt' ? sttChainState : polishChainState;
+        const [moved] = arr.splice(fromIdx, 1);
+        if(moved !== undefined){
+          arr.splice(targetIdx, 0, moved);
+          scheduleChainsPersist();
+          renderAllChains();
+          announce(`«${labelOf(moved, type)}» به جایگاه ${targetIdx + 1} از ${arr.length} منتقل شد`);
+          focusChainRow(type, targetIdx, '.chain-drag');
+        }
+      }
+    };
+
+    const onUp = (e) => {
+      if(e.pointerId !== undefined && e.pointerId !== pointerId) return;
+      cleanup(true);
+    };
+    const onCancel = (e) => {
+      if(e?.pointerId !== undefined && e.pointerId !== pointerId) return;
+      cleanup(false);
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onCancel);
+    handle.addEventListener('lostpointercapture', onCancel);
+  });
+}
+
 function renderChain(container, chain, type){
   if(!container) return;
+  const prevScroll = container.scrollTop;
   container.innerHTML='';
   const polishOff = type==='polish' && !els.togglePolish?.checked;
+  const frag = document.createDocumentFragment();
   chain.forEach((entry, idx)=>{
     const id = entryIdOf(entry);
     const providerId = providerIdOf(entry, type === 'stt' ? 'google' : 'groq');
     const enabled = typeof entry === 'object' ? entry.enabled!==false : true;
     const meta = (type==='stt' ? STT_LABELS[id] : POLISH_LABELS[id]) || {label:id, sub:''};
+    const provRemoved = Storage.isProviderRemoved(providerId);
+    const provDisabled = Storage.isProviderDisabled(providerId);
     const hasKey = hasKeyById(providerId);
     const item = document.createElement('div');
-    item.className = 'chain-item' + (hasKey?'':' missing') + (polishOff?' polish-off':'') + (!enabled?' polish-off':'');
-    item.draggable = true;
+    item.className = 'chain-item' + (!hasKey || provDisabled || provRemoved ? ' missing' : '') + (polishOff || !enabled || provDisabled ? ' polish-off' : '');
+    item.draggable = false;
     item.dataset.id = id;
     item.dataset.index = idx;
     item.setAttribute('role','listitem');
     item.setAttribute('aria-label', `${idx+1}. ${meta.label}`);
     item.tabIndex = 0; // keyboard reorder target: Ctrl+ArrowUp/Down
-    const dotCls = hasKey ? 'ok' : 'missing';
+
+    let dotCls = hasKey ? 'ok' : 'missing';
+    let statusText = `● ${providerId} · ${hasKey ? '✓' : '⚠'}`;
+    let statusTitle = hasKey ? `${providerId} — کلید دارد` : `${providerId} — بی‌کلید (اول کلید را وارد کن)`;
+    if (provRemoved) {
+      dotCls = 'missing';
+      statusText = `● ${providerId} · حذف‌شده`;
+      statusTitle = `${providerId} — ارائه‌دهنده حذف شده است`;
+    } else if (provDisabled) {
+      dotCls = 'off';
+      statusText = `● ${providerId} · خاموش`;
+      statusTitle = `${providerId} — ارائه‌دهنده خاموش است`;
+    }
+
     const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
-    const statusText = `● ${providerId} · ${hasKey ? '✓' : '⚠'}`;
-    const statusTitle = hasKey ? `${providerId} — کلید دارد` : `${providerId} — بی‌کلید (اول کلید را وارد کن)`;
-    const menuLabel = `گزینه‌های مدل ${meta.label}: جابه‌جایی، حذف`;
-    // ticket/75-chainrows-compact: one ⋮ menu per row (up/down/remove) — ✕ off the surface.
-    // aria-labels of the old ▲▼✕ buttons move onto menu items; Ctrl+Arrow/drag/undo paths untouched.
-    item.title = 'بکش تا جابه‌جا شود — Ctrl+↑/↓ جابه‌جایی ردیف';
+    const menuLabel = `گزینه‌های مدل ${meta.label}: اولویت ۱، حذف`;
+    item.title = 'دستگیره ⠿ را بکش یا از ▲/▼ استفاده کن — Ctrl+↑/↓';
     item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
     item.innerHTML = `
+      <button type="button" class="chain-drag" aria-label="بکش برای تغییر اولویت ${esc(meta.label)}" title="بکش برای جابه‌جایی">⠿</button>
       <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
       <div class="chain-main">
         <span class="chain-label" dir="auto" title="${esc(meta.label)}${meta.sub?` — ${esc(meta.sub)}`:''}">${esc(meta.label)}</span>
@@ -196,22 +337,29 @@ function renderChain(container, chain, type){
           <span class="chain-status ${dotCls}" title="${esc(statusTitle)}">${esc(statusText)}</span>
         </span>
       </div>
+      <div class="chain-step-btns">
+        <button type="button" class="chain-step-btn" data-step-up aria-label="انتقال ${esc(meta.label)} به بالا" title="یک پله بالاتر" ${idx===0?'disabled':''}>▲</button>
+        <button type="button" class="chain-step-btn" data-step-down aria-label="انتقال ${esc(meta.label)} به پایین" title="یک پله پایین‌تر" ${idx===chain.length-1?'disabled':''}>▼</button>
+      </div>
       <label class="chain-switch"><input type="checkbox" class="sr-only" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}"><span class="chain-track" aria-hidden="true"></span><span class="chain-state" aria-hidden="true">${enabled?'روشن':'خاموش'}</span></label>
       <div class="chain-menu-wrap">
         <button type="button" class="chain-menubtn" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}">⋮</button>
         <div class="chain-menu ${idx===chain.length-1?'up':''}" role="menu" aria-label="${esc(menuLabel)}" hidden>
-          <button type="button" role="menuitem" data-up aria-label="انتقال ${esc(meta.label)} به بالا" ${idx===0?'disabled':''}>▲ بالا</button>
-          <button type="button" role="menuitem" data-down aria-label="انتقال ${esc(meta.label)} به پایین" ${idx===chain.length-1?'disabled':''}>▼ پایین</button>
+          <button type="button" role="menuitem" data-top aria-label="انتقال ${esc(meta.label)} به اولویت ۱" ${idx===0?'disabled':''}>⤒ اولویت ۱</button>
           <button type="button" role="menuitem" class="danger" data-remove aria-label="حذف مدل ${esc(meta.label)}">✕ حذف</button>
         </div>
       </div>
     `;
+
+    attachPointerDrag(item.querySelector('.chain-drag'), item, container, idx, type);
+
     // toggle per-model (both chains) — single path: canonical {id, providerId, enabled}
     item.querySelector('[data-toggle]')?.addEventListener('change', (e)=>{
       const arr = type==='stt'? sttChainState : polishChainState;
       if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], providerId: providerIdOf(arr[idx], type==='stt'?'google':'groq'), enabled:e.target.checked};
       else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'google':'groq'); arr[idx].enabled = e.target.checked; }
       scheduleChainsPersist();
+      renderAllChains();
       announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
       focusChainRow(type, idx, '[data-toggle]');
     });
@@ -220,6 +368,7 @@ function renderChain(container, chain, type){
       const [removed] = arr.splice(idx,1);
       lastDeleted = { entry: removed, index: idx, type };
       scheduleChainsPersist();
+      renderAllChains();
       announce(`مدل ${meta.label} حذف شد — برای بازگردانی «واگرد» را بزن`);
       showUndoToast(meta.label);
       focusChainRow(type, idx);
@@ -242,7 +391,7 @@ function renderChain(container, chain, type){
     menu?.addEventListener('keydown', (e)=>{
       const items = [...menu.querySelectorAll('button:not([disabled])')];
       const at = items.indexOf(document.activeElement);
-      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeChainMenus(null, menuBtn); } // consume: open menu owns Esc (ticket/2x)
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); closeChainMenus(null, menuBtn); }
       else if(e.key === 'ArrowDown'){ e.preventDefault(); (items[at + 1] || items[0])?.focus?.(); }
       else if(e.key === 'ArrowUp'){ e.preventDefault(); (items[at - 1] || items[items.length - 1])?.focus?.(); }
       else if(e.key === 'Home'){ e.preventDefault(); items[0]?.focus?.(); }
@@ -255,59 +404,59 @@ function renderChain(container, chain, type){
       });
       document.addEventListener('keydown', (e)=>{
         if(e.key === 'Escape' && !e.defaultPrevented){
-          if (shortcutsOpen()) return; // guide owns Esc while open (ticket/51)
+          if (shortcutsOpen()) return;
           const open = document.querySelector('.chain-menu-wrap.open .chain-menubtn');
           if(!open) return;
-          e.preventDefault(); e.stopPropagation(); // consumed — later document layers (recording-cancel) must see defaultPrevented (ticket/2x)
+          e.preventDefault(); e.stopPropagation();
           closeChainMenus(null, open);
         }
       });
     }
-    // up/down
-    item.querySelector('[data-up]')?.addEventListener('click', ()=> moveChain(type, idx, -1));
-    item.querySelector('[data-down]')?.addEventListener('click', ()=> moveChain(type, idx, 1));
-    // keyboard reorder: Ctrl+ArrowUp/Down on focused row (bubbles from inner controls too).
-    // NOTE (ticket/2x): bubbling is intentional and left as-is — there is no global
-    // Ctrl+Arrow binding, so the row owns it wherever focus sits inside the row.
+    // inline stepper ▲ / ▼ + jump-to-top ⤒
+    item.querySelector('[data-step-up]')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      moveChain(type, idx, -1, '[data-step-up]');
+    });
+    item.querySelector('[data-step-down]')?.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      moveChain(type, idx, 1, '[data-step-down]');
+    });
+    item.querySelector('[data-top]')?.addEventListener('click', ()=> moveChainToTop(type, idx));
+    // keyboard reorder: Ctrl+ArrowUp/Down on focused row
     item.addEventListener('keydown', (e)=>{
       if(e.ctrlKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
         e.preventDefault();
         moveChain(type, idx, e.key === 'ArrowUp' ? -1 : 1);
       }
     });
-    // drag
-    item.addEventListener('dragstart', e=>{
-      item.classList.add('dragging');
-      e.dataTransfer.effectAllowed='move';
-      e.dataTransfer.setData('text/plain', idx);
-    });
-    item.addEventListener('dragend', ()=> item.classList.remove('dragging'));
-    container.appendChild(item);
+    frag.appendChild(item);
   });
-  // dragover reordering
-  container.ondragover = e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; };
-  container.ondrop = e=>{
-    e.preventDefault();
-    const from = parseInt(e.dataTransfer.getData('text/plain'),10);
-    const target = e.target.closest('.chain-item');
-    if(!target) return;
-    const to = parseInt(target.dataset.index,10);
-    if(isNaN(from)||isNaN(to)||from===to) return;
-    const arr = type==='stt'? sttChainState : polishChainState;
-    const [moved]=arr.splice(from,1);
-    arr.splice(to,0,moved);
-    scheduleChainsPersist();
-  };
+  container.appendChild(frag);
+  container.scrollTop = prevScroll;
 }
 
-function moveChain(type, idx, dir){
+function moveChain(type, idx, dir, focusSel){
   const arr = type==='stt'? sttChainState : polishChainState;
   const n = idx+dir;
   if(n<0||n>=arr.length) return;
   [arr[idx], arr[n]] = [arr[n], arr[idx]];
+  try { navigator.vibrate?.(6); } catch {}
   scheduleChainsPersist();
+  renderAllChains();
   announce(`«${labelOf(arr[n], type)}» به جایگاه ${n+1} از ${arr.length} منتقل شد`);
-  focusChainRow(type, n);
+  focusChainRow(type, n, focusSel);
+}
+
+function moveChainToTop(type, idx){
+  const arr = type==='stt'? sttChainState : polishChainState;
+  if(idx<=0 || idx>=arr.length) return;
+  const [moved] = arr.splice(idx, 1);
+  arr.unshift(moved);
+  try { navigator.vibrate?.(8); } catch {}
+  scheduleChainsPersist();
+  renderAllChains();
+  announce(`«${labelOf(moved, type)}» به اولویت ۱ منتقل شد`);
+  focusChainRow(type, 0);
 }
 
 export function renderAllChains(){
@@ -383,6 +532,7 @@ function allFlowModels(){
   const push = (id, pid) => {
     const clean = String(id || '').trim();
     if (!clean) return;
+    if (Storage.isProviderRemoved(pid)) return;
     const k = pid + ':' + clean;
     if (seen.has(k)) return;
     seen.add(k);
@@ -454,7 +604,9 @@ function renderFlowList(){
       return true;
     })
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
+  const frag = document.createDocumentFragment();
   for (const d of rows) {
+    const disabled = Storage.isProviderDisabled(d.providerId);
     const hasKey = (() => { try { return hasKeyById(d.providerId); } catch { return false; } })();
     const loc = chainLoc(d.id, d.providerId);
     const card = document.createElement('div');
@@ -478,14 +630,16 @@ function renderFlowList(){
     btn.className = 'btn-ghost btn-sm ' + (loc ? 'btn-remove' : 'btn-add');
     btn.textContent = loc ? 'حذف' : 'افزودن';
     btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
-    // Per-row target (ticket/76): each model knows its chain, so no row is ever
-    // muted for "wrong chain" — only needs-key disables (remove stays enabled).
     const targetNow = targetForModel(d.id, d.providerId);
-    btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'); btn.disabled = !hasKey && !loc;
+    btn.title = disabled
+      ? 'این ارائه‌دهنده خاموش است'
+      : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'));
+    btn.disabled = (!hasKey || disabled) && !loc;
     btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
     card.append(main, btn);
-    box.appendChild(card);
+    frag.appendChild(card);
   }
+  box.appendChild(frag);
   const empty = $('m-empty'), err = $('m-err');
   if (empty) {
     empty.hidden = rows.length !== 0;
@@ -586,38 +740,79 @@ export function renderCustomProviders(){
   if(!box) return;
   box.innerHTML='';
   const s = Storage.getSettings();
+  const frag = document.createDocumentFragment();
   for(const c of (s.customProviders || [])){
+    const disabled = Storage.isProviderDisabled(c.id);
     const card = document.createElement('details');
-    card.className = 'provider-card';
+    card.className = 'provider-card' + (disabled ? ' is-disabled' : '');
     const head = document.createElement('summary');
     head.className = 'provider-head';
     const dot = document.createElement('span');
-    dot.className = 'dot ' + (c.key ? 'ok' : 'missing');
+    dot.className = 'dot ' + (disabled ? 'warn' : c.key ? 'ok' : 'missing');
     const name = document.createElement('b');
     name.textContent = c.name || c.id; // textContent: custom names never as HTML
     const pill = document.createElement('span');
-    pill.className = 'chain-badge ' + (c.key ? 'ok' : 'missing');
-    pill.textContent = c.key ? '✓ کلید' : '⚠ بی‌کلید';
+    pill.className = 'provider-status ' + (disabled ? 'disabled' : c.key ? 'ok' : 'missing');
+    pill.textContent = disabled ? 'خاموش' : (c.key ? 'متصل' : 'بدون کلید');
     const spacer = document.createElement('span');
     spacer.style.flex = '1';
     const base = document.createElement('span');
     base.className = 'hint-inline';
     base.textContent = c.baseURL || '';
     base.dir = 'ltr';
+    const swLbl = document.createElement('label');
+    swLbl.className = 'prov-switch';
+    swLbl.title = 'روشن یا خاموش کردن این ارائه‌دهنده';
+    const swIn = document.createElement('input');
+    swIn.type = 'checkbox';
+    swIn.className = 'sr-only';
+    swIn.checked = !disabled;
+    swIn.setAttribute('aria-label', `فعال بودن ${c.name || c.id}`);
+    const swTr = document.createElement('span');
+    swTr.className = 'prov-track';
+    swTr.setAttribute('aria-hidden', 'true');
+    swLbl.append(swIn, swTr);
+    swLbl.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      const nextDisabled = swIn.checked;
+      Storage.setProviderDisabled(c.id, nextDisabled);
+      renderCustomProviders();
+      renderAllChains();
+      renderFlowListSoon();
+      updateBadge();
+      try { onSettingsSync(); } catch {}
+      Logger.toast(`${c.name || c.id} ${nextDisabled ? 'خاموش' : 'روشن'} شد`);
+    });
     const rm = document.createElement('button');
-    rm.type = 'button'; rm.className = 'btn-ghost btn-sm'; rm.textContent = 'حذف';
-    rm.setAttribute('aria-label', 'حذف ارائه‌دهنده سفارشی');
+    rm.type = 'button'; rm.className = 'btn-ghost btn-xs prov-remove'; rm.textContent = 'حذف';
+    rm.setAttribute('aria-label', `حذف ارائه‌دهنده سفارشی ${c.name || c.id}`);
     rm.addEventListener('click', (e)=>{
       e.preventDefault();
-      const cur = Storage.getSettings().customProviders.filter(x=> x.id !== c.id);
-      Storage.saveSettings({ customProviders: cur });
-      // drop chain entries pointing at removed provider
-      sttChainState = sttChainState.filter(x=> providerIdOf(x,'') !== c.id);
-      polishChainState = polishChainState.filter(x=> providerIdOf(x,'') !== c.id);
-      scheduleChainsPersist(); renderCustomProviders(); renderFlowList();
-      Logger.toast('حذف شد');
+      e.stopPropagation();
+      const prevCustom = Storage.getSettings().customProviders.map(x => ({ ...x }));
+      const prevStt = sttChainState.map(x => (typeof x === 'object' ? { ...x } : x));
+      const prevPolish = polishChainState.map(x => (typeof x === 'object' ? { ...x } : x));
+      Storage.removeProvider(c.id);
+      const nextS = Storage.getSettings();
+      sttChainState = [...nextS.sttChain];
+      polishChainState = nextS.polishChain.map(x => ({ ...x }));
+      renderCustomProviders(); renderAllChains(); renderFlowList(); renderProvidersStatus(); updateBadge();
+      try { onSettingsSync(); } catch {}
+      Logger.toast(`«${c.name || c.id}» حذف شد`, 8000, {
+        actionLabel: 'واگرد',
+        onAction: () => {
+          Storage.saveSettings({ customProviders: prevCustom, sttChain: prevStt, polishChain: prevPolish });
+          const restored = Storage.getSettings();
+          sttChainState = [...restored.sttChain];
+          polishChainState = restored.polishChain.map(x => ({ ...x }));
+          renderCustomProviders(); renderAllChains(); renderFlowList(); renderProvidersStatus(); updateBadge();
+          try { onSettingsSync(); } catch {}
+          Logger.toast(`${c.name || c.id} بازگردانده شد`);
+        },
+      });
     });
-    head.append(dot, name, pill, spacer, base, rm);
+    head.append(dot, name, pill, spacer, base, swLbl, rm);
     const body = document.createElement('div');
     body.className = 'provider-body';
     const keyLabel = document.createElement('span');
@@ -625,8 +820,9 @@ export function renderCustomProviders(){
     keyLabel.textContent = 'کلید در فرم افزودن ویرایش می‌شود — اینجا فقط نمایشی است.';
     body.appendChild(keyLabel);
     card.append(head, body);
-    box.appendChild(card);
+    frag.appendChild(card);
   }
+  box.appendChild(frag);
   syncCustomModelsBtn();
 }
 function syncCustomModelsBtn(){
@@ -662,7 +858,9 @@ function renderChainPanel(target){
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
   if(!rows.length){ list.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن.'; return; }
   const chainFa = target === 'stt' ? 'STT' : 'پالیش';
+  const frag = document.createDocumentFragment();
   for(const d of rows){
+    const disabled = Storage.isProviderDisabled(d.providerId);
     let hasKey = false;
     try{ hasKey = hasKeyById(d.providerId); }catch{ hasKey = false; }
     const loc = chainLoc(d.id, d.providerId);
@@ -691,18 +889,19 @@ function renderChainPanel(target){
       btn.textContent = 'افزودن';
       btn.classList.add('btn-add');
       btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + chainFa);
-      btn.title = !hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + chainFa;
-      btn.disabled = !hasKey;
+      btn.title = disabled ? 'این ارائه‌دهنده خاموش است' : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + chainFa);
+      btn.disabled = !hasKey || disabled;
       btn.addEventListener('click', ()=>{
-        addModelToChain(d.id, d.providerId, target); // same target-scoped helper as the models tab
+        addModelToChain(d.id, d.providerId, target);
         renderFlowList();
-        renderChainPanel(target); // stays open so more models can follow without scrolling
+        renderChainPanel(target);
         chainPanelEls(target).search?.focus?.();
       });
     }
     card.append(main, btn);
-    list.appendChild(card);
+    frag.appendChild(card);
   }
+  list.appendChild(frag);
 }
 export function setChainPanel(target, open, focusSearch){
   const { btn, panel, search } = chainPanelEls(target);
@@ -726,6 +925,7 @@ export function mountChains(deps){
   shortcutsOpen = deps.shortcutsOpen;
   renderProvidersStatus = deps.renderProvidersStatus;
   onChainsRendered = deps.onChainsRendered || null;
+  onSettingsSync = deps.onSettingsSync || onSettingsSync;
   els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
   els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini'));
   els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
@@ -851,10 +1051,10 @@ export function mountChains(deps){
     addModelToChain(mid, pid, target);
     renderFlowList();
   });
-  $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); Logger.toast('همه روشن'); });
-  $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); Logger.toast('همه خاموش'); });
-  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); Logger.toast('همه STT روشن'); });
-  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); Logger.toast('همه STT خاموش'); });
+  $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه روشن'); });
+  $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه خاموش'); });
+  $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه STT روشن'); });
+  $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
   els.btnExpandStt?.addEventListener('click', ()=> toggleChainPanel('stt'));
   els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));

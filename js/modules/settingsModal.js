@@ -36,21 +36,44 @@ let mainWaveSync = () => {};
 let isWaveMicActive = () => false;
 let onSettingsSync = () => {};
 
+let geminiPersonalOpen = false;
+const BUILTIN_LABELS = { groq: 'Groq', google: 'Google Gemini', openrouter: 'OpenRouter' };
+
 function engineInfo() {
   const s = Storage.getSettings();
-  const raw = s.sttChain?.find(e => typeof e !== 'object' || e.enabled !== false) || s.sttChain?.[0] || s.primary || 'groq';
-  const firstId = typeof raw === 'object' ? raw.id : raw;
-  const label = firstId === 'groq' ? 'Groq' : String(firstId).replace(/^gemini-/i, 'Gemini ');
+  const active = s.sttChain?.find(e => (typeof e !== 'object' || e.enabled !== false) && hasKeyFor(e))
+    || s.sttChain?.find(e => typeof e !== 'object' || e.enabled !== false)
+    || s.sttChain?.[0];
   const pol = s.polishEnabled ? 'پالیش روشن' : 'پالیش خاموش';
-  return { text: `${label} · ${pol}`, hasKey: hasKeyFor(raw) };
+  if (!active) return { text: `بدون مدل صوتی · ${pol}`, hasKey: false };
+  const firstId = typeof active === 'object' ? active.id : active;
+  const label = firstId === 'groq' ? 'Groq' : String(firstId).replace(/^gemini-/i, 'Gemini ');
+  return { text: `${label} · ${pol}`, hasKey: hasKeyFor(active) };
 }
 
 function updateBadge() {
   getStagebar()?.updateStageScope();
 }
 
+function syncGeminiCardLayout() {
+  const serverReady = Storage.isServerGeminiAvailable();
+  const gm = els.keyGemini?.value?.trim() || Storage.getSettings().geminiKey || '';
+  const showInput = !serverReady || geminiPersonalOpen || !!gm;
+  const srvBar = $('gemini-server-bar');
+  const keyBlock = $('gemini-key-block');
+  const srvModelsRow = $('gemini-models-row');
+  const rec = $('gemini-rec');
+  const persBtn = $('btn-gemini-personal');
+  if (srvBar) srvBar.hidden = !serverReady;
+  if (keyBlock) keyBlock.hidden = !showInput;
+  if (srvModelsRow) srvModelsRow.hidden = showInput;
+  if (rec) rec.textContent = serverReady ? 'متصل از طریق سرور (یا کلید شخصی)' : 'کلید Google AI Studio';
+  if (persBtn) persBtn.textContent = showInput ? 'مخفی کردن کلید شخصی' : 'افزودن کلید شخصی';
+}
+
 function validate() {
   const g = els.keyGroq?.value.trim() || '';
+  const gm = els.keyGemini?.value.trim() || '';
   const or = els.keyOpenrouter?.value.trim() || '';
   const hg = $('hint-groq');
   const hgm = $('hint-gemini');
@@ -62,19 +85,27 @@ function validate() {
       ? 'کلید Groq باید با <code>gsk_</code> شروع شود.'
       : 'رایگان و بسیار سریع برای فارسی؛ با <code>gsk_</code> شروع می‌شود. <a href="https://console.groq.com/keys" target="_blank" rel="noopener">دریافت کلید از console.groq.com</a>';
   }
+  syncGeminiCardLayout();
   if (hgm) {
     const serverReady = Storage.isServerGeminiAvailable();
-    hgm.className = 'hint';
-    hgm.textContent = serverReady
-      ? 'مدل‌های Google Gemini به‌صورت خودکار از طریق سرور فعال هستند و نیازی به وارد کردن کلید در مرورگر نیست.'
-      : 'سرویس Google Gemini روی سرور پیکربندی نشده است؛ برای فعال‌سازی، متغیر GEMINI_API_KEY را در تنظیمات سرور (Settings > Secrets) وارد کنید.';
+    const looksGm = !gm || gm.startsWith('AIza') || gm.startsWith('AQ.');
+    hgm.className = 'hint' + (gm && !looksGm ? ' err' : '');
+    if (gm && !looksGm) {
+      hgm.innerHTML = 'کلید Google AI Studio معمولاً با <code>AIza</code> یا <code>AQ.</code> شروع می‌شود.';
+    } else if (serverReady) {
+      hgm.textContent = gm
+        ? 'کلید شخصی شما ثبت شده و به‌جای کلید سرور استفاده می‌شود.'
+        : 'سرویس Google Gemini از طریق سرور فعال است. در صورت نیاز می‌توانی کلید شخصی خودت را هم وارد کنی.';
+    } else {
+      hgm.innerHTML = 'برای اجرا در مرورگر (مانند GitHub Pages)، کلید رایگان Google AI Studio را وارد کن. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>';
+    }
   }
   if (hor) {
     const okOr = !or || or.startsWith('sk-or-');
     hor.className = 'hint' + (or && !okOr ? ' err' : '');
     hor.innerHTML = or && !okOr
       ? 'کلید OpenRouter معمولاً با <code>sk-or-v1-</code> شروع می‌شود.'
-      : 'اختیاری برای مدل‌های پالیش بیشتر. در صورت خالی بودن، پالیش با Groq یا Google انجام می‌شود. <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>';
+      : 'اختیاری برای مدل‌های پالیش بیشتر. <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">openrouter.ai/keys</a>';
   }
 
   if (els.groqBaseUrl) {
@@ -107,32 +138,92 @@ function validate() {
   try { renderFlowListSoon(); } catch {}
 }
 
+function renderRestoreProvidersBar() {
+  const bar = $('restore-providers-bar');
+  if (!bar) return;
+  let removed = [];
+  try { removed = Storage.getRemovedBuiltIns(); } catch { removed = []; }
+  bar.textContent = '';
+  if (!removed.length) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const label = document.createElement('span');
+  label.className = 'hint-inline';
+  label.textContent = 'ارائه‌دهندگان حذف‌شده:';
+  bar.appendChild(label);
+  for (const pid of removed) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-ghost btn-xs';
+    btn.textContent = `＋ بازگردانی ${BUILTIN_LABELS[pid] || pid}`;
+    btn.addEventListener('click', () => {
+      Storage.restoreProvider(pid);
+      renderProvidersStatus();
+      renderAllChains();
+      try { renderFlowListSoon(); } catch {}
+      updateBadge();
+      try { onSettingsSync(); } catch {}
+      Logger.toast(`${BUILTIN_LABELS[pid] || pid} بازگردانده شد`);
+    });
+    bar.appendChild(btn);
+  }
+}
+
 function renderProvidersStatus() {
-  let providers = [];
-  try { providers = Storage.getProviders(); } catch { return; }
+  const cardIds = { groq: 'provider-card-groq', google: 'provider-card-gemini', openrouter: 'provider-card-openrouter' };
+  const s = Storage.getSettings();
   const liveValues = {
     groq: els.keyGroq?.value?.trim(),
+    google: els.keyGemini?.value?.trim(),
     openrouter: els.keyOpenrouter?.value?.trim(),
   };
-  for (const p of providers) {
-    const pill = document.getElementById('pill-' + p.id) || (p.id === 'google' ? document.getElementById('pill-gemini') : null);
-    if (pill) {
-      if (p.id === 'google') {
-        const ready = Storage.isServerGeminiAvailable();
-        pill.className = 'provider-status ' + (ready ? 'ok' : 'missing');
-        pill.textContent = ready ? 'متصل (سرور)' : 'تنظیم‌نشده روی سرور';
-        continue;
+  for (const pid of ['groq', 'google', 'openrouter']) {
+    const removed = Storage.isProviderRemoved(pid);
+    const disabled = Storage.isProviderDisabled(pid);
+    const card = $(cardIds[pid]);
+    if (card) {
+      card.hidden = removed;
+      card.classList.toggle('is-disabled', disabled);
+      const sw = card.querySelector(`[data-provider-toggle="${pid}"]`);
+      if (sw) {
+        sw.checked = !disabled;
+        sw.setAttribute('aria-checked', String(!disabled));
       }
-      const has = p.id in liveValues ? !!(liveValues[p.id] || p.hasKey) : !!p.hasKey;
-      pill.className = 'provider-status ' + (has ? 'ok' : 'missing');
-      pill.textContent = has ? 'متصل' : 'بدون کلید';
     }
+    const pill = document.getElementById('pill-' + pid) || (pid === 'google' ? document.getElementById('pill-gemini') : null);
+    if (!pill) continue;
+    if (disabled) {
+      pill.className = 'provider-status disabled';
+      pill.textContent = 'خاموش';
+      continue;
+    }
+    if (pid === 'google') {
+      const hasPersonal = !!(liveValues.google || s.geminiKey);
+      const serverReady = Storage.isServerGeminiAvailable();
+      if (hasPersonal) {
+        pill.className = 'provider-status ok';
+        pill.textContent = 'متصل (کلید شخصی)';
+      } else if (serverReady) {
+        pill.className = 'provider-status ok';
+        pill.textContent = 'متصل (سرور)';
+      } else {
+        pill.className = 'provider-status missing';
+        pill.textContent = 'بدون کلید';
+      }
+      continue;
+    }
+    const has = !!(liveValues[pid] || (pid === 'groq' ? s.groqKey : s.openrouterKey));
+    pill.className = 'provider-status ' + (has ? 'ok' : 'missing');
+    pill.textContent = has ? 'متصل' : 'بدون کلید';
   }
+  renderRestoreProvidersBar();
 }
 
 function hasAnyConfiguredKey() {
   try {
-    return Storage.getProviders().some(p => p.hasKey);
+    return Storage.getProviders().some(p => !p.disabled && p.hasKey);
   } catch {
     const s = Storage.getSettings();
     return !!(s.groqKey || s.geminiKey || s.openrouterKey);
@@ -142,6 +233,7 @@ function hasAnyConfiguredKey() {
 function loadSettings() {
   const s = Storage.getSettings();
   if (els.keyGroq) els.keyGroq.value = s.groqKey;
+  if (els.keyGemini) els.keyGemini.value = s.geminiKey || '';
   if (els.keyOpenrouter) els.keyOpenrouter.value = s.openrouterKey;
   if (els.groqBaseUrl) els.groqBaseUrl.value = s.groqBaseURL || GROQ_BASE_DEFAULT;
   if (els.openrouterBaseUrl) els.openrouterBaseUrl.value = s.openrouterBaseURL || OPENROUTER_BASE_DEFAULT;
@@ -160,7 +252,7 @@ function loadSettings() {
   Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
   Dashboard.renderOverall();
   if (!hasAnyConfiguredKey()) {
-    Logger.setStatus('بدون کلید — برای شروع تنظیم کن', 'warn');
+    Logger.setStatus('بدون کلید فعال — برای شروع تنظیم کن', 'warn');
   } else {
     Logger.setStatus('آماده ضبط', 'info');
   }
@@ -171,6 +263,7 @@ function saveSettings() {
   try {
     Storage.saveSettings({
       groqKey: els.keyGroq?.value || '',
+      geminiKey: els.keyGemini?.value || '',
       openrouterKey: els.keyOpenrouter?.value || '',
       groqBaseURL: els.groqBaseUrl?.value || '',
       openrouterBaseURL: els.openrouterBaseUrl?.value || '',
@@ -315,9 +408,72 @@ export function mountSettingsModal(deps) {
   onSettingsSync = deps.onSettingsSync || onSettingsSync;
 
   if (els.keyGroq) els.keyGroq.addEventListener('input', validate);
+  if (els.keyGemini) els.keyGemini.addEventListener('input', validate);
   if (els.keyOpenrouter) els.keyOpenrouter.addEventListener('input', validate);
   if (els.groqBaseUrl) els.groqBaseUrl.addEventListener('input', validate);
   if (els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input', validate);
+
+  $('btn-gemini-personal')?.addEventListener('click', () => {
+    geminiPersonalOpen = !geminiPersonalOpen;
+    syncGeminiCardLayout();
+    if (geminiPersonalOpen) els.keyGemini?.focus?.();
+  });
+  $('btn-gemini-models-srv')?.addEventListener('click', () => els.btnGeminiModels?.click?.());
+
+  // Built-in provider On/Off switches + Remove actions inside <summary>
+  els.providerDrawer?.querySelectorAll('.prov-switch').forEach((lbl) => {
+    lbl.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const cb = lbl.querySelector('[data-provider-toggle]');
+      if (!cb) return;
+      const pid = cb.dataset.providerToggle;
+      const nextDisabled = cb.checked; // currently checked (active) -> toggle off
+      Storage.setProviderDisabled(pid, nextDisabled);
+      renderProvidersStatus();
+      renderAllChains();
+      try { renderFlowListSoon(); } catch {}
+      updateBadge();
+      try { onSettingsSync(); } catch {}
+      Logger.toast(`${BUILTIN_LABELS[pid] || pid} ${nextDisabled ? 'خاموش' : 'روشن'} شد`);
+    });
+  });
+
+  els.providerDrawer?.querySelectorAll('[data-provider-remove]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pid = btn.dataset.providerRemove;
+      const prevStt = getSttChain().map(x => (typeof x === 'object' ? { ...x } : x));
+      const prevPolish = getPolishChain().map(x => (typeof x === 'object' ? { ...x } : x));
+      Storage.removeProvider(pid);
+      const cur = Storage.getSettings();
+      setSttChain([...cur.sttChain]);
+      setPolishChain(cur.polishChain.map(x => ({ ...x })));
+      renderProvidersStatus();
+      renderAllChains();
+      try { renderFlowListSoon(); } catch {}
+      updateBadge();
+      try { onSettingsSync(); } catch {}
+      Logger.toast(`«${BUILTIN_LABELS[pid] || pid}» حذف شد`, 8000, {
+        actionLabel: 'واگرد',
+        onAction: () => {
+          Storage.restoreProvider(pid);
+          Storage.saveSettings({ sttChain: prevStt, polishChain: prevPolish });
+          const next = Storage.getSettings();
+          setSttChain([...next.sttChain]);
+          setPolishChain(next.polishChain.map(x => ({ ...x })));
+          renderProvidersStatus();
+          renderAllChains();
+          try { renderFlowListSoon(); } catch {}
+          updateBadge();
+          try { onSettingsSync(); } catch {}
+          Logger.toast(`${BUILTIN_LABELS[pid] || pid} برگردانده شد`);
+        },
+      });
+    });
+  });
+
   if (els.togglePolish) {
     els.togglePolish.addEventListener('change', () => {
       persistChains();

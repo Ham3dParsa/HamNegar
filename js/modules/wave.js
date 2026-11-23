@@ -106,13 +106,16 @@ export function createWaveRenderer(canvas) {
   let cfg = defaultWaveConfig();
   let analyser = null;
   let micBuf = null;
+  let freqBuf = null;
   let fakeOn = true;
   let raf = 0;
+  let active = false;
   let last = 0;
   let lastF = 0; // renderFrame() clock for externally-driven thumbs (T3/3 shared loop)
   const t0 = performance.now();
   let gateOpen = false, env = 0, envFast = 0, envSlow = 0;
   const wSm = new Map();
+  const gradCache = new Map();
   let Wd = 0, H = 0;
 
   const eff = (wv, k) => (wv.ov && wv.ov[k] != null ? wv.ov[k] : cfg[k]);
@@ -123,13 +126,43 @@ export function createWaveRenderer(canvas) {
   // the taller preview at normal levels; extremes still soft-clip at the edge (reads as loud).
   const ampOf = (HH, L, wv) => HH * IDLE_FRAC + HH * 0.40 * sm(L / (1 + 0.12 * L)) * (0.15 + 1.85 * (eff(wv, 'intensity') / 100));
 
-  function fit() {
+  function fit(nextW, nextH) {
     const d = Math.min(devicePixelRatio || 1, 2);
-    const r = canvas.getBoundingClientRect();
-    Wd = Math.max(2, r.width); H = Math.max(2, r.height);
-    canvas.width = Math.max(2, Math.round(Wd * d));
-    canvas.height = Math.max(2, Math.round(H * d));
+    let w = nextW, h = nextH;
+    if (w == null || h == null) {
+      const r = canvas.getBoundingClientRect();
+      w = r.width;
+      h = r.height;
+    }
+    const nw = Math.max(2, w || canvas.clientWidth || 2);
+    const nh = Math.max(2, h || canvas.clientHeight || 2);
+    const targetCw = Math.round(nw * d);
+    const targetCh = Math.round(nh * d);
+    if (Math.abs(nw - Wd) <= 0.5 && Math.abs(nh - H) <= 0.5 && canvas.width === targetCw && canvas.height === targetCh) return;
+    Wd = nw; H = nh;
+    canvas.width = Math.max(2, targetCw);
+    canvas.height = Math.max(2, targetCh);
     g.setTransform(d, 0, 0, d, 0, 0);
+    gradCache.clear();
+  }
+
+  function drawStaticLine() {
+    if (Wd <= 2 || H <= 2) fit();
+    g.clearRect(0, 0, Wd, H);
+    g.fillStyle = '#333439';
+    g.fillRect(0, H / 2 - 1, Wd, 2);
+  }
+
+  if (typeof ResizeObserver === 'function') {
+    try {
+      const ro = new ResizeObserver((entries) => {
+        const cr = entries[0]?.contentRect;
+        if (!cr) return;
+        fit(cr.width, cr.height);
+        if (!raf && active && (reduced || (!analyser && !fakeOn))) drawStaticLine();
+      });
+      ro.observe(canvas);
+    } catch {}
   }
 
   function stepLevel(t, dt) {
@@ -163,7 +196,8 @@ export function createWaveRenderer(canvas) {
     }
     // Mic spectrum shape × gated level: silence → 0 (stillness), speech → opens.
     const n = analyser.frequencyBinCount;
-    const buf = new Uint8Array(n);
+    if (!freqBuf || freqBuf.length !== n) freqBuf = new Uint8Array(n);
+    const buf = freqBuf;
     analyser.getByteFrequencyData(buf);
     const q1 = Math.floor(n * 0.15), q2 = Math.floor(n * 0.45);
     let l = 0, m = 0, h = 0;
@@ -199,8 +233,13 @@ export function createWaveRenderer(canvas) {
 
   function strokeFor(wv, t) {
     if (wv.colorMode === 'gradient') {
-      const gr = g.createLinearGradient(0, H / 2 - 30, 0, H / 2 + 30);
-      gr.addColorStop(0, wv.c1); gr.addColorStop(1, wv.c2);
+      const k = `${H}|${wv.c1}|${wv.c2}`;
+      let gr = gradCache.get(k);
+      if (!gr) {
+        gr = g.createLinearGradient(0, H / 2 - 30, 0, H / 2 + 30);
+        gr.addColorStop(0, wv.c1); gr.addColorStop(1, wv.c2);
+        gradCache.set(k, gr);
+      }
       return gr;
     }
     if (wv.colorMode === 'rainbow') {
@@ -385,32 +424,46 @@ export function createWaveRenderer(canvas) {
     if (top) drawParts(t, top);
   }
 
+  function canAnimate() {
+    return !reduced && !document.hidden && (Boolean(analyser) || fakeOn);
+  }
+
+  function ensureLoop() {
+    if (!active) return;
+    if (!canAnimate()) {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (!document.hidden) drawStaticLine();
+      return;
+    }
+    if (Wd <= 2 || H <= 2) fit();
+    if (!raf) {
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
+  }
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      } else if (active) {
+        ensureLoop();
+      }
+    });
+  }
+
   function frame(now) {
-    if (!raf) return;
+    if (!raf || !active || !canAnimate()) {
+      raf = 0;
+      if (!document.hidden && active) drawStaticLine();
+      return;
+    }
     // Cap at ~60fps: skip frames arriving <16ms after the previous one.
     if (now - last < 15) { raf = requestAnimationFrame(frame); return; }
     const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
     last = now;
-    const t = reduced ? 0 : now - t0;
-    const r = canvas.getBoundingClientRect();
-    if (Math.abs(r.width - Wd) > 1 || Math.abs(r.height - H) > 1) fit();
+    const t = now - t0;
     g.clearRect(0, 0, Wd, H);
-    if (reduced) {
-      // Static line: no animation, no fake/mic levels.
-      g.fillStyle = '#333439';
-      g.fillRect(0, H / 2 - 1, Wd, 2);
-      raf = requestAnimationFrame(frame);
-      return;
-    }
-    if (!analyser && !fakeOn) {
-      // #91 T3 static-unless-live: this instance has no fake demo and no live
-      // mic — flat line, no clock-driven wobble. Only hits fake-OFF instances
-      // (main strip); fake-ON paths (settings preview/starters) never land here.
-      g.fillStyle = '#333439';
-      g.fillRect(0, H / 2 - 1, Wd, 2);
-      raf = requestAnimationFrame(frame);
-      return;
-    }
     stepLevel(t, dt);
     drawStack(t, dt, bandLevels());
     raf = requestAnimationFrame(frame);
@@ -426,26 +479,31 @@ export function createWaveRenderer(canvas) {
     setAnalyser(node) {
       analyser = node || null;
       micBuf = null;
+      freqBuf = null;
+      if (active) ensureLoop();
     },
-    setFakeEnabled(on) { fakeOn = !!on; },
+    setFakeEnabled(on) {
+      fakeOn = !!on;
+      if (active) ensureLoop();
+    },
     getLevel() { return sm(env); },
-    start() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } },
-    stop() { if (raf) cancelAnimationFrame(raf); raf = 0; },
+    start() {
+      active = true;
+      ensureLoop();
+    },
+    stop() {
+      active = false;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      drawStaticLine();
+    },
     // T3/3: one synchronous frame on the caller's clock — lets app.js drive ALL
     // starter thumbs from ONE shared rAF instead of N per-renderer loops.
     renderFrame(now) {
-      const r = canvas.getBoundingClientRect();
-      if (Math.abs(r.width - Wd) > 1 || Math.abs(r.height - H) > 1) fit();
+      if (Wd <= 2 || H <= 2) fit();
       g.clearRect(0, 0, Wd, H);
-      if (reduced) {
-        g.fillStyle = '#333439';
-        g.fillRect(0, H / 2 - 1, Wd, 2);
-        return;
-      }
-      if (!analyser && !fakeOn) {
-        // #91 T3 static-unless-live (externally-driven twin of the frame() gate).
-        g.fillStyle = '#333439';
-        g.fillRect(0, H / 2 - 1, Wd, 2);
+      if (reduced || (!analyser && !fakeOn)) {
+        drawStaticLine();
         return;
       }
       if (!lastF) lastF = now;
