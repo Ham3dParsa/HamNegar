@@ -91,11 +91,11 @@ function updateStageScope(){
   if (!badge) return;
   const g = stageScope();
   const base = g.kind === 'selection'
-    ? 'دامنه: انتخاب («' + g.sel.slice(0, 24) + (g.sel.length > 24 ? '…' : '') + '»)'
-    : 'دامنه: کل متن';
+    ? 'انتخاب («' + g.sel.slice(0, 22) + (g.sel.length > 22 ? '…' : '') + '»)'
+    : 'کل متن';
   const eng = engineInfo();
-  badge.textContent = `${base} • ${eng.text}`;
-  badge.style.opacity = eng.hasKey ? '1' : '0.6';
+  badge.textContent = `${base} · ${eng.text}`;
+  badge.style.opacity = eng.hasKey ? '1' : '0.68';
 }
 // stagebar button visibility (session-only: storage seam is locked, so no persistence here)
 const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…']];
@@ -259,7 +259,12 @@ function renderLangs(){
     if (i === langHi) b.classList.add('hl');
     b.addEventListener('mouseenter', () => { langHi = i; paintLangHi(); });
     b.addEventListener('click', () => {
-      if (code !== '__none__') { const p = $('tr-panel'); if (p) p.hidden = true; runTranslate(code); }
+      if (code !== '__none__') {
+        const p = $('tr-panel');
+        if (p) p.hidden = true;
+        $('stage-tr-panel')?.setAttribute('aria-pressed', 'false');
+        runTranslate(code);
+      }
     });
     box.appendChild(b);
   });
@@ -340,12 +345,15 @@ export function mountStagebar(deps){
   $('stage-lang-search')?.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); langHi = Math.min(langView.length - 1, langHi + 1); paintLangHi(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); langHi = Math.max(0, langHi - 1); paintLangHi(); }
-    else if (e.key === 'Enter' && langView[langHi]) { const p = $('tr-panel'); if (p) p.hidden = true; runTranslate(langView[langHi][1]); }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const p = $('tr-panel'); if (p) p.hidden = true; } // consume: topmost layer owns Esc — must never reach recording-cancel (ticket/2x)
+    else if (e.key === 'Enter' && langView[langHi]) { const p = $('tr-panel'); if (p) p.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); runTranslate(langView[langHi][1]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const p = $('tr-panel'); if (p) p.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); } // consume: topmost layer owns Esc — must never reach recording-cancel
   });
   document.addEventListener('click', (e) => {
     const panel = $('tr-panel');
-    if (panel && !panel.hidden && !e.target.closest('#tr-panel') && !e.target.closest('#stage-tr-panel')) panel.hidden = true;
+    if (panel && !panel.hidden && !e.target.closest('#tr-panel') && !e.target.closest('#stage-tr-panel')) {
+      panel.hidden = true;
+      $('stage-tr-panel')?.setAttribute('aria-pressed', 'false');
+    }
     const det = $('stage-settings');
     if (det && det.open && !e.target.closest('#stage-settings')) det.removeAttribute('open');
   });

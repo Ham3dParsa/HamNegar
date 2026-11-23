@@ -4,6 +4,7 @@
 import { fa, esc } from './format.js';
 
 let logBody, statusText, statusDot, toastEl;
+let toastTimer = null;
 
 // Per-run groups (ticket/16): groupRun(label) opens run #n with a clickable separator;
 // every later log line is tagged data-run=n until the next groupRun/clearRun.
@@ -25,12 +26,10 @@ let progressIndex = 0;
 // raw chain ids (e.g. gemini-flash-lite-latest) never reach the progress UI.
 const STT_DISPLAY_NAMES = {
   groq: 'Groq',
-  'gemini-flash-lite-latest': 'Flash-Lite',
-  'gemini-3.5-flash-lite': 'Flash-Lite 3.5',
+  'gemini-3.5-transcribe': 'Gemini 3.5 Transcribe',
   'gemini-3.1-flash-lite': 'Flash-Lite 3.1',
-  'gemini-2.5-flash': 'Flash 2.5',
-  'gemini-2.0-flash': 'Flash 2.0',
-  'gemini-1.5-flash': 'Flash 1.5',
+  'gemini-4-hydrogen': 'Gemini 4',
+  'gemini-flash-lite-latest': 'Flash-Lite',
   'gemini-flash-latest': 'Flash',
   'groq-whisper-2': 'Groq Whisper 2',
 };
@@ -140,11 +139,30 @@ export const Logger = {
     if (statusDot) statusDot.className = 'dot' + (type === 'error' ? ' err' : type === 'warn' ? ' warn' : type === 'rec' ? ' rec' : '');
     this.log(type === 'error' ? 'error' : type === 'warn' ? 'warn' : 'info', text);
   },
-  toast(msg, ms = 2600) {
+  toast(msg, ms = 2600, opts = null) {
     if (!toastEl) return;
-    toastEl.textContent = msg;
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    toastEl.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = String(msg ?? '');
+    toastEl.appendChild(span);
+    if (opts && opts.actionLabel && typeof opts.onAction === 'function') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-undo';
+      btn.textContent = opts.actionLabel;
+      btn.addEventListener('click', () => {
+        if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+        toastEl.classList.remove('show');
+        try { opts.onAction(); } catch {}
+      });
+      toastEl.appendChild(btn);
+    }
     toastEl.classList.add('show');
-    setTimeout(() => toastEl.classList.remove('show'), ms);
+    toastTimer = setTimeout(() => {
+      toastEl.classList.remove('show');
+      toastTimer = null;
+    }, ms);
   },
   setProgress({ state, index, total, label, engine }) {
     if (!progressEl) progressEl = document.getElementById('stt-progress');

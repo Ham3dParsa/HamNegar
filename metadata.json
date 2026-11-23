@@ -1,0 +1,10 @@
+{
+  "name": "هم‌نگار — استودیوی تایپ صوتی هوشمند",
+  "description": "استودیوی تایپ صوتی هوشمند فارسی برای موبایل، کلاس درس و نگارش طولانی",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

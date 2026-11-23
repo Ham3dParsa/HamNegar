@@ -20,11 +20,12 @@ import {
 import { $ } from './modules/dom.js';
 import { fa } from './modules/format.js';
 import { worstOf } from './modules/quota-badge.js';
+import { VoiceQueue } from './modules/voiceQueue.js';
 
 const els = {
   btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
-  modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'), keyOpenrouter: $('key-openrouter'),
+  modal: $('settings-modal'), keyGroq: $('key-groq'), keyOpenrouter: $('key-openrouter'),
   groqBaseUrl: $('groq-base-url'), openrouterBaseUrl: $('openrouter-base-url'),
   toggleRealtime: $('toggle-realtime'), toggleVad: $('toggle-vad'), toggleAutocopy: $('toggle-autocopy'),
   togglePolish: $('toggle-polish'),
@@ -35,14 +36,24 @@ const els = {
   logPanel: $('log-panel'), btnToggleLog: $('btn-toggle-log'),
   btnCancel: $('btn-cancel-stt'),
   btnGroqModels: $('btn-groq-models'), btnOrModels: $('btn-or-models'), btnGeminiModels: $('btn-gemini-models'),
+  tabKeys: $('tab-keys'), panelKeys: $('panel-keys'),
+  tabBehavior: $('tab-behavior'), panelBehavior: $('panel-behavior'),
   tabPipeline: $('tab-pipeline'), panelPipeline: $('panel-pipeline'),
+  tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   btnExpandStt: $('btn-expand-stt'), btnExpandPolish: $('btn-expand-polish'),
   providerDrawer: $('provider-drawer'),
   sttAddPanel: $('stt-add-panel'), sttAddSearch: $('stt-add-search'), sttAddList: $('stt-add-list'),
   polishAddPanel: $('polish-add-panel'), polishAddSearch: $('polish-add-search'), polishAddList: $('polish-add-list'),
-  tabWave: $('tab-wave'), panelWave: $('panel-wave'),
   customList: $('custom-providers-list'), customName: $('custom-name'), customBaseUrl: $('custom-base-url'), customKey: $('custom-key'),
   easyModelInput: $('easy-model-input'),
+  actionbar: document.querySelector('.actionbar'),
+  onboardingCard: $('onboarding-card'),
+  inspector: $('studio-inspector'), inspectorToggle: $('inspector-toggle'), btnInspector: $('btn-inspector'), inspectorClose: $('inspector-close'),
+  btnUploadAudio: $('btn-upload-audio'), audioFileInput: $('audio-file-input'),
+  modeQuick: $('mode-quick'), modeLecture: $('mode-lecture'),
+  presetQuick: $('preset-quick'), presetLecture: $('preset-lecture'),
+  pendingVoices: $('pending-voices'), pvList: $('pv-list'), pvHeading: $('pv-heading'),
+  pvNetDot: $('pv-net-dot'), pvNetNote: $('pv-net-note'), btnRetryAllVoices: $('btn-retry-all-voices'),
 };
 // hoisted above loadSettings(): updateBadge→updateStageScope→stageScope reads these during initial load
 let selStart=0, selEnd=0;
@@ -165,7 +176,6 @@ Logger.log = (level, msg, data) => {
   if (el && !passes(level, el.textContent, el)) el.classList.add('hidden');
   if (level === 'error' && logReady && els.logPanel?.classList.contains('collapsed')) {
     applyLogCollapsed(false);
-    Logger.toast('خطای جدید — لاگ باز شد');
   }
 };
 // ticket/16: separator click/keyboard isolates that run (combines with level filter + search)
@@ -199,6 +209,51 @@ if (location.protocol === 'file:') { if(els.fileWarn) els.fileWarn.style.display
 // Mounted BEFORE mountSettingsModal so the modal keeps receiving the same wave
 // handles by reference (listener registration order unchanged); app.js keeps only
 // thin calls. getMainWave/syncRecStrip are live (mainWave inits at file end; never snapshots).
+let onboardingDismissed = false;
+function syncOnboarding() {
+  const card = els.onboardingCard;
+  if (!card) return;
+  const hasKey = typeof Settings !== 'undefined' && Settings ? Settings.hasAnyConfiguredKey() : false;
+  const hasText = !!(els.output && els.output.value.trim());
+  card.hidden = hasKey || hasText || onboardingDismissed;
+}
+function syncModeUI() {
+  const isQuick = !!els.toggleVad?.checked;
+  els.modeQuick?.classList.toggle('active', isQuick);
+  els.modeQuick?.setAttribute('aria-pressed', isQuick ? 'true' : 'false');
+  els.modeLecture?.classList.toggle('active', !isQuick);
+  els.modeLecture?.setAttribute('aria-pressed', !isQuick ? 'true' : 'false');
+  els.presetQuick?.classList.toggle('active', isQuick);
+  els.presetQuick?.setAttribute('aria-pressed', isQuick ? 'true' : 'false');
+  els.presetLecture?.classList.toggle('active', !isQuick);
+  els.presetLecture?.setAttribute('aria-pressed', !isQuick ? 'true' : 'false');
+}
+function syncQuickToggles() {
+  const pop = $('behavior-pop');
+  if (!pop) return;
+  const state = {
+    realtime: !!els.toggleRealtime?.checked,
+    vad: !!els.toggleVad?.checked,
+    polish: !!els.togglePolish?.checked,
+    autocopy: !!els.toggleAutocopy?.checked,
+  };
+  pop.querySelectorAll('[data-quick-toggle]').forEach((btn) => {
+    const k = btn.dataset.quickToggle;
+    if (!(k in state)) return;
+    const on = state[k];
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.classList.toggle('active', on);
+  });
+}
+function applyPresetMode(mode) {
+  const vad = mode === 'quick';
+  if (els.toggleVad) els.toggleVad.checked = vad;
+  Storage.saveSettings({ vad });
+  syncModeUI();
+  syncQuickToggles();
+  Logger.toast(vad ? 'حالت روزمره: توقف خودکار در سکوت روشن است' : 'حالت کلاس: ضبط پیوسته بدون قطع در سکوت');
+}
+
 const Wave = mountWaveTab({ els, getMainWave: () => mainWave, syncRecStrip });
 const { waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, waveKillApply, isWaveHidden, isWaveMicActive } = Wave;
 const Settings = mountSettingsModal({
@@ -208,8 +263,10 @@ const Settings = mountSettingsModal({
   chainPanelOpen, setChainPanel, chainPanelEls, STT_DEFAULTS, POLISH_DEFAULTS,
   waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, mainWaveSync,
   isWaveMicActive,
+  onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); },
 });
-const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal } = Settings;
+const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey } = Settings;
+$('btn-x-modal')?.addEventListener('click', () => closeModal());
 
 // --- preference chains UI + models flow + inline add panels live in js/modules/chains.js (ticket 30) ---
 // Mounted here (original region-1 slot) so listener registration order is unchanged;
@@ -267,7 +324,24 @@ document.getElementById('log-header')?.addEventListener('click', (e)=>{
   applyLogCollapsed(!logCollapsed);
 });
 
-// quota strip (ticket/51): collapsed slim head (today numbers + worst-provider dot); details toggle reveals grid/report
+// progressive disclosure inspector (mobile bottom-sheet drawer, desktop side panel)
+function isInspectorOpen(){
+  return els.inspector?.dataset.open === 'true';
+}
+function setInspectorOpen(open){
+  if (!els.inspector) return;
+  els.inspector.dataset.open = open ? 'true' : 'false';
+  els.inspectorToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  els.btnInspector?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  els.btnInspector?.classList.toggle('active', open);
+  const chev = $('inspector-chev');
+  if (chev) chev.textContent = open ? '▴' : '▾';
+}
+els.inspectorToggle?.addEventListener('click', () => setInspectorOpen(!isInspectorOpen()));
+els.btnInspector?.addEventListener('click', () => setInspectorOpen(!isInspectorOpen()));
+els.inspectorClose?.addEventListener('click', () => setInspectorOpen(false));
+
+// quota strip: collapsed slim head (today numbers + worst-provider dot); details toggle reveals grid/report
 function setQuotaExpanded(v){
   const detail = $('quota-detail'), toggle = $('quota-toggle'), chev = $('quota-chev');
   if(!detail || !toggle) return;
@@ -282,7 +356,7 @@ function refreshQuotaStrip(){
   let s = null;
   try{ s = Quota.getSummary('today'); }catch{ return; }
   if(!s) return;
-  if(nums) nums.textContent = `${s.totals.count} درخواست • ${s.totals.words} کلمه`;
+  if(nums) nums.textContent = `${fa(s.totals.count)} درخواست · ${fa(s.totals.words)} کلمه`;
   if(dot){
     const badge = worstOf(s);
     dot.className = 'dot' + (badge ? ' ' + badge : '');
@@ -294,14 +368,16 @@ refreshQuotaStrip();
 // output draft + counters + heights
 selStart=0; selEnd=0; const saveCursor=()=>{ selStart=els.output.selectionStart; selEnd=els.output.selectionEnd; };
 els.output.addEventListener('click',saveCursor); els.output.addEventListener('keyup',saveCursor); els.output.addEventListener('select',saveCursor);
-const updateCounts=()=>{ els.charCount.textContent=els.output.value.length+' کاراکتر'; els.wordCount.textContent=(els.output.value.trim()?els.output.value.trim().split(/\s+/).length:0)+' کلمه'; autogrowOutput(); };
-// transcript autogrow (ticket/51): grow with content, cap ~60vh, then internal scroll; native resize:vertical kept for manual override
-// transcript touch resize (#93): a grip drag sets a manual-override flag — input may
-// grow a user-enlarged box, never shrink it; double-tap on #output resets the flag.
-// keyboard cap (#112 T1): a keyboard-open fires window/visualViewport resize with a
-// shrunken viewport — that path is shrink-only and uses a tight cap (40vh of the
-// shrunken viewport, 280px on narrow phones) so #stagebar stays above the fold.
-// select/focus handlers above only saveCursor — they never autogrow (delta 0px).
+const updateCounts = () => {
+  const v = els.output.value;
+  const words = v.trim() ? v.trim().split(/\s+/).length : 0;
+  els.charCount.textContent = `${fa(v.length)} کاراکتر`;
+  els.wordCount.textContent = `${fa(words)} کلمه`;
+  syncOnboarding();
+  autogrowOutput();
+};
+// transcript autogrow: generous mobile writing height when keyboard is closed,
+// tight keyboard cap ONLY when virtual keyboard shrinks visualViewport.
 let outManual=false;
 let vpPeak=Math.max(window.innerHeight, window.visualViewport ? window.visualViewport.height : 0);
 let kbCapOn=false, lastVpH=window.innerHeight;
@@ -309,9 +385,13 @@ function outputCap(){
   const vv=window.visualViewport;
   const vh=Math.round(Math.min(vv ? vv.height : window.innerHeight, window.innerHeight));
   const vw=Math.round(vv ? vv.width : window.innerWidth);
-  let cap=Math.round(vh * (kbCapOn ? 0.4 : 0.6));
-  if(vw <= 420) cap=Math.min(cap, 280);
-  return Math.max(cap, 96);
+  if(kbCapOn){
+    let cap=Math.round(vh * 0.4);
+    if(vw <= 420) cap=Math.min(cap, 280);
+    return Math.max(cap, 96);
+  }
+  const ratio = vw <= 640 ? 0.52 : 0.6;
+  return Math.max(Math.round(vh * ratio), 140);
 }
 function autogrowOutput(opts){
   if(!els.output) return;
@@ -345,7 +425,10 @@ let draftTimer=null;
 const editorHistory={stack:[], index:-1, max:50, pushing:false, push(v){ if(this.pushing) return; if(this.stack[this.index]===v) return; this.stack=this.stack.slice(0,this.index+1); this.stack.push(v); if(this.stack.length>this.max){ this.stack.shift(); } else { this.index++; } this.index=Math.min(this.index,this.stack.length-1); updateHistoryButtons(); }, undo(){ if(this.index<=0) return null; this.index--; updateHistoryButtons(); return this.stack[this.index]; }, redo(){ if(this.index>=this.stack.length-1) return null; this.index++; updateHistoryButtons(); return this.stack[this.index]; }, canUndo(){return this.index>0}, canRedo(){return this.index<this.stack.length-1}};
 function updateHistoryButtons(){ const u=document.getElementById('btn-undo'), r=document.getElementById('btn-redo'); if(u) u.disabled=!editorHistory.canUndo(); if(r) r.disabled=!editorHistory.canRedo(); }
 function applyHistoryValue(v){ editorHistory.pushing=true; els.output.value=v; saveCursor(); updateCounts(); Storage.saveDraft(v); editorHistory.pushing=false; updateHistoryButtons(); }
-els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); if(!editorHistory.pushing) editorHistory.push(els.output.value); clearTimeout(draftTimer); draftTimer=setTimeout(()=> Storage.saveDraft(els.output.value),400); });
+els.output.addEventListener('input',()=>{ saveCursor(); updateCounts(); if(!editorHistory.pushing) editorHistory.push(els.output.value); clearTimeout(draftTimer); draftTimer=setTimeout(()=> { draftTimer=null; Storage.saveDraft(els.output.value); },400); });
+function flushDraft(){ if(draftTimer){ clearTimeout(draftTimer); draftTimer=null; Storage.saveDraft(els.output.value); } }
+window.addEventListener('pagehide', flushDraft);
+window.addEventListener('beforeunload', flushDraft);
 document.getElementById('btn-undo')?.addEventListener('click', ()=>{ const v=editorHistory.undo(); if(v!==null) applyHistoryValue(v); });
 document.getElementById('btn-redo')?.addEventListener('click', ()=>{ const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); });
 // Undo scope (ticket/2x): the custom editorHistory runs ONLY while #output itself
@@ -619,18 +702,21 @@ function recTimerReset(){
 function syncActionbar(){
   const mic=els.btnMic, cb=els.btnCancel, tm=document.getElementById('mic-timer');
   if(!mic) return;
+  const active = isRecording || isTranscribing;
+  els.actionbar?.classList.toggle('is-active', active);
+  if (els.btnUploadAudio) els.btnUploadAudio.disabled = active;
   mic.classList.toggle('recording', isRecording);
   mic.classList.toggle('transcribing', isTranscribing);
-  mic.setAttribute('aria-busy', (isRecording||isTranscribing)?'true':'false');
-  mic.setAttribute('aria-label', isRecording?'توقف و تبدیل':isTranscribing?'در حال تبدیل':'میکروفون');
-  const showCancel=(isRecording||isTranscribing);
+  mic.setAttribute('aria-busy', active ? 'true' : 'false');
+  mic.setAttribute('aria-label', isRecording ? 'توقف و تبدیل' : isTranscribing ? 'در حال تبدیل' : 'شروع ضبط');
   if(cb){
-    if(cb.hasAttribute('hidden')!==!showCancel) cb.hidden=!showCancel;
+    if(cb.hasAttribute('hidden')!==!active) cb.hidden=!active;
     cb.classList.remove('cancel-appear');
-    if(showCancel){ void cb.offsetWidth; cb.classList.add('cancel-appear'); }
+    if(active){ void cb.offsetWidth; cb.classList.add('cancel-appear'); }
   }
-  if(tm) tm.hidden=!(isRecording||isTranscribing);
+  if(tm) tm.hidden=!active;
   updateHistoryButtons();
+  if (typeof pendingVoicesCache !== 'undefined' && pendingVoicesCache.length) renderPendingVoices();
 }
 function setMicBusy(busy){
   isTranscribing = busy;
@@ -655,12 +741,12 @@ async function startRecording(){
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
   const s=Storage.getSettings();
-  const hasBatchKey = !!(s.groqKey||s.geminiKey||s.openrouterKey);
-  // ticket/105: live preview is keyless — only the batch key gate stays. Keyless
+  const hasBatchKey = hasAnyConfiguredKey();
+  // live preview is keyless — only the batch key gate stays. Keyless
   // recording is allowed when realtime can actually preview (realtime=1 + SR
-  // supported); otherwise the old key prompt stands (nothing could preview).
+  // supported); otherwise open the Keys setup tab directly.
   const keylessPreview = !hasBatchKey && s.realtime && Realtime.isSupported();
-  if(!hasBatchKey && !keylessPreview){ Logger.setStatus('کلید نداری — ⚙️ نوار پایین را بزن','error'); openModal(); return; }
+  if(!hasBatchKey && !keylessPreview){ Logger.setStatus('برای ضبط دقیق یک کلید رایگان وارد کن','warn'); openModal('keys'); return; }
   let snap=null;
   recordingStarting = true;
   try{
@@ -695,7 +781,14 @@ async function startRecording(){
     }
     if(s.vad) startVAD();
     Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad, snapId: snap.id});
-  }catch(e){ try { await Audio.stop(); } catch {} if(snap && rtSnap?.id===snap.id) rtSnap=null; Logger.setStatus('میکروفون خطا: '+e.message,'error'); Logger.log('error','getUserMedia',e.message); Logger.toast(e.message); }
+  }catch(e){
+    try { await Audio.stop(); } catch {}
+    if(snap && rtSnap?.id===snap.id) rtSnap=null;
+    const hint = micErrorHint(e);
+    Logger.setStatus(hint,'error');
+    Logger.log('error','getUserMedia',{ name: e?.name, msg: e?.message });
+    Logger.toast(hint, 4500);
+  }
   finally { recordingStarting = false; }
 }
 function stopRecording(){
@@ -733,11 +826,14 @@ els.btnCancel?.addEventListener('click', cancelTranscription);
 // the diff sheet / modal / tr-panel own Esc.
 document.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape' || e.defaultPrevented) return;
-  if (shortcutsOpen()) return; // guide owns Esc while open (ticket/51)
-  if (diffPending && diffEls().back && !diffEls().back.hidden) return; // #83 owns Esc (registered later on document)
+  if (shortcutsOpen()) return; // guide owns Esc while open
+  if (diffPending && diffEls().back && !diffEls().back.hidden) return; // diff owns Esc
   const trp = $('tr-panel');
-  if (trp && !trp.hidden){ e.preventDefault(); trp.hidden = true; return; } // panel fallback: close, never cancel
-  if (els.modal && els.modal.style.display === 'flex') return; // modal owns Esc (element handler consumes)
+  if (trp && !trp.hidden){ e.preventDefault(); trp.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); return; }
+  const bpop = $('behavior-pop');
+  if (bpop && !bpop.hidden){ e.preventDefault(); setBehaviorOpen(false); $('behavior-toggle')?.focus?.(); return; }
+  if (els.modal && els.modal.style.display === 'flex') return; // modal owns Esc
+  if (isInspectorOpen() && window.innerWidth < 1080){ e.preventDefault(); setInspectorOpen(false); return; }
   if (isRecording || (isTranscribing && transcribingAbort)){ e.preventDefault(); e.stopPropagation(); cancelTranscription(); }
 });
 function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
@@ -769,26 +865,49 @@ async function handleTranscription(blob, snap){
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
   }
-  // ticket/105: keyless preview session — the interim text is already live in
-  // the output; there is no batch key to transcribe with, so prompt for a key
-  // instead of surfacing a 401 traceback. (Keys added mid-recording fall
-  // through to the normal batch path below.)
-  { const sNow = Storage.getSettings();
-    if(snap?.keyless && !sNow.groqKey && !sNow.geminiKey && !sNow.openrouterKey){
-      Logger.log('info','keyless stop — key prompt instead of batch',{snapId: snapId||null});
+  // keyless preview session — preserve the recorded blob too so entering a key
+  // lets the user convert what they just said without re-recording.
+  {
+    if(snap?.keyless && !hasAnyConfiguredKey()){
+      const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
+      await preservePendingVoice({
+        blob,
+        durationMs,
+        reason: 'کلید API ثبت نشده — پس از وارد کردن کلید، «تلاش مجدد» را بزن',
+        statusCode: 401,
+      });
+      Logger.log('info','keyless stop — audio preserved + key prompt',{snapId: snapId||null});
       Logger.dismissProgress(0);
       setMicBusy(false); transcribingAbort = null;
       recTimerReset(); syncActionbar(); mainWaveIdle();
       if(!snap || snapId===rtVersion){ rtSnap=null; }
       if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
-      Logger.setStatus('برای ثبت نهایی، کلید را در ⚙️ وارد کن','warn');
-      Logger.toast('برای ثبت نهایی کلید لازم است', 3500);
-      openModal();
+      Logger.setStatus('صدایت ذخیره شد — برای تبدیل دقیق یک کلید رایگان وارد کن','warn');
+      Logger.toast('صدایت ذخیره شد — پس از وارد کردن کلید «تلاش مجدد» را بزن', 4000);
+      openModal('keys');
       return;
     }
   }
+  const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
+  // Fast offline guard: preserve audio immediately without waiting for fetch timeout
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    await preservePendingVoice({
+      blob,
+      durationMs,
+      reason: 'اینترنت قطع است — صدای شما امن ذخیره شد؛ پس از وصل شدن شبکه «تلاش مجدد» را بزن',
+      statusCode: 0,
+    });
+    Logger.log('warn', 'offline at stop — voice preserved', { size: blob.size, durationMs });
+    Logger.setStatus('آفلاین — صدای شما ذخیره شد تا با بازگشت اینترنت تبدیل شود', 'warn');
+    Logger.toast('اینترنت قطع است — صدایت امن ذخیره شد', 4000);
+    Logger.dismissProgress(0);
+    setMicBusy(false); transcribingAbort = null;
+    recTimerReset(); syncActionbar(); mainWaveIdle();
+    if(!snap || snapId===rtVersion){ rtSnap=null; }
+    if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
+    return;
+  }
   try{
-    const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
     const signal = transcribingAbort?.signal;
     Logger.groupRun('🎙 رونویسی');
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
@@ -814,14 +933,18 @@ async function handleTranscription(blob, snap){
       const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.substring(0,ps)+text+o.substring(pe); els.output.setSelectionRange(ps+text.length,ps+text.length);
     }
     els.output.focus(); saveCursor();
-    editorHistory.push(els.output.value); // no-loss (ticket/2x): explicit push so the pre-insert state stays reachable via Ctrl+Z/redo (the dispatched `input` below then dedups)
+    editorHistory.push(els.output.value);
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; els.output.dispatchEvent(new Event('input'));
     Storage.saveDraft(els.output.value);
     Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
     Dashboard.renderOverall();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
-    Logger.setStatus(`✅ با ${engine}${polInfo} نشست`,'info'); Logger.toast('درج شد'); Logger.dismissProgress(2600); if(Storage.getSettings().autocopy) try{ await navigator.clipboard.writeText(text); }catch{}
+    Logger.setStatus(`با ${engine}${polInfo} درج شد`,'info');
+    Logger.dismissProgress(2600);
+    const copied = await tryAutocopy(text);
+    if (!Storage.getSettings().autocopy) Logger.toast('درج شد');
+    else if (copied) Logger.toast('درج و کپی شد');
     Logger.log('info','success',{engine, polishModel, len:text.length});
   }catch(err){
     if (err.code === 'STALE') {
@@ -829,17 +952,34 @@ async function handleTranscription(blob, snap){
     } else if (err.code === 'EMPTY') {
       // already handled
     } else if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
-      Logger.log('info','transcribe aborted',{msg:err.message, snapId});
-      Logger.toast('لغو شد', 1500);
+      Logger.log('info','transcribe aborted — preserving recorded blob',{msg:err.message, snapId, size: blob.size});
+      await preservePendingVoice({
+        blob,
+        durationMs,
+        reason: 'ارسال متوقف شد — صدا محفوظ است؛ هر زمان بخواهی می‌توانی دوباره تبدیل یا حذف کنی',
+        statusCode: 0,
+      });
+      Logger.toast('ارسال متوقف شد — صدایت ذخیره ماند', 3200);
       Logger.dismissProgress(0);
-      Logger.setStatus('لغو شد','warn');
-      // already handled toast/status above
+      Logger.setStatus('ارسال متوقف شد — صدا در صف انتظار ذخیره ماند','warn');
     } else {
       Logger.log('error','transcribe failed',{msg:err.message, status:err.status});
-      if(err.status === 429){ setQuotaExpanded(true); try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{} try{ Dashboard.renderOverall(); }catch{} try{ refreshQuotaStrip(); }catch{} }
-      let h='کلید/اینترنت را چک کن'; if(err.status===429) h='سهمیه پر — کمی صبر کن'; else if(err.status===404) h='مدل پیدا نشد'; else if(err.status===401 || err.status===403) h='کلید نامعتبر';
-      Logger.setStatus(`❌ خطا: ${err.message.slice(0,90)} — ${h}`,'error');
-      Logger.toast(`❌ ${err.message.slice(0,60)} — ${h}`, 3500);
+      if(err.status === 429){
+        setInspectorOpen(true);
+        setQuotaExpanded(true);
+        try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{}
+        try{ Dashboard.renderOverall(); }catch{}
+        try{ refreshQuotaStrip(); }catch{}
+      }
+      const h = errorHintFor(err);
+      await preservePendingVoice({
+        blob,
+        durationMs,
+        reason: h,
+        statusCode: err.status || 0,
+      });
+      Logger.setStatus(`صدایت ذخیره شد — ${h}`,'error');
+      Logger.toast(`صدایت ذخیره شد — ${h}`, 4500);
       Logger.dismissProgress(3500);
     }
   } finally {
@@ -853,6 +993,506 @@ async function handleTranscription(blob, snap){
     if(els.livePreview) els.livePreview.classList.remove('on');
   }
 }
+
+function micErrorHint(err) {
+  const name = String(err?.name || '');
+  const msg = String(err?.message || '');
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || /denied|permission/i.test(msg)) {
+    return 'دسترسی میکروفون رد شد — از آیکون کنار آدرس مرورگر دسترسی میکروفون را باز کن و صفحه را تازه کن';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'میکروفونی پیدا نشد — اتصال میکروفون یا هندزفری را بررسی کن';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'میکروفون در برنامه دیگری مشغول است — آن را ببند و دوباره تلاش کن';
+  }
+  if (name === 'NotSupportedError' || name === 'SecurityError') {
+    return 'دسترسی میکروفون در این محیط فعال نیست — صفحه را در تب مستقل (HTTPS) باز کن';
+  }
+  return 'خطای میکروفون: ' + (msg || 'نامشخص');
+}
+
+function errorHintFor(err) {
+  const st = Number(err?.status || 0);
+  const msg = String(err?.message || '');
+  if (st === 429) return 'سهمیه موقتاً پر شد — چند لحظه صبر کن یا مدل پشتیبان اضافه کن';
+  if (st === 401 || st === 403) return 'کلید API نامعتبر یا منقضی است — در تب «کلیدها» بررسی کن';
+  if (st === 404) return 'مدل انتخاب‌شده پیدا نشد — لیست مدل‌ها را در تنظیمات بروزرسانی کن';
+  if (st === 408 || /timeout|زمان/i.test(msg)) return 'پاسخ سرور طول کشید — اتصال اینترنت را چک کن و دوباره بزن';
+  if (st === 413 || /large|size|حجم/i.test(msg)) return 'حجم صدا از سقف سرویس بیشتر است — فایل یا ضبط کوتاه‌تری امتحان کن';
+  if (st === 0 && /network|fetch|failed|اینترنت/i.test(msg)) return 'اتصال به اینترنت برقرار نشد — شبکه یا فیلترشکن را بررسی کن';
+  return 'کلید API و اتصال اینترنت را بررسی کن';
+}
+
+async function tryAutocopy(text) {
+  if (!Storage.getSettings().autocopy) return false;
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    Logger.log('warn', 'autocopy failed', { msg: e?.message });
+    Logger.toast('درج شد — کپی خودکار ناموفق بود، دستی کپی کن', 3200);
+    return false;
+  }
+}
+
+// Student & long-form audio file transcription (mp3/m4a/wav/ogg/webm)
+const MAX_AUDIO_BYTES = 24 * 1024 * 1024;
+async function transcribeAudioFile(file) {
+  if (!file) return;
+  if (isRecording || isTranscribing) {
+    Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 2000);
+    return;
+  }
+  if (!hasAnyConfiguredKey()) {
+    Logger.toast('برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200);
+    openModal('keys');
+    return;
+  }
+  if (file.size > MAX_AUDIO_BYTES) {
+    Logger.toast('حجم فایل بیشتر از ۲۴ مگابایت است — فایل کوتاه‌تری انتخاب کن', 4000);
+    Logger.setStatus('فایل صوتی بزرگ‌تر از حد مجاز است', 'warn');
+    return;
+  }
+  saveCursor();
+  setMicBusy(true);
+  transcribingAbort = new AbortController();
+  Logger.setStatus(`در حال تبدیل فایل «${file.name.slice(0, 28)}»…`, 'warn');
+  try {
+    const signal = transcribingAbort.signal;
+    Logger.groupRun('📎 تبدیل فایل صوتی');
+    const { text, engine, polishModel } = await Transcription.transcribe(file, { durationMs: 0, signal });
+    if (signal.aborted) throw Object.assign(new Error('لغو شد'), { code: 'ABORTED', aborted: true });
+    if (!text) {
+      Logger.setStatus('متنی از فایل استخراج نشد', 'warn');
+      Logger.toast('متنی در فایل پیدا نشد');
+      Logger.dismissProgress(800);
+      return;
+    }
+    const o = els.output.value;
+    const ps = Math.min(selStart, o.length), pe = Math.min(selEnd, o.length);
+    const sep = ps > 0 && !/\s$/.test(o.slice(0, ps)) ? '\n' : '';
+    const inserted = sep + text.trim();
+    els.output.value = o.substring(0, ps) + inserted + o.substring(pe);
+    const cur = ps + inserted.length;
+    els.output.setSelectionRange(cur, cur);
+    els.output.focus();
+    saveCursor();
+    editorHistory.push(els.output.value);
+    els.output.dispatchEvent(new Event('input'));
+    Storage.saveDraft(els.output.value);
+    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+    Dashboard.renderOverall();
+    const s = Storage.getSettings();
+    const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
+    Logger.setStatus(`فایل با ${engine}${polInfo} تبدیل شد`, 'info');
+    const copied = await tryAutocopy(text.trim());
+    if (!s.autocopy) Logger.toast('متن فایل درج شد');
+    else if (copied) Logger.toast('متن فایل درج و کپی شد');
+    Logger.dismissProgress(2600);
+    Logger.log('info', 'file transcribe success', { name: file.name, size: file.size, engine, polishModel, len: text.length });
+  } catch (err) {
+    if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
+      Logger.log('info', 'file transcribe aborted — preserved', { name: file.name });
+      await preservePendingVoice({
+        blob: file,
+        durationMs: 0,
+        name: file.name,
+        reason: 'ارسال فایل متوقف شد — آماده تلاش مجدد یا حذف',
+        statusCode: 0,
+      });
+      Logger.toast('تبدیل فایل متوقف شد — در صف انتظار ذخیره ماند', 3000);
+      Logger.dismissProgress(0);
+      Logger.setStatus('تبدیل فایل متوقف شد — ذخیره ماند', 'warn');
+    } else {
+      Logger.log('error', 'file transcribe failed', { name: file.name, msg: err.message, status: err.status });
+      if (err.status === 429) {
+        setInspectorOpen(true);
+        setQuotaExpanded(true);
+        try { Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); } catch {}
+        try { Dashboard.renderOverall(); } catch {}
+        try { refreshQuotaStrip(); } catch {}
+      }
+      const h = errorHintFor(err);
+      await preservePendingVoice({
+        blob: file,
+        durationMs: 0,
+        name: file.name,
+        reason: h,
+        statusCode: err.status || 0,
+      });
+      Logger.setStatus(`فایل ذخیره ماند — ${h}`, 'error');
+      Logger.toast(`فایل ذخیره ماند — ${h}`, 4200);
+      Logger.dismissProgress(3500);
+    }
+  } finally {
+    setMicBusy(false);
+    recTimerReset();
+    syncActionbar();
+    mainWaveIdle();
+    transcribingAbort = null;
+  }
+}
+els.btnUploadAudio?.addEventListener('click', () => {
+  if (isRecording || isTranscribing) { Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 1800); return; }
+  if (!hasAnyConfiguredKey()) { Logger.toast('برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200); openModal('keys'); return; }
+  els.audioFileInput?.click();
+});
+els.audioFileInput?.addEventListener('change', (e) => {
+  const file = e.target?.files?.[0];
+  e.target.value = '';
+  if (file) transcribeAudioFile(file);
+});
+
+// --- Offline / Failed Voice Preservation Vault (IndexedDB-backed) ---
+let pendingVoicesCache = [];
+let activeVoiceAudio = null, activeVoiceId = null, activeVoiceUrl = null;
+let retryingVoiceId = null;
+
+function stopVoicePlayback() {
+  if (activeVoiceAudio) {
+    try { activeVoiceAudio.pause(); } catch {}
+    activeVoiceAudio = null;
+  }
+  if (activeVoiceUrl) {
+    try { URL.revokeObjectURL(activeVoiceUrl); } catch {}
+    activeVoiceUrl = null;
+  }
+  activeVoiceId = null;
+}
+
+function formatVoiceDuration(ms) {
+  const sec = Math.max(0, Math.round((Number(ms) || 0) / 1000));
+  if (!sec) return '';
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${fa(String(m).padStart(2, '0'))}:${fa(String(s).padStart(2, '0'))}`;
+}
+
+function formatVoiceSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024) return `${fa((n / (1024 * 1024)).toFixed(1))} مگابایت`;
+  return `${fa(Math.max(1, Math.round(n / 1024)))} کیلوبایت`;
+}
+
+function formatVoiceTime(ts) {
+  try {
+    return new Date(ts || Date.now()).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
+}
+
+function extForMime(mime) {
+  const m = String(mime || '').toLowerCase();
+  if (m.includes('mp4') || m.includes('m4a')) return 'm4a';
+  if (m.includes('mpeg') || m.includes('mp3')) return 'mp3';
+  if (m.includes('wav')) return 'wav';
+  if (m.includes('ogg')) return 'ogg';
+  return 'webm';
+}
+
+async function preservePendingVoice({ blob, durationMs = 0, name = '', reason = '', statusCode = 0 }) {
+  try {
+    const saved = await VoiceQueue.save({ blob, durationMs, name, reason, statusCode });
+    await refreshPendingVoices();
+    return saved;
+  } catch (e) {
+    Logger.log('warn', 'VoiceQueue save failed', { msg: e?.message });
+    return null;
+  }
+}
+
+function toggleVoicePlayback(item) {
+  if (!item?.blob) return;
+  if (activeVoiceId === item.id) {
+    stopVoicePlayback();
+    renderPendingVoices();
+    return;
+  }
+  stopVoicePlayback();
+  try {
+    const url = URL.createObjectURL(item.blob);
+    const audio = new window.Audio(url);
+    activeVoiceAudio = audio;
+    activeVoiceUrl = url;
+    activeVoiceId = item.id;
+    audio.addEventListener('ended', () => {
+      stopVoicePlayback();
+      renderPendingVoices();
+    });
+    audio.addEventListener('error', () => {
+      stopVoicePlayback();
+      renderPendingVoices();
+      Logger.toast('پخش این فایل صوتی ممکن نشد');
+    });
+    audio.play().catch(() => {
+      stopVoicePlayback();
+      renderPendingVoices();
+      Logger.toast('پخش صدا با محدودیت مرورگر متوقف شد');
+    });
+    renderPendingVoices();
+  } catch {
+    stopVoicePlayback();
+  }
+}
+
+function downloadPendingVoice(item) {
+  if (!item?.blob) return;
+  try {
+    const url = URL.createObjectURL(item.blob);
+    const a = document.createElement('a');
+    const ext = extForMime(item.mimeType || item.blob.type);
+    const stamp = new Date(item.createdAt || Date.now()).toISOString().replace(/[:T]/g, '-').slice(0, 16);
+    a.href = url;
+    a.download = item.name || `hamnegar-voice-${stamp}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => { try { URL.revokeObjectURL(url); } catch {} }, 1500);
+    Logger.toast('فایل صوتی ذخیره شد');
+  } catch {
+    Logger.toast('ذخیره فایل ناموفق بود');
+  }
+}
+
+async function cancelPendingVoice(item) {
+  if (!item) return;
+  if (retryingVoiceId === item.id) cancelTranscription();
+  if (activeVoiceId === item.id) stopVoicePlayback();
+  await VoiceQueue.remove(item.id);
+  await refreshPendingVoices();
+  Logger.toast('صدای ذخیره‌شده لغو و حذف شد', 5000, {
+    actionLabel: 'واگرد',
+    onAction: async () => {
+      await VoiceQueue.save(item);
+      await refreshPendingVoices();
+      Logger.toast('صدای ذخیره‌شده برگردانده شد', 1800);
+    },
+  });
+}
+
+async function retryPendingVoice(id) {
+  const item = await VoiceQueue.get(id);
+  if (!item?.blob) {
+    await refreshPendingVoices();
+    return false;
+  }
+  if (isRecording || isTranscribing) {
+    Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 2000);
+    return false;
+  }
+  if (!hasAnyConfiguredKey()) {
+    Logger.toast('ابتدا یک کلید رایگان وارد کن تا صدایت تبدیل شود', 3200);
+    openModal('keys');
+    return false;
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    Logger.toast('هنوز به اینترنت وصل نیستی — صدایت امن ذخیره مانده است', 3200);
+    return false;
+  }
+  if (activeVoiceId === id) stopVoicePlayback();
+  saveCursor();
+  retryingVoiceId = id;
+  setMicBusy(true);
+  transcribingAbort = new AbortController();
+  renderPendingVoices();
+  Logger.setStatus('در حال تلاش مجدد برای تبدیل صدای ذخیره‌شده…', 'warn');
+  try {
+    const signal = transcribingAbort.signal;
+    Logger.groupRun('🔄 تلاش مجدد صدا');
+    const { text, engine, polishModel } = await Transcription.transcribe(item.blob, {
+      durationMs: item.durationMs || 0,
+      signal,
+    });
+    if (signal.aborted) throw Object.assign(new Error('لغو شد'), { code: 'ABORTED', aborted: true });
+    if (!text) {
+      await VoiceQueue.updateReason(id, 'متنی از این صدا استخراج نشد — می‌توانی پخش کنی یا حذفش کنی', 0);
+      Logger.setStatus('متنی از صدا استخراج نشد', 'warn');
+      Logger.toast('متنی از این صدا برنگشت', 3000);
+      Logger.dismissProgress(800);
+      return false;
+    }
+    const o = els.output.value;
+    const ps = Math.min(selStart, o.length), pe = Math.min(selEnd, o.length);
+    const sep = ps > 0 && !/\s$/.test(o.slice(0, ps)) ? '\n' : '';
+    const inserted = sep + text.trim();
+    els.output.value = o.substring(0, ps) + inserted + o.substring(pe);
+    const cur = ps + inserted.length;
+    els.output.setSelectionRange(cur, cur);
+    els.output.focus();
+    saveCursor();
+    editorHistory.push(els.output.value);
+    els.output.dispatchEvent(new Event('input'));
+    Storage.saveDraft(els.output.value);
+    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+    Dashboard.renderOverall();
+    await VoiceQueue.remove(id);
+    const s = Storage.getSettings();
+    const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
+    Logger.setStatus(`صدای ذخیره‌شده با ${engine}${polInfo} درج شد`, 'info');
+    const copied = await tryAutocopy(text.trim());
+    if (!s.autocopy) Logger.toast('صدای ذخیره‌شده تبدیل و درج شد');
+    else if (copied) Logger.toast('صدای ذخیره‌شده تبدیل و کپی شد');
+    Logger.dismissProgress(2600);
+    Logger.log('info', 'pending voice recovered', { id, engine, polishModel, len: text.length });
+    return true;
+  } catch (err) {
+    if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
+      await VoiceQueue.updateReason(id, 'تلاش مجدد متوقف شد — صدا همچنان محفوظ است', 0);
+      Logger.toast('تلاش مجدد متوقف شد — صدا محفوظ ماند', 2600);
+      Logger.dismissProgress(0);
+      Logger.setStatus('تلاش مجدد متوقف شد — صدا محفوظ ماند', 'warn');
+      return false;
+    }
+    Logger.log('error', 'pending voice retry failed', { id, msg: err.message, status: err.status });
+    if (err.status === 429) {
+      setInspectorOpen(true);
+      setQuotaExpanded(true);
+      try { Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); } catch {}
+      try { Dashboard.renderOverall(); } catch {}
+      try { refreshQuotaStrip(); } catch {}
+    }
+    const h = errorHintFor(err);
+    await VoiceQueue.updateReason(id, h, err.status || 0);
+    Logger.setStatus(`خطا در تلاش مجدد — ${h}`, 'error');
+    Logger.toast(`صدا محفوظ ماند — ${h}`, 4000);
+    Logger.dismissProgress(3500);
+    return false;
+  } finally {
+    retryingVoiceId = null;
+    setMicBusy(false);
+    recTimerReset();
+    syncActionbar();
+    mainWaveIdle();
+    transcribingAbort = null;
+    await refreshPendingVoices();
+  }
+}
+
+async function retryAllPendingVoices() {
+  const queue = [...pendingVoicesCache].reverse(); // chronological order
+  for (const item of queue) {
+    const ok = await retryPendingVoice(item.id);
+    if (!ok) break;
+  }
+}
+
+function renderPendingVoices() {
+  const box = els.pendingVoices, list = els.pvList;
+  if (!box || !list) return;
+  const items = pendingVoicesCache;
+  box.hidden = !items.length;
+  if (!items.length) {
+    list.textContent = '';
+    return;
+  }
+  const online = typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+  box.classList.toggle('is-online', online);
+  if (els.pvHeading) {
+    els.pvHeading.textContent = items.length === 1
+      ? '۱ صدای ذخیره‌شده در انتظار تبدیل'
+      : `${fa(items.length)} صدای ذخیره‌شده در انتظار تبدیل`;
+  }
+  if (els.pvNetNote) {
+    els.pvNetNote.textContent = online
+      ? 'شبکه وصل است — آماده تلاش مجدد'
+      : 'آفلاین — صداها تا بازگشت شبکه امن می‌مانند';
+  }
+  if (els.btnRetryAllVoices) {
+    els.btnRetryAllVoices.hidden = items.length < 2;
+    els.btnRetryAllVoices.disabled = isRecording || isTranscribing || !online;
+  }
+  list.textContent = '';
+  for (const item of items) {
+    const card = document.createElement('article');
+    const isThisRetrying = retryingVoiceId === item.id;
+    const isPlaying = activeVoiceId === item.id;
+    card.className = 'voice-card' + (isThisRetrying ? ' is-retrying' : '') + (isPlaying ? ' is-playing' : '');
+
+    const top = document.createElement('div');
+    top.className = 'voice-card__top';
+    const title = document.createElement('span');
+    title.className = 'voice-card__title';
+    const dur = formatVoiceDuration(item.durationMs);
+    title.textContent = item.name
+      ? `فایل: ${item.name}`
+      : (dur ? `صدای ضبط‌شده · ${dur}` : 'صدای ضبط‌شده');
+    const meta = document.createElement('span');
+    meta.className = 'voice-card__meta';
+    const clock = formatVoiceTime(item.createdAt);
+    meta.textContent = [formatVoiceSize(item.size), clock].filter(Boolean).join(' · ');
+    top.append(title, meta);
+
+    const reason = document.createElement('p');
+    reason.className = 'voice-card__reason';
+    reason.textContent = item.reason || 'تبدیل ناموفق بود — صدای شما امن ذخیره شده است';
+
+    const actions = document.createElement('div');
+    actions.className = 'voice-card__actions';
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = (isThisRetrying ? 'btn-ghost' : 'btn-primary') + ' btn-xs vc-retry';
+    retryBtn.textContent = isThisRetrying ? 'توقف تلاش' : 'تلاش مجدد';
+    retryBtn.disabled = !isThisRetrying && (isRecording || isTranscribing);
+    retryBtn.addEventListener('click', () => {
+      if (isThisRetrying) cancelTranscription();
+      else retryPendingVoice(item.id);
+    });
+
+    const playBtn = document.createElement('button');
+    playBtn.type = 'button';
+    playBtn.className = 'btn-ghost btn-xs vc-btn';
+    playBtn.textContent = isPlaying ? 'توقف پخش' : 'پخش';
+    playBtn.addEventListener('click', () => toggleVoicePlayback(item));
+
+    const dlBtn = document.createElement('button');
+    dlBtn.type = 'button';
+    dlBtn.className = 'btn-ghost btn-xs vc-btn';
+    dlBtn.textContent = 'دانلود';
+    dlBtn.title = 'ذخیره فایل صوتی روی دستگاه';
+    dlBtn.addEventListener('click', () => downloadPendingVoice(item));
+
+    const cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-ghost btn-xs vc-cancel';
+    cancelBtn.textContent = 'لغو و حذف';
+    cancelBtn.addEventListener('click', () => cancelPendingVoice(item));
+
+    actions.append(retryBtn, playBtn, dlBtn, cancelBtn);
+    card.append(top, reason, actions);
+    list.appendChild(card);
+  }
+}
+
+async function refreshPendingVoices() {
+  try {
+    pendingVoicesCache = await VoiceQueue.list();
+  } catch {
+    pendingVoicesCache = [];
+  }
+  renderPendingVoices();
+}
+
+els.btnRetryAllVoices?.addEventListener('click', retryAllPendingVoices);
+window.addEventListener('online', async () => {
+  await refreshPendingVoices();
+  if (pendingVoicesCache.length > 0 && !isRecording && !isTranscribing) {
+    Logger.setStatus('اتصال برقرار شد — صداهای ذخیره‌شده آماده تبدیل‌اند', 'info');
+    Logger.toast(
+      `اینترنت وصل شد — ${fa(pendingVoicesCache.length)} صدای ذخیره‌شده آماده است`,
+      6000,
+      { actionLabel: 'تبدیل کن', onAction: () => retryAllPendingVoices() },
+    );
+  }
+});
+window.addEventListener('offline', () => {
+  renderPendingVoices();
+  if (isRecording) {
+    Logger.toast('اینترنت قطع شد — نگران نباش، پس از توقف صدایت امن ذخیره می‌شود', 3800);
+  }
+});
 
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
@@ -875,7 +1515,44 @@ els.btnCopy.onclick=async()=>{
   els.btnCopy.classList.add('ok'); setTimeout(()=>els.btnCopy.classList.remove('ok'),1200);
   Logger.toast('کپی شد');
 };
-els.btnClear.onclick=()=>{ if(!els.output.value.trim()){ els.btnClear.classList.remove('shake'); void els.btnClear.offsetWidth; els.btnClear.classList.add('shake'); setTimeout(()=>els.btnClear.classList.remove('shake'),400); Logger.toast('متن خالی است'); return; } els.output.value=''; Storage.clearDraft(); selStart=selEnd=0; rtSnap=null; if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on'); updateCounts(); editorHistory.push(''); Logger.setStatus('آماده','info'); Logger.toast('پاک شد'); };
+els.btnClear.onclick = () => {
+  const hasText = !!els.output.value.trim();
+  if (!hasText && !isRecording && !isTranscribing) {
+    els.btnClear.classList.remove('shake');
+    void els.btnClear.offsetWidth;
+    els.btnClear.classList.add('shake');
+    setTimeout(() => els.btnClear.classList.remove('shake'), 400);
+    Logger.toast('متن خالی است');
+    return;
+  }
+  setBehaviorOpen(false);
+  if (isRecording || isTranscribing) {
+    rtVersion++;
+    cancelTranscription();
+  }
+  const prevText = els.output.value;
+  els.output.value = '';
+  Storage.clearDraft();
+  selStart = selEnd = 0;
+  rtSnap = null;
+  if (els.liveFinal) els.liveFinal.textContent = '';
+  if (els.liveInterim) els.liveInterim.textContent = '';
+  if (els.livePreview) els.livePreview.classList.remove('on');
+  updateCounts();
+  editorHistory.push('');
+  Logger.setStatus('آماده ضبط', 'info');
+  if (prevText) {
+    Logger.toast('متن پاک شد', 4500, {
+      actionLabel: 'واگرد',
+      onAction: () => {
+        applyHistoryValue(prevText);
+        Logger.toast('متن برگردانده شد', 1600);
+      },
+    });
+  } else {
+    Logger.toast('پاک شد');
+  }
+};
 // stagebar seam lives in js/modules/stagebar.js (mounted at file end) — see ticket 29.
 // --- apply-diff-confirm (issue #49): result-apply gate — Persian word diff + thin bottom sheet ---
 // Pure Persian word diff (DOM-free; verified under node by slicing __DIFF_PURE_START__..__DIFF_PURE_END__).
@@ -1099,50 +1776,43 @@ const SHORTCUTS = [
   { id:'enter-lang', keysFa:'Enter', keys:'Enter', action:'اجرای ترجمه به زبان برجسته', scope:'جست‌وجوی زبان — زمینه‌ای', contextual:true },
   { id:'enter-rename', keysFa:'Enter', keys:'Enter', action:'تأیید نام', scope:'تغییرنام موج — زمینه‌ای', contextual:true },
   { id:'esc-guide', keysFa:'Esc', keys:'Escape', layer:1, action:'بستن همین راهنما', scope:'راهنما باز' },
-  { id:'esc-tr', keysFa:'Esc', keys:'Escape', layer:2, action:'بستن پنل ترجمه', scope:'پنل ترجمه باز' },
+  { id:'esc-tr', keysFa:'Esc', keys:'Escape', layer:2, action:'بستن پنل ترجمه یا گزینه‌های سریع', scope:'پاپ‌اور باز' },
   { id:'esc-diff', keysFa:'Esc', keys:'Escape', layer:3, action:'دور ریختن نتیجه', scope:'شیت بازبینی باز' },
-  { id:'esc-modal', keysFa:'Esc', keys:'Escape', layer:4, action:'بستن مدال تنظیمات (اول پنل افزودن، بعد مدال — بدون ذخیره)', scope:'مدال تنظیمات باز' },
+  { id:'esc-modal', keysFa:'Esc', keys:'Escape', layer:4, action:'بستن تنظیمات (اول پنل افزودن، بعد مدال — بدون ذخیره)', scope:'تنظیمات باز' },
   { id:'esc-cancel', keysFa:'Esc', keys:'Escape', layer:5, action:'لغو ضبط/رونویسی', scope:'حین ضبط یا رونویسی — آخرین راه' },
 ];
 function shortcutById(id){ return SHORTCUTS.find(s => s.id === id); }
-// --- user guide (issue #95, ticket/guide-content): single source of truth for guide tabs + control titles ---
-// ANTI-ROT: any PR touching stagebar/settings/quota UI MUST touch this GUIDE map
-// (add/update/remove the matching entry) — enforced via the hamnegar-reviewer gate.
-// The guide dialog tabs AND the applyShortcutHints() control titles render from it.
 const GUIDE = {
   tools: [
-    { id:'g-mic', title:'ضبط صدا', body:'دکمهٔ میکروفون نوار پایین ضبط را شروع/متوقف می‌کند؛ ✕ کناری لغو و دورریختن است.', ref:'btn-mic' },
-    { id:'g-cancel', title:'لغو ضبط', body:'ضبط یا رونویسی جاری را لغو و دور می‌ریزد (آخرین راه Esc هم همین است).', ref:'btn-cancel-stt' },
-    { id:'g-undo', title:'واگرد', body:'متن را یک قدم برمی‌گرداند — فقط وقتی کادر خروجی فوکوس است.', ref:'btn-undo' },
-    { id:'g-redo', title:'ازنو', body:'واگرد را برمی‌گرداند — فقط با فوکوس کادر خروجی.', ref:'btn-redo' },
-    { id:'g-output', title:'کادر خروجی', body:'متن نهایی اینجاست؛ پیش‌نویس خودکار ذخیره می‌شود.', ref:'output' },
-    { id:'g-simple', title:'پالایش ساده', body:'املا و علائم نگارشی متن دامنه (کل متن یا انتخاب).', ref:'stage-simple' },
-    { id:'g-advanced', title:'پالایش پیشرفته', body:'املا + دستور زبان؛ کامل‌ترین ویرایش فارسی.', ref:'stage-advanced' },
-    { id:'g-grammar', title:'پالایش دستوری', body:'فقط دستور زبان؛ املا و واژه‌ها دست نمی‌خورند.', ref:'stage-grammar' },
-    { id:'g-trquick', title:'ترجمه سریع EN⇄FA', body:'ترجمهٔ فوری انگلیسی⇄فارسی بدون انتخاب زبان.', ref:'stage-tr-quick' },
-    { id:'g-trpanel', title:'ترجمه به زبان…', body:'پنل جست‌وجوی زبان را باز می‌کند؛ Enter یعنی اجرای ترجمه به زبان برجسته.', ref:'stage-tr-panel' },
-    { id:'g-langsearch', title:'جست‌وجوی زبان', body:'نام یا کد زبان را بنویس (مثل en یا عربی)؛ Enter ترجمه به زبان برجسته است.', ref:'stage-lang-search' },
-    { id:'g-raw', title:'خام', body:'متن پیش از آخرین پالایش را برمی‌گرداند؛ تا پالایشی نشده غیرفعال است.', ref:'stage-raw' },
-    { id:'g-diffapply', title:'اعمال نتیجه', body:'نتیجهٔ شیت بازبینی را می‌پذیرد؛ سهمیه فقط همین‌جا مصرف می‌شود.', ref:'diff-apply' },
-    { id:'g-diffdiscard', title:'دور ریختن نتیجه', body:'نتیجهٔ بازبینی‌نشده را دور می‌ریزد؛ هیچ پشته‌ای لمس نمی‌شود.', ref:'diff-discard' },
+    { id:'g-mic', title:'ضبط صدا', body:'دکمه میکروفون در مرکز نوار پایین ضبط را شروع و متوقف می‌کند؛ حین ضبط دکمه لغو و تایمر جایگزین دکمه‌های کناری می‌شوند.', ref:'btn-mic' },
+    { id:'g-mode', title:'حالت روزمره و کلاس', body:'در نوار بالا بین «روزمره» (توقف خودکار پس از سکوت) و «کلاس» (ضبط پیوسته برای سخنرانی و درس بدون قطع در مکث استاد) جابه‌جا شو.', ref:'mode-lecture' },
+    { id:'g-upload', title:'تبدیل فایل صوتی', body:'با دکمه «فایل صوتی» می‌توانی فایل ضبط‌شده کلاس یا مصاحبه (mp3، m4a، wav و…) را مستقیم به متن تبدیل کنی.', ref:'btn-upload-audio' },
+    { id:'g-vault', title:'نگهداری خودکار صدا در قطعی شبکه', body:'اگر اینترنت قطع شود یا تبدیل خطا بدهد، صدای ضبط‌شده امن در مرورگر می‌ماند و می‌توانی پس از وصل شدن شبکه «تلاش مجدد»، «پخش»، «دانلود» یا «لغو و حذف» بزنی.', ref:'pending-voices' },
+    { id:'g-cancel', title:'لغو ضبط', body:'حین ضبط صدا را دور می‌ریزد؛ حین ارسالِ کند، ارسال را متوقف می‌کند و صدا را در صف انتظار نگه می‌دارد تا از بین نرود.', ref:'btn-cancel-stt' },
+    { id:'g-undo', title:'واگرد و ازنو', body:'متن را قدم‌به‌قدم برمی‌گرداند؛ با دکمه‌های زیر کادر متن یا Ctrl+Z در حالت فوکوس.', ref:'btn-undo' },
+    { id:'g-output', title:'بوم متن', body:'متن نهایی اینجاست؛ پیش‌نویس به‌صورت خودکار ذخیره می‌شود و حتی با بستن صفحه از بین نمی‌رود.', ref:'output' },
+    { id:'g-simple', title:'پالایش ساده', body:'اصلاح املا، نیم‌فاصله و علائم نگارشی روی کل متن یا بخش انتخاب‌شده.', ref:'stage-simple' },
+    { id:'g-advanced', title:'پالایش پیشرفته', body:'اصلاح هم‌زمان املا، نگارش و دستور زبان؛ کامل‌ترین ویرایش فارسی.', ref:'stage-advanced' },
+    { id:'g-grammar', title:'پالایش دستوری', body:'فقط اصلاح ساختار دستوری بدون تغییر واژه‌ها و سبک.', ref:'stage-grammar' },
+    { id:'g-trquick', title:'ترجمه سریع EN⇄FA', body:'ترجمه فوری فارسی ⇄ انگلیسی بدون نیاز به انتخاب زبان.', ref:'stage-tr-quick' },
+    { id:'g-trpanel', title:'زبان‌ها', body:'پنل جست‌وجوی زبان را باز می‌کند؛ با Enter به زبان انتخاب‌شده ترجمه می‌شود.', ref:'stage-tr-panel' },
+    { id:'g-raw', title:'برگشت به خام', body:'متن پیش از آخرین پالایش را برمی‌گرداند.', ref:'stage-raw' },
+    { id:'g-diffapply', title:'اعمال نتیجه', body:'نتیجه بازبینی‌شده را روی متن می‌نشاند.', ref:'diff-apply' },
   ],
   config: [
-    { id:'g-settings', title:'تنظیمات', body:'دکمهٔ ⚙️ نوار پایین مدال تنظیمات را باز می‌کند: زنجیره‌ها، کلیدها، رفتار.', ref:'btn-settings' },
-    { id:'g-modal', title:'مدال تنظیمات', body:'Esc اول پنل افزودن را می‌بندد، بعد خود مدال را — بدون ذخیره.', ref:'settings-modal' },
-    { id:'g-closemodal', title:'بستن تنظیمات', body:'مدال را بدون ذخیرهٔ اضافه می‌بندد.', ref:'btn-close-modal' },
-    { id:'g-realtime', title:'حالت آنی', body:'پیش‌نمایش زندهٔ رونویسی حین صحبت.', ref:'toggle-realtime' },
-    { id:'g-vad', title:'VAD', body:'ارسال خودکار پس از سکوت؛ بدون آن باید دستی متوقف کنی.', ref:'toggle-vad' },
-    { id:'g-autocopy', title:'کپی خودکار', body:'متن نهایی پس از هر اجرا خودکار کپی می‌شود.', ref:'toggle-autocopy' },
-    { id:'g-polish', title:'پالیش نهایی', body:'ویرایش خودکار متن رونوشت؛ خاموش یعنی درج متن خام.', ref:'toggle-polish' },
-    { id:'g-stt', title:'زنجیرهٔ STT', body:'ترتیب تلاش مدل‌های گفتار→متن؛ مدل بی‌کلید بی‌صدا رد می‌شود.', ref:'stt-chain' },
-    { id:'g-polishchain', title:'زنجیرهٔ پالیش', body:'ترتیب ویرایشگرهای فارسی؛ اولین مدلِ دارای کلید جواب می‌دهد.', ref:'polish-chain' },
-    { id:'g-keys', title:'کلیدهای ارائه‌دهنده', body:'کلید Groq (با gsk_) و Google (با AQ.) را در کارت خود بگذار و «تست» بزن.', ref:'provider-drawer' },
-    { id:'g-wavehygiene', title:'تنظیمات مرده موج', body:'ضخامت فقط ۶ نوع خطی، شکل/تعداد/فاصله فقط ستون‌ها، رنگ ۲ فقط گرادیان، ته‌رنگ فقط با aurora روشن؛ حساسیت هر موج گین پیش‌نمایش است نه گیت.', ref:'panel-wave' },
-    { id:'g-wavehide', title:'پنهان‌سازی انیمیشن صدا', body:'نوار موج را به ارتفاع صفر می‌برد و همه حلقه‌های موج (نوار، پیش‌نمایش، استارترها) را می‌خواباند؛ با همان تیک برمی‌گردد و روی دیسک می‌ماند. حاشیه‌های ضبط/رونویسی جدا هستند.', ref:'wave-hide' },
+    { id:'g-settings', title:'تنظیمات استودیو', body:'آیکون چرخ‌دنده در نوار بالا تنظیمات ۴بخشی را باز می‌کند: کلیدها، رفتار، مدل‌ها و موج صدا.', ref:'btn-settings' },
+    { id:'g-keys', title:'تب کلیدها', body:'مدل‌های Google Gemini به‌صورت خودکار از طریق سرور فعال هستند؛ کلیدهای Groq و OpenRouter اختیاری بوده و فقط روی مرورگر خودت ذخیره می‌شوند.', ref:'provider-drawer' },
+    { id:'g-realtime', title:'حالت آنی', body:'نمایش زنده کلمات حین صحبت و سپس جایگزینی با متن دقیق و پالایش‌شده.', ref:'toggle-realtime' },
+    { id:'g-vad', title:'توقف خودکار در سکوت (VAD)', body:'برای پیام‌های سریع روشن بگذار و برای ضبط کلاس و سخنرانی خاموش کن.', ref:'toggle-vad' },
+    { id:'g-polish', title:'پالیش خودکار فارسی', body:'اصلاح خودکار نیم‌فاصله و نگارش پس از هر رونویسی.', ref:'toggle-polish' },
+    { id:'g-autocopy', title:'کپی خودکار', body:'متن نهایی پس از تبدیل بلافاصله در کلیپ‌بورد کپی می‌شود.', ref:'toggle-autocopy' },
+    { id:'g-stt', title:'زنجیره صوت به متن', body:'ترتیب اولویت مدل‌های STT؛ اگر مدلی بی‌کلید یا پر باشد خودکار سراغ بعدی می‌رود.', ref:'stt-chain' },
+    { id:'g-polishchain', title:'زنجیره پالیش', body:'ترتیب ویرایشگرهای متنی برای پالیش و ترجمه.', ref:'polish-chain' },
+    { id:'g-wavehide', title:'پنهان‌سازی نوار موج', body:'نوار موج را می‌بندد و حلقه رندر را متوقف می‌کند تا باتری کمتری مصرف شود.', ref:'wave-hide' },
   ],
   quota: [
-    { id:'g-quota', title:'سهمیه امروز', body:'روی نوار «سهمیه امروز» بزن تا جزئیات هر مدل باز شود: مصرف امروز در برابر سقف روزانه.', ref:'quota-toggle' },
-    { id:'g-quotadetail', title:'جزئیات مصرف', body:'کارت هر مدل: مصرف امروز، سقف روزانه و هشدار نزدیک‌شدن به سقف.', ref:'quota-detail' },
+    { id:'g-quota', title:'سهمیه و گزارش سیستم', body:'با دکمه نمودار در نوار بالا یا نوار خلاصه پایین صفحه، آمار مصرف امروز و گزارش سیستم را باز و بسته کن.', ref:'inspector-toggle' },
+    { id:'g-quotadetail', title:'جزئیات مصرف مدل‌ها', body:'نمایش تعداد درخواست، کلمات و وضعیت نزدیک‌شدن به سقف روزانه هر مدل.', ref:'quota-detail' },
   ],
 };
 function guideEntryByRef(ref){
@@ -1281,23 +1951,71 @@ document.addEventListener('keydown', (e) => {
   openShortcuts();
 });
 applyShortcutHints();
-// ticket/behavior-collapse (#110 T1d): single arrow by the actionbar toggles the
-// behavior popover; default collapsed every load (no persist — seam is app.js only,
-// toggle persist + chain-gate untouched).
+// Quick behavior popover + outside-click + quick-toggle bidirectional sync
 const behaviorToggle = $('behavior-toggle'), behaviorPop = $('behavior-pop');
+function setBehaviorOpen(open) {
+  if (!behaviorToggle || !behaviorPop) return;
+  behaviorPop.hidden = !open;
+  behaviorToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  behaviorToggle.classList.toggle('active', open);
+  if (open) syncQuickToggles();
+}
 if (behaviorToggle && behaviorPop) {
-  const setBehaviorOpen = (open) => {
-    behaviorPop.hidden = !open;
-    behaviorToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-    behaviorToggle.setAttribute('aria-label', open ? 'پنهان‌کردن رفتار' : 'نمایش رفتار');
-    const chev = behaviorToggle.querySelector('.beh-chev');
-    if (chev) chev.textContent = open ? '›' : '‹';
+  behaviorToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setBehaviorOpen(behaviorPop.hidden);
+  });
+  const QUICK_MAP = {
+    realtime: () => els.toggleRealtime,
+    vad: () => els.toggleVad,
+    polish: () => els.togglePolish,
+    autocopy: () => els.toggleAutocopy,
   };
-  behaviorToggle.addEventListener('click', () => setBehaviorOpen(behaviorPop.hidden));
+  behaviorPop.querySelectorAll('[data-quick-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cb = QUICK_MAP[btn.dataset.quickToggle]?.();
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change', { bubbles: true }));
+      syncQuickToggles();
+      syncModeUI();
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if (!behaviorPop.hidden && !e.target.closest('#behavior-pop') && !e.target.closest('#behavior-toggle')) {
+      setBehaviorOpen(false);
+    }
+  });
   setBehaviorOpen(false);
 }
-// stagebar run/wiring lives in js/modules/stagebar.js (mounted below) — see ticket 29.
-// (ticket 30: renderAllChains→stage-model refresh now rides the chains.js onChainsRendered hook.)
+
+// Onboarding card & Everyday/Lecture preset mode controls
+$('btn-onboard-keys')?.addEventListener('click', () => openModal('keys'));
+$('btn-onboard-live')?.addEventListener('click', () => {
+  if (!Realtime.isSupported()) {
+    Logger.toast('مرورگر فعلی از حالت زنده پشتیبانی نمی‌کند — یک کلید رایگان وارد کن', 3500);
+    openModal('keys');
+    return;
+  }
+  if (els.toggleRealtime) els.toggleRealtime.checked = true;
+  Storage.saveSettings({ realtime: true });
+  onboardingDismissed = true;
+  syncOnboarding();
+  syncQuickToggles();
+  els.btnMic?.focus?.();
+  Logger.setStatus('حالت زنده روشن شد — دکمه ضبط را بزن', 'info');
+  Logger.toast('حالت زنده روشن شد — دکمه ضبط را بزن', 2800);
+});
+$('btn-onboard-dismiss')?.addEventListener('click', () => {
+  onboardingDismissed = true;
+  syncOnboarding();
+});
+els.modeQuick?.addEventListener('click', () => applyPresetMode('quick'));
+els.modeLecture?.addEventListener('click', () => applyPresetMode('lecture'));
+els.presetQuick?.addEventListener('click', () => applyPresetMode('quick'));
+els.presetLecture?.addEventListener('click', () => applyPresetMode('lecture'));
+
+// stagebar run/wiring lives in js/modules/stagebar.js
 Stagebar = mountStagebar({
   getSelStart: () => selStart, getSelEnd: () => selEnd,
   getPolishChain,
@@ -1306,9 +2024,33 @@ Stagebar = mountStagebar({
   entryIdOf, providerIdOf, sanitizeMsg, diffEls, openDiffRunning, fillDiffSheet, closeDiffSheet,
 });
 mainWaveInit();
-waveKillApply(); // T3 (#109): apply persisted kill-switch on load (hide + stop, or show)
+waveKillApply();
 const verEl = document.getElementById('settings-version'); if (verEl) verEl.textContent = `v${VERSION}`;
 Dashboard.ensureReportUI();
 Logger.log('info',`هم‌نگار v${VERSION} (${BUILD}) آماده`, {hasRealtime: Realtime.isSupported(), proto: location.protocol, version: VERSION});
 Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
 Dashboard.renderOverall();
+syncOnboarding();
+syncModeUI();
+syncQuickToggles();
+refreshPendingVoices();
+
+async function initServerGeminiStatus() {
+  try {
+    const res = await fetch('/api/gemini/status', { cache: 'no-store' });
+    if (!res.ok) return;
+    const j = await res.json();
+    Storage.setServerGeminiAvailable(Boolean(j?.configured));
+    Settings.validate();
+    updateBadge();
+    syncOnboarding();
+    Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
+    Dashboard.renderOverall();
+    if (hasAnyConfiguredKey()) {
+      Logger.setStatus('آماده ضبط', 'info');
+    }
+  } catch (e) {
+    Logger.log('warn', 'بررسی وضعیت سرور Gemini ناموفق بود', { msg: e?.message || String(e) });
+  }
+}
+initServerGeminiStatus();

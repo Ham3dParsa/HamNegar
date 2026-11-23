@@ -32,16 +32,24 @@ export const Audio = {
     let mr = null;
     starting = true;
     try {
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+        const err = new Error('دسترسی میکروفون در این محیط فعال نیست');
+        err.name = 'NotSupportedError';
+        throw err;
+      }
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       micStream = stream;
       audioChunks = [];
       onStopCb = onStop;
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-      mr = new MediaRecorder(stream, { mimeType });
+      const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      const mimeType = typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function'
+        ? (candidates.find(t => MediaRecorder.isTypeSupported(t)) || '')
+        : '';
+      mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorder = mr;
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
       mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || 'audio/webm' });
+        const blob = new Blob(audioChunks, { type: mediaRecorder?.mimeType || mimeType || 'audio/webm' });
         if (onStopCb) onStopCb(blob);
       };
       mediaRecorder.start(vadChunkMs);

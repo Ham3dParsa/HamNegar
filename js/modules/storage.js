@@ -9,7 +9,7 @@
 // and fall back to full normalize on mismatch (ticket 24 migration unchanged).
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
-export const STT_DEFAULTS = ['groq','gemini-flash-lite-latest','gemini-3.5-flash-lite','gemini-3.1-flash-lite'];
+export const STT_DEFAULTS = ['groq','gemini-3.5-transcribe','gemini-3.1-flash-lite'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
 export const BUILTIN_PROVIDER_IDS = ['groq','google','openrouter'];
@@ -20,6 +20,7 @@ export const POLISH_DEFAULTS = [
   { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
   { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
   { id:'openai/gpt-oss-20b', providerId:'groq', enabled:true },
+  { id:'gemini-4-hydrogen', providerId:'google', enabled:true },
 ];
 const POLISH_DEFAULTS_LEGACY = ['openai/gpt-oss-120b','qwen/qwen3.8-27b','qwen/qwen3.6-27b','openai/gpt-oss-20b'];
 
@@ -176,6 +177,7 @@ const SETTINGS_CACHE_VERSION = 1;
 const SETTINGS_STAMP_KEY = 'SETTINGS_NORM_V1';
 let _settingsCache = null;
 let _settingsDirty = true;
+let _serverGeminiAvailable = false;
 
 function cloneSettings(s){
   if(typeof structuredClone === 'function'){
@@ -191,7 +193,7 @@ function cloneSettings(s){
 
 function hasKeyInSettings(s, pid){
   if(pid === 'groq') return !!s.groqKey;
-  if(pid === 'google') return !!(s.googleKey || s.geminiKey);
+  if(pid === 'google') return _serverGeminiAvailable;
   if(pid === 'openrouter') return !!s.openrouterKey;
   const c = s.customProviders.find(x => x.id === pid);
   return !!(c && c.key);
@@ -261,7 +263,7 @@ function assembleSettings(sttChain, polishChain, customProviders){
     openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
     openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
     primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
-    model: localStorage.getItem(KEYS.MODEL) || 'gemini-flash-latest',
+    model: localStorage.getItem(KEYS.MODEL) || 'gemini-3.5-transcribe',
     sttChain,
     polishChain,
     customProviders,
@@ -542,12 +544,18 @@ export const Storage = {
     // keys this patch did not touch).
     refreshSettingsCache();
   },
+  setServerGeminiAvailable(v) {
+    _serverGeminiAvailable = !!v;
+  },
+  isServerGeminiAvailable() {
+    return _serverGeminiAvailable;
+  },
   getProviders() {
     // built-ins (key presence only — never leaks key values) + customs
     const s = Storage.getSettings();
     return [
       { id: 'groq', name: 'Groq', baseURL: s.groqBaseURL, hasKey: !!s.groqKey },
-      { id: 'google', name: 'Google', baseURL: '', hasKey: !!(s.googleKey || s.geminiKey) },
+      { id: 'google', name: 'Google', baseURL: '', hasKey: _serverGeminiAvailable },
       { id: 'openrouter', name: 'OpenRouter', baseURL: s.openrouterBaseURL, hasKey: !!s.openrouterKey },
       ...s.customProviders.map(c => ({ id: c.id, name: c.name || c.id, baseURL: c.baseURL || '', hasKey: !!c.key })),
     ];
@@ -555,10 +563,10 @@ export const Storage = {
   hasKeyForProvider(providerId) {
     const pid = migrateProviderId(providerId);
     if(pid === null || !pid) return false;
+    if(pid === 'google') return _serverGeminiAvailable;
     if(!_settingsDirty && _settingsCache) return hasKeyInSettings(_settingsCache, pid);
     // Cheap key-only fast path on a cold cache: 1–2 reads, no chain parsing.
     if(pid === 'groq') return !!localStorage.getItem(KEYS.GROQ);
-    if(pid === 'google') return !!localStorage.getItem(KEYS.GEMINI);
     if(pid === 'openrouter') return !!localStorage.getItem(KEYS.OPENROUTER);
     const c = parseCustomProviders(localStorage.getItem(KEYS.CUSTOM_PROVIDERS)).find(x => x.id === pid);
     return !!(c && c.key);

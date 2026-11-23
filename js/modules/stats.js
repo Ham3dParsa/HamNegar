@@ -6,13 +6,11 @@ import { Storage } from './storage.js';
 
 export const LIMITS = {
   groq: { label: 'Groq Whisper', rpd: 2000, rpm: 20, tpm: '—' },
+  'gemini-3.5-transcribe': { label: 'Gemini 3.5 Transcribe', rpd: 1500, rpm: 30, tpm: '1M' },
+  'gemini-3.1-flash-lite': { label: 'Gemini 3.1 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
+  'gemini-4-hydrogen': { label: 'Gemini 4 Hydrogen', rpd: 1500, rpm: 30, tpm: '1M' },
   'gemini-flash-latest': { label: 'Gemini Flash Latest', rpd: 1500, rpm: 15, tpm: '1M' },
   'gemini-flash-lite-latest': { label: 'Gemini Flash-Lite Latest', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-3.5-flash-lite': { label: 'Gemini 3.5 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-3.1-flash-lite': { label: 'Gemini 3.1 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
-  'gemini-2.5-flash': { label: 'Gemini 2.5 Flash', rpd: 500, rpm: 10, tpm: '250K' },
-  'gemini-2.0-flash': { label: 'Gemini 2.0 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
-  'gemini-1.5-flash': { label: 'Gemini 1.5 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
 };
 
 const tehranFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tehran' });

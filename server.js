@@ -1,6 +1,16 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  CURATED_MODELS,
+  isGeminiConfigured,
+  transcribeAudio,
+  generateText,
+  listAvailableModels,
+  testConnection,
+  extractHttpStatus,
+  safeErrorMessage,
+} from './server/gemini.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -9,9 +19,72 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = '0.0.0.0';
 
+app.disable('x-powered-by');
+
 app.use('/css', express.static(path.join(__dirname, 'css')));
 app.use('/js', express.static(path.join(__dirname, 'js')));
 app.use('/docs', express.static(path.join(__dirname, 'docs')));
+
+const geminiRouter = express.Router();
+geminiRouter.use(express.json({ limit: '35mb' }));
+
+geminiRouter.get('/status', (_req, res) => {
+  res.json({
+    configured: isGeminiConfigured(),
+    models: CURATED_MODELS,
+  });
+});
+
+geminiRouter.get('/models', async (_req, res) => {
+  try {
+    const models = await listAvailableModels();
+    res.json({ models });
+  } catch (err) {
+    const status = extractHttpStatus(err);
+    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+  }
+});
+
+geminiRouter.post('/test', async (req, res) => {
+  try {
+    const result = await testConnection({ model: req.body?.model });
+    res.json(result);
+  } catch (err) {
+    const status = extractHttpStatus(err);
+    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+  }
+});
+
+geminiRouter.post('/transcribe', async (req, res) => {
+  try {
+    const { model, mimeType, data } = req.body || {};
+    const result = await transcribeAudio({ model, mimeType, data });
+    res.json(result);
+  } catch (err) {
+    const status = extractHttpStatus(err);
+    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+  }
+});
+
+geminiRouter.post('/text', async (req, res) => {
+  try {
+    const { model, text, system, maxOutputTokens } = req.body || {};
+    const result = await generateText({ model, text, system, maxOutputTokens });
+    res.json(result);
+  } catch (err) {
+    const status = extractHttpStatus(err);
+    res.status(status).json({ error: { message: safeErrorMessage(err, status), status } });
+  }
+});
+
+geminiRouter.use((err, _req, res, next) => {
+  if (!err) return next();
+  const status = err.type === 'entity.too.large' ? 413 : extractHttpStatus(err);
+  const message = status === 413 ? 'حجم درخواست بیشتر از حد مجاز است' : safeErrorMessage(err, status);
+  res.status(status).json({ error: { message, status } });
+});
+
+app.use('/api/gemini', geminiRouter);
 
 const rootFiles = new Set([
   '/index.html',

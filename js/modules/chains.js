@@ -29,15 +29,12 @@ let onChainsRendered = null;
 // --- preference chains UI ---
 const STT_LABELS = {
   'groq': { label: 'Groq Whisper', sub: 'سریع • whisper-large-v3' },
-  'gemini-flash-latest': { label: 'gemini-flash-latest', sub: 'پیشنهادی' },
-  'gemini-flash-lite-latest': { label: 'gemini-flash-lite-latest', sub: 'سهم بیشتر ✓' },
-  'gemini-3.5-flash-lite': { label: 'gemini-3.5-flash-lite', sub: 'سهم بیشتر ✓' },
-  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'سهم بیشتر ✓' },
-  'gemini-2.5-flash': { label: 'gemini-2.5-flash', sub: 'قدیمی' },
-  'gemini-2.0-flash': { label: 'gemini-2.0-flash', sub: '' },
-  'gemini-1.5-flash': { label: 'gemini-1.5-flash', sub: '' },
+  'gemini-3.5-transcribe': { label: 'gemini-3.5-transcribe', sub: 'پیشنهادی • رونویسی دقیق ✓' },
+  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'سریع و سبک ✓' },
 };
 const POLISH_LABELS = {
+  'gemini-4-hydrogen': { label: 'gemini-4-hydrogen', sub: 'Google • پالیش و ترجمه سریع (سرور)' },
+  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'Google • سبک و سریع (سرور)' },
   'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'Qwen سبک • رایگان' },
   'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'Qwen دقیق • رایگان' },
   'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'GPT-OSS • رایگان' },
@@ -757,8 +754,8 @@ export function mountChains(deps){
     e.preventDefault();
     const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
     if(card && 'open' in card) card.open = true;
-    const input = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : els.keyOpenrouter;
-    input?.focus?.();
+    const target = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? $('btn-test-gemini') : els.keyOpenrouter;
+    target?.focus?.();
   });
   els.customName?.addEventListener('input', syncCustomModelsBtn);
   $('btn-custom-add')?.addEventListener('click', ()=>{
