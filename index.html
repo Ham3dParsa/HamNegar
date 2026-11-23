@@ -72,14 +72,17 @@
       <!-- Active Transcription Progress (visible only while transcribing) -->
       <section id="stt-progress" hidden role="status" aria-live="polite" aria-label="پیشرفت تبدیل">
         <div class="stt-progress__head">
-          <span id="progress-label">در حال تبدیل…</span>
+          <span class="stt-progress__title">
+            <span class="stt-progress__pulse" aria-hidden="true"></span>
+            <span id="progress-label">در حال تبدیل…</span>
+          </span>
           <span id="progress-step"></span>
         </div>
         <ol class="stt-progress__steps" id="progress-steps">
-          <li class="chain-step"><span class="rank">۱</span> Groq <span class="step-icon" aria-hidden="true"></span></li>
-          <li class="chain-step"><span class="rank fallback">۲</span> Flash-Lite</li>
+          <li class="chain-step"><span class="rank">۱</span><span class="step-lbl">Groq</span><span class="step-icon" aria-hidden="true"></span></li>
+          <li class="chain-step"><span class="rank fallback">۲</span><span class="step-lbl">Flash-Lite</span><span class="step-icon" aria-hidden="true"></span></li>
         </ol>
-        <div class="stt-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar" style="width:0%"></i></div>
+        <div class="stt-progress__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="progress-bar"></i></div>
       </section>
 
       <!-- Preserved Offline / Failed Voices Vault (visible only when unsent voices exist) -->
@@ -120,72 +123,15 @@
         </div>
       </section>
 
-      <!-- Labeled Touch Stagebar (Polish, Translate, Audio File Import) -->
-      <section id="stagebar" aria-label="ابزارهای پالایش، ترجمه و فایل صوتی">
-        <div class="stage-row" role="toolbar" aria-label="مراحل پالایش و ترجمه">
-          <button type="button" id="stage-simple" class="sbtn" title="پالایش ساده (املا و نگارش)" aria-label="پالایش ساده">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span>
-            <span class="s-lbl">ساده</span>
-          </button>
-          <button type="button" id="stage-advanced" class="sbtn" title="پالایش پیشرفته (املا، نگارش و دستور)" aria-label="پالایش پیشرفته">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 3l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/><path d="M3 9h8M3 15h8"/><circle cx="15" cy="9" r="2"/><circle cx="15" cy="15" r="2"/><path d="M17 9h4M17 15h4"/></svg></span>
-            <span class="s-lbl">پیشرفته</span>
-          </button>
-          <button type="button" id="stage-grammar" class="sbtn" title="پالایش دستوری" aria-label="پالایش دستوری">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 10h11M4 14h6"/><path d="M13 17l2.2 2.2L20.5 14"/></svg></span>
-            <span class="s-lbl">دستوری</span>
-          </button>
-          <button type="button" id="stage-tr-quick" class="sbtn ghost" title="ترجمه سریع فارسی ⇄ انگلیسی" aria-label="ترجمه سریع EN⇄FA">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg></span>
-            <span class="s-lbl">EN⇄FA</span>
-          </button>
-          <button type="button" id="stage-tr-panel" class="sbtn ghost" aria-pressed="false" title="ترجمه به زبان دلخواه" aria-label="ترجمه به زبان…">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
-            <span class="s-lbl">زبان‌ها</span>
-          </button>
-          <button type="button" id="stage-raw" class="sbtn ghost" disabled title="برگشت به متن خام پیش از آخرین پالایش" aria-label="خام">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg></span>
-            <span class="s-lbl">خام</span>
-          </button>
-
-          <span class="stage-divider" aria-hidden="true"></span>
-
-          <button type="button" id="btn-upload-audio" class="sbtn ghost" title="تبدیل فایل صوتی ضبط‌شده (مناسب کلاس و مصاحبه)" aria-label="تبدیل فایل صوتی">
-            <span class="s-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
-            <span class="s-lbl">فایل صوتی</span>
-          </button>
-          <input type="file" id="audio-file-input" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.flac,.aac" hidden>
-
-          <details id="stage-settings" class="settings icon-only">
-            <summary title="تنظیم مدل پالایش و دکمه‌ها" aria-label="تنظیمات مراحل">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="var(--surface)"/><circle cx="15" cy="12" r="2" fill="var(--surface)"/><circle cx="11" cy="18" r="2" fill="var(--surface)"/></svg>
-            </summary>
-            <div class="menu">
-              <div class="hint-inline">هر ابزار فقط با لمس روی متن فعلی (یا بخش انتخاب‌شده) اجرا می‌شود.</div>
-              <label class="menu-field">مدل متنی ترجیحی
-                <select class="model" id="stage-model">
-                  <option value="">خودکار: زنجیره پالایش به‌ترتیب</option>
-                </select>
-              </label>
-              <div class="menu-div">نمایش دکمه‌ها در این نشست</div>
-              <div id="stage-edit-menu"></div>
-            </div>
-          </details>
-        </div>
-
-        <div class="combo" id="tr-panel" hidden>
-          <input id="stage-lang-search" placeholder="جست‌وجوی زبان… (مثلاً انگلیسی، عربی، آلمانی)" role="combobox" aria-expanded="true" aria-controls="stage-lang-opts" autocomplete="off" aria-label="جست‌وجوی زبان">
-          <div class="list" id="stage-lang-opts" role="listbox"></div>
-        </div>
-      </section>
-
       <!-- Mobile Single-Line Collapsible Summary Trigger for Quota & System Logs -->
       <button type="button" class="inspector-bar" id="inspector-toggle" aria-expanded="false" aria-controls="studio-inspector">
         <span class="inspector-bar__label">سهمیه امروز و گزارش سیستم</span>
         <span class="inspector-bar__meta">
           <span class="qs-nums" id="quota-nums">—</span>
           <span class="dot" id="quota-dot" aria-hidden="true"></span>
-          <span class="inspector-chev" id="inspector-chev" aria-hidden="true">▾</span>
+          <span class="inspector-chev" id="inspector-chev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
         </span>
       </button>
     </div>
@@ -195,13 +141,17 @@
   <aside class="studio-inspector" id="studio-inspector" aria-label="سهمیه و گزارش سیستم" data-open="false">
     <div class="inspector-head">
       <strong>سهمیه و گزارش سیستم</strong>
-      <button type="button" id="inspector-close" class="icon-btn icon-btn--xs" aria-label="بستن پنل سهمیه و گزارش">✕</button>
+      <button type="button" id="inspector-close" class="icon-btn icon-btn--xs" aria-label="بستن پنل سهمیه و گزارش">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </div>
 
     <div class="inspector-body" id="inspector-body">
       <section class="quota-strip" id="quota-strip">
         <button type="button" class="qs-head" id="quota-toggle" aria-expanded="true" aria-controls="quota-detail">
-          <span id="quota-chev">▴</span>
+          <span id="quota-chev" class="qs-chev" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </span>
           <b>سهمیه و آمار مصرف</b>
         </button>
         <div id="quota-detail">
@@ -213,9 +163,18 @@
         <div id="log-header">
           <b>گزارش سیستم</b>
           <div id="log-actions">
-            <button type="button" class="btn-ghost btn-xs" id="btn-copy-log" title="کپی لاگ" aria-label="کپی لاگ"><span class="log-ic" aria-hidden="true">کپی</span><span class="log-tx">کپی</span></button>
-            <button type="button" class="btn-ghost btn-xs" id="btn-clear-log" title="پاک کردن لاگ" aria-label="پاک کردن لاگ"><span class="log-ic" aria-hidden="true">پاک</span><span class="log-tx">پاک</span></button>
-            <button type="button" class="btn-ghost btn-xs" id="btn-toggle-log" title="بستن لاگ" aria-label="بستن لاگ"><span class="log-ic" aria-hidden="true">▾</span><span class="log-tx">بستن</span></button>
+            <button type="button" class="btn-ghost btn-xs" id="btn-copy-log" title="کپی لاگ" aria-label="کپی لاگ">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+              <span class="log-tx">کپی</span>
+            </button>
+            <button type="button" class="btn-ghost btn-xs" id="btn-clear-log" title="پاک کردن لاگ" aria-label="پاک کردن لاگ">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>
+              <span class="log-tx">پاک</span>
+            </button>
+            <button type="button" class="btn-ghost btn-xs" id="btn-toggle-log" title="بستن لاگ" aria-label="بستن لاگ">
+              <svg class="log-chev-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+              <span class="log-tx">بستن</span>
+            </button>
           </div>
         </div>
         <div id="log-body"></div>
@@ -224,37 +183,114 @@
   </aside>
 </div>
 
-<!-- Single-Row Thumb-Zone Bottom Recording Dock (never wraps on 360px!) -->
-<footer class="actionbar demo-actionbar" aria-label="نوار کنترل ضبط">
+<!-- Single-Row Thumb-Zone Apple Droplet Bottom Dock -->
+<footer class="actionbar droplet-dock" aria-label="نوار کنترل ضبط">
   <div class="dock-slot dock-slot--start">
-    <button type="button" id="btn-copy" class="dock-btn dock-btn--copy" data-act="copy" title="کپی متن" aria-label="کپی متن">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
-      <span class="dock-lbl">کپی</span>
-      <span class="copy-tick" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+    <button type="button" id="tools-toggle" class="dock-btn" aria-expanded="false" aria-controls="tools-pop" title="ابزارهای پالایش، ترجمه و فایل صوتی" aria-label="ابزارها">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 4.8L18.5 9.5l-4.7 1.7L12 16l-1.8-4.8L5.5 9.5l4.7-1.7z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>
+      <span class="dock-lbl">ابزارها</span>
+    </button>
+    <button type="button" id="btn-clear" class="dock-btn dock-btn--clear" data-act="clear" title="پاک کردن بوم متن" aria-label="پاک کردن متن">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/></svg>
+      <span class="dock-lbl">پاک</span>
+    </button>
+    <button type="button" id="btn-pause" class="dock-btn dock-btn--pause" data-act="pause" aria-pressed="false" title="توقف موقت و ازسرگیری ضبط" aria-label="مکث ضبط" hidden>
+      <svg class="pause-svg" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M9 6v12M15 6v12"/></svg>
+      <svg class="resume-svg" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19 7 5"/></svg>
+      <span class="dock-lbl" id="pause-lbl">مکث</span>
     </button>
     <span class="rec-timer" id="mic-timer" data-timer hidden>۰۰:۰۰</span>
   </div>
 
   <button type="button" id="btn-mic" class="cbtn hero" data-act="mic" title="شروع یا توقف ضبط" aria-label="شروع ضبط" aria-busy="false">
-    <svg class="mic-svg" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
-    <svg class="stop-sq" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>
+    <svg class="mic-svg" viewBox="0 0 24 24" width="27" height="27" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>
+    <svg class="stop-sq" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.8" fill="currentColor"/></svg>
     <span class="pulse-ring" aria-hidden="true"></span>
   </button>
 
   <div class="dock-slot dock-slot--end">
-    <button type="button" id="behavior-toggle" class="dock-btn" aria-expanded="false" aria-controls="behavior-pop" title="گزینه‌های سریع و پاک‌کردن" aria-label="گزینه‌های سریع">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.2" fill="var(--surface-elevated)"/><circle cx="15" cy="17" r="2.2" fill="var(--surface-elevated)"/></svg>
+    <button type="button" id="btn-copy" class="dock-btn dock-btn--copy" data-act="copy" title="کپی متن" aria-label="کپی متن">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+      <span class="dock-lbl">کپی</span>
+      <span class="copy-tick" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="3"><path d="M4 12l5 5L20 6"/></svg></span>
+    </button>
+    <button type="button" id="behavior-toggle" class="dock-btn" aria-expanded="false" aria-controls="behavior-pop" title="تنظیمات سریع ضبط" aria-label="گزینه‌ها">
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2.2" fill="var(--surface-elevated)"/><circle cx="15" cy="17" r="2.2" fill="var(--surface-elevated)"/></svg>
       <span class="dock-lbl">گزینه‌ها</span>
     </button>
     <button type="button" id="btn-cancel-stt" class="dock-btn dock-btn--cancel" data-act="cancel" title="لغو ضبط یا تبدیل (Esc)" aria-label="لغو ضبط" hidden>
-      <svg class="cancel-svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      <svg class="cancel-svg" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       <span class="dock-lbl">لغو</span>
     </button>
   </div>
 </footer>
 
-<!-- Origin-Aware Quick Behavior & Safe Clear Popover -->
-<div id="behavior-pop" class="behavior-pop" role="dialog" aria-label="گزینه‌های سریع ضبط و متن" hidden>
+<!-- Thumb-Zone Droplet Tools, Polish, Translation & Audio File Popover -->
+<div id="tools-pop" class="tools-pop droplet-surface" role="dialog" aria-label="ابزارهای پالایش، ترجمه و فایل صوتی" hidden>
+  <div class="tools-pop__head">
+    <div class="tools-pop__title-wrap">
+      <strong>ابزارهای متن و صوت</strong>
+      <span class="tools-scope" id="tools-scope-info">کل متن</span>
+    </div>
+    <button type="button" id="tools-close" class="icon-btn icon-btn--xs" aria-label="بستن ابزارها">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <div class="tools-grid" role="toolbar" aria-label="مراحل پالایش و ترجمه">
+    <button type="button" id="stage-simple" class="tool-card">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg></span>
+      <span class="tool-card__copy"><strong>پالایش ساده</strong><small>املا، نیم‌فاصله و علائم</small></span>
+    </button>
+    <button type="button" id="stage-advanced" class="tool-card">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 3l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/><path d="M3 9h8M3 15h8"/><circle cx="15" cy="9" r="2"/><circle cx="15" cy="15" r="2"/><path d="M17 9h4M17 15h4"/></svg></span>
+      <span class="tool-card__copy"><strong>پالایش پیشرفته</strong><small>املا، نگارش و دستور کامل</small></span>
+    </button>
+    <button type="button" id="stage-grammar" class="tool-card">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 10h11M4 14h6"/><path d="M13 17l2.2 2.2L20.5 14"/></svg></span>
+      <span class="tool-card__copy"><strong>پالایش دستوری</strong><small>اصلاح ساختار جمله و فعل</small></span>
+    </button>
+    <button type="button" id="stage-structure" class="tool-card tool-card--smart">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 10h11"/><path d="M9 15h11M9 19h8"/><circle cx="5" cy="15" r="1.2" fill="currentColor" stroke="none"/><circle cx="5" cy="19" r="1.2" fill="currentColor" stroke="none"/></svg></span>
+      <span class="tool-card__copy"><strong>ساختاردهی متن</strong><small>پاراگراف و لیست بر اساس گفته</small></span>
+    </button>
+    <button type="button" id="stage-tr-quick" class="tool-card">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13l-3-3"/><path d="M20 16H7l3 3"/></svg></span>
+      <span class="tool-card__copy"><strong>ترجمه <span dir="ltr">EN⇄FA</span></strong><small>تبدیل فوری فارسی و انگلیسی</small></span>
+    </button>
+    <button type="button" id="stage-tr-panel" class="tool-card" aria-pressed="false">
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18"/><path d="M12 3a14 14 0 0 0 0 18"/></svg></span>
+      <span class="tool-card__copy"><strong>سایر زبان‌ها</strong><small>آلمانی، عربی، ترکی و…</small></span>
+    </button>
+    <button type="button" id="stage-raw" class="tool-card tool-card--span2" disabled>
+      <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg></span>
+      <span class="tool-card__copy"><strong>بازگشت به خام</strong><small>برگرداندن آخرین ویرایش اعمال‌شده</small></span>
+    </button>
+  </div>
+
+  <div class="combo" id="tr-panel" hidden>
+    <input id="stage-lang-search" placeholder="جست‌وجوی زبان… (مثلاً انگلیسی، عربی، آلمانی)" role="combobox" aria-expanded="true" aria-controls="stage-lang-opts" autocomplete="off" aria-label="جست‌وجوی زبان">
+    <div class="list" id="stage-lang-opts" role="listbox"></div>
+  </div>
+
+  <button type="button" id="btn-upload-audio" class="tool-card tool-card--wide">
+    <span class="tool-card__ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></span>
+    <span class="tool-card__copy"><strong>تبدیل فایل صوتی</strong><small>مناسب ضبط کلاس، مصاحبه و ویس (<span dir="ltr">MP3, M4A, WAV</span>)</small></span>
+  </button>
+  <input type="file" id="audio-file-input" accept="audio/*,.mp3,.m4a,.wav,.ogg,.webm,.flac,.aac" hidden>
+
+  <div class="tools-pop__foot">
+    <label class="tools-model-field" for="stage-model">
+      <span>مدل متنی ترجیحی</span>
+      <select class="model" id="stage-model">
+        <option value="">خودکار: زنجیره پالایش به‌ترتیب</option>
+      </select>
+    </label>
+  </div>
+</div>
+
+<!-- Origin-Aware Droplet Quick Behavior Popover -->
+<div id="behavior-pop" class="behavior-pop droplet-surface" role="dialog" aria-label="گزینه‌های سریع ضبط و متن" hidden>
   <div class="quick-toggles">
     <button type="button" class="quick-row" data-quick-toggle="realtime" aria-pressed="false">
       <span class="quick-row__text"><strong>حالت آنی</strong><small>نمایش زنده کلمات حین صحبت</small></span>
@@ -275,9 +311,9 @@
   </div>
   <div class="quick-divider"></div>
   <div class="quick-actions">
-    <button type="button" id="btn-clear" class="quick-danger" data-act="clear" aria-label="پاک کردن متن">
-      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14"/></svg>
-      <span>پاک کردن کل متن</span>
+    <button type="button" id="btn-quick-settings" class="quick-link">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span>تنظیمات کامل استودیو</span>
     </button>
   </div>
 </div>
@@ -288,7 +324,9 @@
     <div class="sheet-handle" aria-hidden="true"></div>
     <header class="modal-head">
       <h3>تنظیمات استودیو</h3>
-      <button type="button" class="icon-btn icon-btn--xs" id="btn-x-modal" aria-label="بستن تنظیمات">✕</button>
+      <button type="button" class="icon-btn icon-btn--xs" id="btn-x-modal" aria-label="بستن تنظیمات">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
     </header>
 
     <div class="settings-tabs" role="tablist" aria-label="بخش‌های تنظیمات">
@@ -477,6 +515,14 @@
 
     <!-- TAB 3: Pipeline & Models -->
     <section id="panel-pipeline" class="settings-panel" role="tabpanel" aria-labelledby="tab-pipeline" hidden>
+      <div class="catalog-toolbar">
+        <div class="catalog-toolbar__info">
+          <strong>کاتالوگ زنده مدل‌ها</strong>
+          <span class="hint-inline" id="catalog-status">آماده دریافت از ارائه‌دهندگان فعال</span>
+        </div>
+        <button type="button" class="btn-ghost btn-sm" id="btn-refresh-catalog">بروزرسانی کاتالوگ زنده</button>
+      </div>
+
       <section class="pref-section" aria-labelledby="stt-title">
         <div class="pref-head">
           <h4 id="stt-title">زنجیره تبدیل صدا به متن (STT)</h4>
@@ -485,47 +531,70 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-stt-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره <code>⠿</code> را بکش یا از دکمه‌های <code>▲</code>/<code>▼</code> هر ردیف استفاده کن.</p>
+        <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره کنار ردیف را بکش یا با دکمه‌های بالا و پایین کارت‌ها جایگاه را عوض کن.</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-expanded="false" aria-controls="stt-add-panel">＋ افزودن مدل صوتی</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-expanded="false" aria-controls="stt-add-panel">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span>افزودن مدل صوتی</span>
+          </button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="stt-add-panel" hidden>
-          <label for="stt-add-search" class="hint-inline">جست‌وجوی مدل صوتی:</label>
-          <input type="search" id="stt-add-search" placeholder="مثلاً whisper یا flash…">
+          <label for="stt-add-search" class="hint-inline">جست‌وجو در مدل‌های صوتی یا افزودن مدل دلخواه:</label>
+          <input type="search" id="stt-add-search" placeholder="مثلاً whisper یا gemini-2.5-flash…">
           <div id="stt-add-list" role="listbox" aria-label="فهرست مدل‌های صوتی"></div>
+          <div class="custom-model-bar">
+            <select id="stt-custom-prov" aria-label="ارائه‌دهنده مدل صوتی دلخواه"></select>
+            <input type="text" id="stt-custom-id" placeholder="شناسه مدل دلخواه (مثلاً gemini-2.5-flash)" dir="ltr" aria-label="شناسه مدل صوتی دلخواه">
+            <button type="button" class="btn-ghost btn-sm" id="btn-stt-custom-add">افزودن</button>
+          </div>
         </div>
       </section>
 
       <section class="pref-section" aria-labelledby="polish-title">
         <div class="pref-head">
-          <h4 id="polish-title">زنجیره پالیش و ترجمه فارسی</h4>
+          <h4 id="polish-title">زنجیره پالیش، ساختاردهی و ترجمه</h4>
           <div class="row-actions">
             <button type="button" class="btn-ghost btn-xs" id="btn-polish-all-on">همه روشن</button>
             <button type="button" class="btn-ghost btn-xs" id="btn-polish-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود؛ ترتیب را با <code>⠿</code> یا <code>▲</code>/<code>▼</code> عوض کن.</p>
+        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود؛ ابزار «ساختاردهی متن» به‌طور هوشمند قوی‌ترین مدل فعال زنجیره را در اولویت قرار می‌دهد.</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">＋ افزودن ویرایشگر</button>
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span>افزودن ویرایشگر</span>
+          </button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="polish-add-panel" hidden>
-          <label for="polish-add-search" class="hint-inline">جست‌وجوی ویرایشگر:</label>
-          <input type="search" id="polish-add-search" placeholder="مثلاً qwen یا gpt-oss…">
-          <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌های پالیش"></div>
+          <label for="polish-add-search" class="hint-inline">جست‌وجو در کاتالوگ زنده یا ثبت شناسه دلخواه:</label>
+          <input type="search" id="polish-add-search" placeholder="مثلاً llama-3.3-70b، qwen یا :free…">
+          <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌های متنی"></div>
+          <div class="custom-model-bar">
+            <select id="polish-custom-prov" aria-label="ارائه‌دهنده مدل متنی دلخواه"></select>
+            <input type="text" id="polish-custom-id" placeholder="شناسه دلخواه (مثلاً llama-3.3-70b-versatile)" dir="ltr" aria-label="شناسه مدل متنی دلخواه">
+            <button type="button" class="btn-ghost btn-sm" id="btn-polish-custom-add">افزودن</button>
+          </div>
         </div>
-        <div class="hint" id="polish-disabled-hint" style="display:none">پالیش خودکار خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
+        <div class="hint" id="polish-disabled-hint" hidden>پالیش خودکار خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
       </section>
 
       <details class="provider-card" id="models-explorer-card">
-        <summary class="provider-head"><b>کاوشگر کامل مدل‌ها (پیشرفته)</b></summary>
+        <summary class="provider-head"><b>کاوشگر کامل و افزودن مدل دلخواه</b></summary>
         <div class="provider-body">
           <div class="state-card state-warn" id="m-nokey" hidden>کلید این ارائه‌دهنده ثبت نشده — <a href="#" id="m-nokey-link">رفتن به تب کلیدها</a></div>
           <div class="fetch-bar">
-            <input type="search" id="m-q" placeholder="جست‌وجو در همه مدل‌ها… (مثل whisper یا gemini)">
+            <div class="fchips" id="m-prov-chips" role="group" aria-label="فیلتر ارائه‌دهنده">
+              <button type="button" class="fchip active" data-prov="all" aria-pressed="true">همه</button>
+              <button type="button" class="fchip" data-prov="groq" aria-pressed="false">Groq</button>
+              <button type="button" class="fchip" data-prov="gemini" aria-pressed="false">Google</button>
+              <button type="button" class="fchip" data-prov="openrouter" aria-pressed="false">OpenRouter</button>
+              <button type="button" class="fchip" data-prov="custom" aria-pressed="false">سفارشی</button>
+            </div>
+            <input type="search" id="m-q" placeholder="جست‌وجو در همه مدل‌های زنده و پیش‌فرض…">
             <div class="fchips" id="m-chips" role="group" aria-label="فیلتر قابلیت مدل‌ها">
               <button type="button" class="fchip active" data-cap="all" aria-pressed="true">همه</button>
               <button type="button" class="fchip" data-cap="stt" aria-pressed="false">صوت به متن</button>
@@ -533,25 +602,36 @@
               <button type="button" class="fchip" data-cap="free" aria-pressed="false">رایگان</button>
             </div>
             <div class="count hint-inline" id="m-count" aria-live="polite"></div>
-            <div class="hint" id="easy-models-hint">برای به‌روزرسانی فهرست، در تب «کلیدها» دکمه «بروزرسانی مدل‌ها» را بزن.</div>
+            <div class="hint" id="easy-models-hint">برای دریافت جدیدترین مدل‌های هر ارائه‌دهنده، دکمه «بروزرسانی کاتالوگ زنده» در بالای همین تب را بزن.</div>
           </div>
+
+          <div class="manual-model-box" id="m-manual-wrap">
+            <div class="manual-model-head">
+              <b>افزودن مستقیم مدل دلخواه</b>
+              <span class="hint-inline" id="m-manual-hint">هر شناسه مدل دلخواه را برای هر ارائه‌دهنده وارد کن</span>
+            </div>
+            <div class="manual-model-grid">
+              <select id="easy-provider-select" aria-label="انتخاب ارائه‌دهنده"></select>
+              <select id="easy-target-select" aria-label="انتخاب زنجیره مقصد">
+                <option value="polish">مدل متنی / پالیش</option>
+                <option value="stt">صوت به متن (STT)</option>
+              </select>
+              <input type="text" id="easy-model-input" placeholder="مثلاً deepseek/deepseek-r1:free یا gemini-2.5-pro" dir="ltr" aria-label="شناسه دستی مدل">
+              <button type="button" class="btn-primary btn-sm" id="btn-easy-add">افزودن به زنجیره</button>
+            </div>
+          </div>
+
           <details id="models-tips">
             <summary>نکات انتخاب مدل</summary>
             <ul>
-              <li>مدل‌های <code>lite</code> سهمیه روزانه بیشتری دارند.</li>
-              <li><code>gemini-3.5-transcribe</code> و <code>gemini-3.1-flash-lite</code> گزینه‌های پیشنهادی Google هستند.</li>
-              <li>مدل‌های با پسوند <code>:free</code> از سهمیه رایگان OpenRouter استفاده می‌کنند.</li>
+              <li>مدل‌های <code>lite</code> سهمیه روزانه بیشتری دارند و برای پالیش سریع روزمره عالی‌اند.</li>
+              <li>برای ابزار «ساختاردهی متن»، مدل‌های قوی‌تر مثل <code>120b</code>، <code>70b</code>، <code>pro</code> و <code>qwen3.8</code> دقت بالاتری دارند.</li>
+              <li>مدل‌های با پسوند <code>:free</code> در OpenRouter رایگان هستند و شناسه‌شان دقیق ذخیره می‌شود.</li>
             </ul>
           </details>
           <div id="models-list"></div>
           <div class="state-card state-err" id="m-err" hidden><span id="m-err-text">دریافت مدل‌ها ناموفق بود.</span> <button type="button" class="btn-ghost btn-xs" id="m-retry" disabled>تلاش مجدد</button></div>
-          <div class="state-card state-empty" id="m-empty" hidden>مدلی با این فیلترها پیدا نشد.
-            <span id="m-manual-wrap" hidden>
-              <span class="hint-inline" id="m-manual-hint" hidden></span>
-              <input type="text" id="easy-model-input" placeholder="gemini-…" dir="ltr" aria-label="شناسه دستی مدل">
-              <button type="button" class="btn-ghost btn-xs" id="btn-easy-add">افزودن دستی</button>
-            </span>
-          </div>
+          <div class="state-card state-empty" id="m-empty" hidden>مدلی با این فیلترها پیدا نشد — از بخش «افزودن مستقیم مدل دلخواه» بالا می‌توانی هر مدلی را اضافه کنی.</div>
         </div>
       </details>
     </section>
@@ -583,11 +663,15 @@
       <div class="pref-section" aria-label="پشته موج">
         <div class="pref-head"><h4>لایه‌های موج (تا ۵ لایه)</h4><span class="pref-sub">بالاترین ردیف در جلو</span></div>
         <div id="wave-list" class="wave-list"></div>
-        <div class="wave-row-btns" style="justify-content:space-between">
-          <span class="wave-row-btns">
-            <button type="button" id="wave-add" class="btn-ghost btn-sm">＋ افزودن موج</button>
-            <button type="button" id="wave-dice" class="btn-ghost btn-sm">ترکیب تصادفی</button>
-          </span>
+        <div class="wave-row-btns">
+          <button type="button" id="wave-add" class="btn-ghost btn-sm">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <span>افزودن موج</span>
+          </button>
+          <button type="button" id="wave-dice" class="btn-ghost btn-sm">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+            <span>ترکیب تصادفی</span>
+          </button>
         </div>
       </div>
 

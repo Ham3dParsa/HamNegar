@@ -162,9 +162,10 @@ function cleanPolishOutput(raw){
 function validatePolishOutput(raw, text, model, layer = 'polish'){
   const out = cleanPolishOutput(raw);
   if(!out) throw Object.assign(new Error(layer==='polish' ? 'پالیش خالی برگشت' : `خروجی ${layer} خالی بود`),{status:500});
-  if(layer !== 'polish') return out;
-  if(out.length > text.length*3 + 500){ Logger.log('warn','polish reasoning leak suspected',{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('پالیش نامعتبر (نشت تفکر)'),{status:500}); }
-  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)|(no (editing|correction) (needed|required))|((the (original|input) text) is)|(no changes (needed|made))/i.test(out)){ Logger.log('warn','polish meta-commentary rejected',{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
+  if(layer !== 'polish' && layer !== 'structure') return out;
+  const maxLen = layer === 'structure' ? (text.length * 4 + 800) : (text.length * 3 + 500);
+  if(out.length > maxLen){ Logger.log('warn',`${layer} reasoning leak suspected`,{model, inLen:text.length, outLen:out.length}); throw Object.assign(new Error('خروجی نامعتبر (طول بیش‌ازحد یا نشت تفکر)'),{status:500}); }
+  if(/(نیازی به (ویرایش|اصلاح))|((متأسفم)[\s\S]{0,30}(نمی‌توانم))|((نمی‌توانم)[\s\S]{0,30}(ویرایش|اصلاح))|(عذرخواه)|(به عنوان یک هوش)|(as an ai language model)|(no (editing|correction) (needed|required))|((the (original|input) text) is)|(no changes (needed|made))/i.test(out)){ Logger.log('warn',`${layer} meta-commentary rejected`,{model, inLen:text.length, outLen:out.length, out:out.slice(0,40)}); throw Object.assign(new Error('پالیش نامعتبر (توضیح به‌جای متن)'),{status:500}); }
   return out;
 }
 const DEFAULT_POLISH_SYSTEM = `You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)`;
@@ -230,8 +231,9 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(providerId === 'groq' && !k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair(providerId, model)} باید gsk_ باشد`),{status:401});
   if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
   assertTrustedBase(base, trusted);
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
-  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature:0.2, max_tokens:polishOutputBudget(text) };
+  const timeoutMs = layer === 'structure' ? 38000 : 25000;
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
+  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature: layer === 'structure' ? 0.25 : 0.2, max_tokens:polishOutputBudget(text) };
   // Qwen thinking models: instruct mode, hide reasoning (gpt-oss does NOT support reasoning_format — skip there)
   if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   let res; try{
@@ -245,7 +247,8 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
 }
 async function queryPolishViaGeminiDirect(text, model, layer, system, k){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const timeoutMs = layer === 'structure' ? 38000 : 25000;
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
   const sys = system || DEFAULT_POLISH_SYSTEM;
   const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
   let res; try{
@@ -255,7 +258,7 @@ async function queryPolishViaGeminiDirect(text, model, layer, system, k){
       body:JSON.stringify({
         system_instruction:{ parts:[{ text: sys }] },
         contents:[{ parts:[{ text }] }],
-        generationConfig:{ temperature:0.2, maxOutputTokens:polishOutputBudget(text) },
+        generationConfig:{ temperature: layer === 'structure' ? 0.25 : 0.2, maxOutputTokens:polishOutputBudget(text) },
       }),
       signal:ctrl.signal,
     });
@@ -273,7 +276,8 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
   assertGoogleActive();
   const personalKey = getGeminiKey();
   if(!shouldUseServerGemini()) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),25000);
+  const timeoutMs = layer === 'structure' ? 38000 : 25000;
+  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
   let res; try{
     res=await fetch('./api/gemini/text',{
       method:'POST',
@@ -290,17 +294,33 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
   if(j.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(out, text, model, layer);
 }
+// Rank text models by reasoning/structuring capability so `smart: true` picks high-intelligence tiers first.
+export function smartModelScore(id){
+  const m = String(id || '').toLowerCase();
+  let score = 50;
+  if(/(gpt-5|claude-(?:3\.7|4|opus|sonnet)|gemini-(?:2\.5|3(?:\.\d+)?)-pro|gemini-4-hydrogen|o[134](?:-|$))/i.test(m)) score = 95;
+  else if(/(120b|405b|235b|deepseek-r1|deepseek-v3|kimi-k2)/i.test(m)) score = 88;
+  else if(/(70b|72b|gemini-(?:2\.5|3(?:\.\d+)?)-flash(?!-lite)|qwen3\.8|qwen3\.6|claude-haiku|gpt-4o(?!-mini))/i.test(m)) score = 78;
+  else if(/(27b|30b|32b|maverick|gemini-flash-latest|gpt-4\.1(?!-mini|-nano))/i.test(m)) score = 68;
+  else if(/(20b|14b|17b|scout|gpt-4o-mini)/i.test(m)) score = 55;
+  else if(/(lite|mini|nano|flash-lite|8b|7b|4b|3b|1b|allam)/i.test(m)) score = 30;
+  if(/safeguard/i.test(m)) score -= 8;
+  return score;
+}
 // Canonical polish entry shape {id, providerId, enabled}; legacy `provider` alias + string entries supported.
 function polishTargetOf(entry){
   if(typeof entry === 'string'){
-    const clean = entry.replace(':free','');
-    return { model: clean, providerId: entry.includes(':free') ? 'openrouter' : 'groq' };
+    const raw = entry.trim();
+    const providerId = raw.includes(':free') ? 'openrouter' : (/^gemini/i.test(raw) ? 'google' : 'groq');
+    const model = providerId === 'openrouter' ? raw : raw.replace(':free','');
+    return { model, providerId };
   }
-  const model = (entry.id || '').replace(':free','');
+  const rawId = (entry.id || '').trim();
   const rawPid = (typeof entry.providerId === 'string' && entry.providerId.trim()) ? entry.providerId.trim()
     : (typeof entry.provider === 'string' && entry.provider.trim() ? entry.provider.trim() : '');
   let providerId = canonicalize(rawPid);
-  if(!providerId) providerId = (entry.id && entry.id.includes(':free')) ? 'openrouter' : (!model.includes('/') ? 'google' : 'groq');
+  if(!providerId) providerId = rawId.includes(':free') ? 'openrouter' : (/^gemini/i.test(rawId) ? 'google' : 'groq');
+  const model = providerId === 'openrouter' ? rawId : rawId.replace(':free','');
   return { model, providerId };
 }
 async function queryPolish(text, entry, layer = 'polish'){
@@ -312,21 +332,31 @@ async function queryPolish(text, entry, layer = 'polish'){
 // Full-chain text op (ticket/16 chain fallback): iterates ENABLED polishChain entries
 // that have keys, dispatching per provider through the existing adapters (no new
 // seam). Respects intentionally empty chains without forcing defaults.
-// layer names the op in logs ('polish' keeps polish guards in validatePolishOutput,
+// layer names the op in logs ('polish'/'structure' keep guards in validatePolishOutput,
 // 'translate' skips them). 401/403 entries are skipped with a warn log; 429 backs
 // off before the next entry. All throws are typed (err.status set).
-async function textChain(text, { system, layer = 'polish', prefer } = {}){
-  if(!text || !text.trim()) throw Object.assign(new Error(layer==='translate' ? 'متنی برای ترجمه نیست' : 'متنی برای پالایش نیست'),{status:400});
+async function textChain(text, { system, layer = 'polish', prefer, smart = false } = {}){
+  if(!text || !text.trim()) throw Object.assign(new Error(layer==='translate' ? 'متنی برای ترجمه نیست' : 'متنی برای پردازش نیست'),{status:400});
   const { polishChain } = Storage.getSettings();
   const rawChain = Array.isArray(polishChain) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
-  const chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
-  if(prefer && prefer.id && hasKeyForPolish(prefer) && !chain.some(e => polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId)){
-    // explicit dropdown picks carry no enabled flag — resolve it from the chain itself
-    const rawMatch = rawChain.find(e => e && polishTargetOf(e).model === polishTargetOf(prefer).model && polishTargetOf(e).providerId === polishTargetOf(prefer).providerId);
-    if(!rawMatch || rawMatch.enabled !== false) chain.unshift({ id: prefer.id, providerId: canonicalize(prefer.providerId), enabled: true });
-    else Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
+  let chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
+  if(smart && chain.length > 1){
+    chain = [...chain].sort((a, b) => smartModelScore(polishTargetOf(b).model) - smartModelScore(polishTargetOf(a).model));
+  }
+  if(prefer && prefer.id && hasKeyForPolish(prefer)){
+    const pt = polishTargetOf(prefer);
+    const rawMatch = rawChain.find(e => e && polishTargetOf(e).model === pt.model && polishTargetOf(e).providerId === pt.providerId);
+    if(!rawMatch || rawMatch.enabled !== false){
+      chain = chain.filter(e => !(polishTargetOf(e).model === pt.model && polishTargetOf(e).providerId === pt.providerId));
+      chain.unshift({ id: pt.model, providerId: pt.providerId, enabled: true });
+    } else {
+      Logger.log('warn','مدل ترجیحی در زنجیره خاموش است — از زنجیره استفاده شد',{id:prefer.id});
+    }
   }
   if(chain.length===0) throw Object.assign(new Error('مدل متنی فعال و دارای کلید در زنجیره نیست'),{status:401});
+  if(smart && !prefer){
+    Logger.log('info',`اولویت هوشمند برای ${layer}`, { top: displayPair(polishTargetOf(chain[0]).providerId, polishTargetOf(chain[0]).model) });
+  }
   let lastErr=null;
   for(let i=0;i<chain.length;i++){
     const entry = chain[i];
@@ -338,7 +368,7 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
       if(out){
         if(i>0) Logger.log('info',`${layer} fallback ok #${i+1}/${chain.length} → ${displayPair(providerId, model)}`);
         else Logger.log('debug',`${layer} ok → ${displayPair(providerId, model)}`,{model, providerId});
-        if(layer === 'polish'){
+        if(layer === 'polish' || layer === 'structure'){
           const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
           const applied = applyPersonalDictionary(out, dict);
           return { text: applied.text, model, providerId };
@@ -353,7 +383,7 @@ async function textChain(text, { system, layer = 'polish', prefer } = {}){
       if(e.status===429 && i<chain.length-1) await new Promise(r=>setTimeout(r,600));
     }
   }
-  throw lastErr || Object.assign(new Error(layer==='translate' ? 'ترجمه ناموفق بود' : 'پالایش ناموفق بود'),{status:500});
+  throw lastErr || Object.assign(new Error(layer==='translate' ? 'ترجمه ناموفق بود' : 'عملیات متنی ناموفق بود'),{status:500});
 }
 // Translate (ticket/16): same text-model chain as polish (default = first enabled polish
 // entry), but a language-neutral translate prompt on layer='translate' so the polish
@@ -561,18 +591,32 @@ export const Transcription = {
       const j=await r.json();
       return (j.models || [])
         .map(m => String(m?.name || '').replace(/^models\//i, '').trim())
-        .filter(id => /^gemini/i.test(id) && !/embedding|imagen|veo|lyria|aqa|robotics/i.test(id));
+        .filter(id => /^(gemini|gemma)/i.test(id) && !/embedding|imagen|veo|lyria|aqa|robotics/i.test(id));
     }
     let resolved;
     try{ resolved = resolveChatProvider(pid); }
     catch(e){ throw Object.assign(new Error(`ارائه‌دهنده ناشناس: ${String(providerId ?? '')}`),{status:400}); }
     const { key: k, base, trusted } = resolved;
-    if(!k) throw Object.assign(new Error(`کلید ${pid} نیست`),{status:401});
     if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
     assertTrustedBase(base, trusted);
-    const r=await fetch(`${base}/models`,{headers:{Authorization:`Bearer ${k}`}});
+    if(!k && pid !== 'openrouter') throw Object.assign(new Error(`کلید ${pid} نیست`),{status:401});
+    const headers = k ? { Authorization: `Bearer ${k}` } : {};
+    const ctrl = new AbortController(), to = setTimeout(() => ctrl.abort(), 20000);
+    let r;
+    try{
+      r = await fetch(`${base}/models`, { headers, signal: ctrl.signal });
+    }catch(e){
+      clearTimeout(to);
+      throw Object.assign(new Error(e.name==='AbortError' ? 'تایم‌اوت لیست مدل‌ها' : 'شبکه لیست مدل‌ها: ' + e.message), { status: e.name==='AbortError' ? 408 : 0 });
+    }
+    clearTimeout(to);
     if(!r.ok){ const e=await parseErr(r); const err=new Error(`${fmt(r.status)} — ${e.msg}`); err.status=r.status; throw err; }
-    const j=await r.json(); return j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || [];
+    const j=await r.json();
+    let list = (j.data?.map(m=>m.id) || j.models?.map(m=>m.id) || []).map(x => String(x || '').trim()).filter(Boolean);
+    if(pid === 'groq'){
+      list = list.filter(id => !/^(playai-tts|canopylabs\/orpheus|meta-llama\/llama-prompt-guard|llama-guard)/i.test(id));
+    }
+    return [...new Set(list)];
   },
   // provider model lists: single path is listModels(providerId); app.js calls it via fetchAndShowModels/loadEasyModels
   async testGroq(){

@@ -58,7 +58,7 @@ export const Audio = {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
         src = ctx.createMediaStreamSource(stream);
         const an = ctx.createAnalyser();
-        an.fftSize = 256;
+        an.fftSize = 512;
         src.connect(an);
         analyser = an;
         audioCtx = ctx;
@@ -85,6 +85,28 @@ export const Audio = {
       starting = false;
     }
   },
+  canPause() {
+    return !!mediaRecorder && typeof mediaRecorder.pause === 'function' && typeof mediaRecorder.resume === 'function';
+  },
+  pause() {
+    if (!mediaRecorder || mediaRecorder.state !== 'recording' || typeof mediaRecorder.pause !== 'function') return false;
+    try { if (typeof mediaRecorder.requestData === 'function') mediaRecorder.requestData(); } catch {}
+    try {
+      mediaRecorder.pause();
+      return mediaRecorder.state === 'paused';
+    } catch {
+      return false;
+    }
+  },
+  resume() {
+    if (!mediaRecorder || mediaRecorder.state !== 'paused' || typeof mediaRecorder.resume !== 'function') return false;
+    try {
+      mediaRecorder.resume();
+      return mediaRecorder.state === 'recording';
+    } catch {
+      return false;
+    }
+  },
   async stop() {
     const mr = mediaRecorder;
     const cb = onStopCb;
@@ -106,5 +128,6 @@ export const Audio = {
   },
   getAnalyser() { return analyser; },
   getStream() { return micStream; },
-  isRecording() { return !!mediaRecorder && mediaRecorder.state === 'recording'; },
+  isPaused() { return !!mediaRecorder && mediaRecorder.state === 'paused'; },
+  isRecording() { return !!mediaRecorder && (mediaRecorder.state === 'recording' || mediaRecorder.state === 'paused'); },
 };

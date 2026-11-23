@@ -26,10 +26,18 @@ let waveRenderer = null, waveInit = false, waveFakeOn = true;
 // so the «hide» checkbox is its inverse: checked → saveWaveIdle(false). Default
 // visible (waveIdle absent → true), reduced-motion stays independent.
 let waveHidden = !Storage.getWaveIdle();
-let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null, waveFollowTimer = null;
+let waveMicStream = null, waveMicCtx = null, waveMicAnalyser = null;
 let waveMicPending = false;
 let waveOpenIds = new Set(waveCfg.waves.length ? [waveCfg.waves[0].id] : []);
 let waveAdvIds = new Set();
+const STUDIO_SWATCHES = ['#8ab4f8', '#5eead4', '#c4b5fd', '#f6b17a', '#f9a8d4', '#fde68a'];
+const SVG_CHEV = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const SVG_VOL_ON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+const SVG_VOL_OFF = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>';
+const SVG_EDIT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const SVG_UP = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>';
+const SVG_DN = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const SVG_X = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
 function waveName(wv, idx){ const n = (wv.name || '').trim(); return n || `موج ${idx + 1}`; }
 // --- persist timing (ticket 41): preview immediate, persist debounced trailing + flush ---
 let wavePersistTimer = null;
@@ -49,6 +57,45 @@ function waveSeg(box, vals, cur, faMap, cb){
     b.addEventListener('click', e => { e.preventDefault(); cb(v); });
     box.appendChild(b);
   });
+}
+function buildColorRow(labelText, currentHex, onPick){
+  const wrap = document.createElement('div');
+  wrap.className = 'wave-color-row';
+  const lab = document.createElement('span');
+  lab.className = 'wave-ctrl-label';
+  lab.textContent = labelText;
+  const swatches = document.createElement('div');
+  swatches.className = 'wave-swatches';
+  const inp = document.createElement('input');
+  inp.type = 'color';
+  inp.value = currentHex;
+  inp.setAttribute('aria-label', labelText);
+  const syncActive = (hex) => {
+    const low = String(hex || '').toLowerCase();
+    swatches.querySelectorAll('.wave-swatch').forEach(s => {
+      s.classList.toggle('active', s.dataset.color === low);
+    });
+  };
+  for (const c of STUDIO_SWATCHES) {
+    const sw = document.createElement('button');
+    sw.type = 'button';
+    sw.className = 'wave-swatch';
+    sw.dataset.color = c.toLowerCase();
+    sw.style.background = c;
+    sw.setAttribute('aria-label', `${labelText}: ${c}`);
+    sw.addEventListener('click', (e) => {
+      e.preventDefault();
+      inp.value = c;
+      syncActive(c);
+      onPick(c, true);
+    });
+    swatches.appendChild(sw);
+  }
+  inp.addEventListener('input', () => { syncActive(inp.value); onPick(inp.value, false); });
+  inp.addEventListener('change', () => waveFlushPersist());
+  syncActive(currentHex);
+  wrap.append(lab, swatches, inp);
+  return wrap;
 }
 // --- wave sliders T2/3 (ticket/52): ONE builder for globals + per-wave.
 // Replaces the undiscoverable `min=-1` "follow global" dead-zone with an explicit
@@ -93,10 +140,6 @@ function waveSlider(mount, o){
     chip.title = 'روشن = مقدار سراسری؛ خاموش = مقدار دستی این موج';
     mount.appendChild(chip);
   }
-  const shownVal = () => {
-    const v = o.get();
-    return (o.follow && v == null) ? o.follow.globalVal() : v;
-  };
   const paint = () => {
     const v = o.get();
     const following = !!(o.follow && v == null);
@@ -136,25 +179,22 @@ function waveApplyStarter(id, applyAurora){
   waveAdvIds = new Set();
   wavePersist(); waveRenderList();
 }
-// --- live starter previews T3/3 (ticket/53): tiny canvases reusing createWaveRenderer,
-// driven by ONE shared rAF (~16fps), paused via IntersectionObserver + tab-hidden.
-// T1 discipline: starter `waves` are static preset defs (pinned per build), but every
-// tick re-reads the LIVE waveCfg globals — thumbs never desync like mute did.
-// prefers-reduced-motion → static renderOnce() frame, no loop.
+// --- live starter previews: tiny canvases reusing createWaveRenderer,
+// driven by ONE shared rAF (~28fps), paused via IntersectionObserver + tab-hidden.
 let waveStarterLive = { raf: 0, last: 0, items: [], io: null };
 function waveStarterLoop(now) {
   waveStarterLive.raf = 0;
-  if (document.hidden) return; // zero CPU while hidden — resumed by waveStarterVis
-  if (now - waveStarterLive.last >= 60) {
+  if (document.hidden) return;
+  if (now - waveStarterLive.last >= 34) {
     waveStarterLive.last = now;
     const stats = (window.__waveStarterStats = window.__waveStarterStats || { ticks: 0, draws: 0 });
     stats.ticks++;
-    const cfg = waveCfg; // live config every tick (never a closed-over copy)
+    const cfg = waveCfg;
     for (const it of waveStarterLive.items) {
       if (!it.visible || !it.renderer) continue;
       try {
         it.renderer.setConfig({ ...cfg, waves: it.waves, starterId: it.id });
-        it.renderer.renderFrame(now); // same wall clock for all → shared fake clock
+        it.renderer.renderFrame(now);
         stats.draws++;
       } catch {}
     }
@@ -266,7 +306,7 @@ function waveRenderList(){
     // #109 T4: explicit chevron affordance — native summary marker stays hidden
     // (css), this button is the visible open/collapse control.
     const chev = document.createElement('button');
-    chev.type = 'button'; chev.className = 'wave-chev'; chev.textContent = '▾';
+    chev.type = 'button'; chev.className = 'wave-chev'; chev.innerHTML = SVG_CHEV;
     chev.title = 'باز/بسته';
     chev.setAttribute('aria-label', 'باز/بسته ' + waveName(wv, idx));
     chev.setAttribute('aria-expanded', String(det.open));
@@ -280,20 +320,20 @@ function waveRenderList(){
     title.className = 'wave-title' + (wv.mute ? ' dim' : '');
     const paintTitle = () => {
       title.textContent = `${waveName(wv, idx)} — ${WAVE_FA.types[wv.type]} · ${WAVE_FA.colorModes[wv.colorMode]} · ${WAVE_FA.profiles[wv.profile || 'flat']}${wv.mute ? ' · بی‌صدا' : ''}`;
-      title.title = wv.mute ? 'بی‌صدا — برای فعال‌سازی روی 🔊 بزن' : 'برای باز/بسته کلیک کن؛ تغییر نام با ✎';
+      title.title = wv.mute ? 'بی‌صدا — برای فعال‌سازی روی دکمه صدا بزن' : 'برای باز/بسته کلیک کن';
     };
     paintTitle();
     const muteBtn = document.createElement('button');
     muteBtn.type = 'button'; muteBtn.className = 'wave-mute';
     const paintMute = () => {
-      muteBtn.textContent = wv.mute ? '🔇' : '🔊';
+      muteBtn.innerHTML = wv.mute ? SVG_VOL_OFF : SVG_VOL_ON;
       muteBtn.setAttribute('aria-pressed', String(!wv.mute));
       muteBtn.setAttribute('aria-label', (wv.mute ? 'فعال‌سازی ' : 'بی‌صدا کردن ') + waveName(wv, idx));
     };
     paintMute();
     muteBtn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); const live = waveCfg.waves.find(w => w.id === wv.id) || wv; const next = !live.mute; live.mute = next; wv.mute = next; row.classList.toggle('muted', next); paintTitle(); title.classList.toggle('dim', next); paintMute(); wavePersist(); const stored = waveCfg.waves.find(w => w.id === wv.id); if (stored && stored.mute !== next) { wv.mute = stored.mute; row.classList.toggle('muted', stored.mute); paintTitle(); title.classList.toggle('dim', !!stored.mute); paintMute(); } });
     const rn = document.createElement('button');
-    rn.type = 'button'; rn.className = 'wave-rename'; rn.textContent = '✎'; rn.title = 'تغییر نام موج';
+    rn.type = 'button'; rn.className = 'wave-rename'; rn.innerHTML = SVG_EDIT; rn.title = 'تغییر نام موج';
     rn.setAttribute('aria-label', 'تغییر نام ' + waveName(wv, idx));
     const startRename = e => {
       if (e) { e.preventDefault(); e.stopPropagation(); }
@@ -312,23 +352,21 @@ function waveRenderList(){
       };
       inp.addEventListener('click', ev => ev.stopPropagation());
       inp.addEventListener('pointerdown', ev => ev.stopPropagation());
-      inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter'){ ev.preventDefault(); commit(true); } else if (ev.key === 'Escape'){ ev.preventDefault(); commit(false); } }); // consume: rename owns Enter/Esc (ticket/2x)
+      inp.addEventListener('keydown', ev => { ev.stopPropagation(); if (ev.key === 'Enter'){ ev.preventDefault(); commit(true); } else if (ev.key === 'Escape'){ ev.preventDefault(); commit(false); } });
       inp.addEventListener('blur', () => commit(true));
     };
-    // #109 T4: title tap toggles open/collapse ONLY — never starts rename.
-    // preventDefault avoids the native summary double-toggle; det.open flips once.
     title.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); det.open = !det.open; });
     rn.addEventListener('click', startRename);
     const tag = document.createElement('span');
     tag.className = 'wave-tag' + (idx === 0 ? ' front' : '');
-    tag.textContent = idx === 0 ? 'بالا · رو/جلو' : (idx === waveCfg.waves.length - 1 ? 'پایین · پشت/زیر' : 'میانی');
+    tag.textContent = idx === 0 ? 'جلو' : (idx === waveCfg.waves.length - 1 ? 'پشت' : 'میانی');
     const tools = document.createElement('span');
     tools.className = 'wave-tools';
-    const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'انتقال به رو (جلوتر)'; up.setAttribute('aria-label', 'انتقال به رو ' + waveName(wv, idx)); up.disabled = idx === 0;
+    const up = document.createElement('button'); up.type = 'button'; up.innerHTML = SVG_UP; up.title = 'انتقال به جلو'; up.setAttribute('aria-label', 'انتقال به جلو ' + waveName(wv, idx)); up.disabled = idx === 0;
     up.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx - 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx - 1]]; wavePersist(); waveRenderList(); });
-    const dn = document.createElement('button'); dn.type = 'button'; dn.textContent = '↓'; dn.title = 'انتقال به پشت (عقب‌تر)'; dn.setAttribute('aria-label', 'انتقال به پشت ' + waveName(wv, idx)); dn.disabled = idx === waveCfg.waves.length - 1;
+    const dn = document.createElement('button'); dn.type = 'button'; dn.innerHTML = SVG_DN; dn.title = 'انتقال به پشت'; dn.setAttribute('aria-label', 'انتقال به پشت ' + waveName(wv, idx)); dn.disabled = idx === waveCfg.waves.length - 1;
     dn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); [waveCfg.waves[idx + 1], waveCfg.waves[idx]] = [waveCfg.waves[idx], waveCfg.waves[idx + 1]]; wavePersist(); waveRenderList(); });
-    const del = document.createElement('button'); del.type = 'button'; del.textContent = '✕'; del.title = 'حذف'; del.setAttribute('aria-label', 'حذف ' + waveName(wv, idx)); del.disabled = waveCfg.waves.length <= 1;
+    const del = document.createElement('button'); del.type = 'button'; del.innerHTML = SVG_X; del.title = 'حذف'; del.setAttribute('aria-label', 'حذف ' + waveName(wv, idx)); del.disabled = waveCfg.waves.length <= 1;
     del.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); waveOpenIds.delete(wv.id); waveAdvIds.delete(wv.id); waveCfg.waves.splice(idx, 1); wavePersist(); waveRenderList(); });
     tools.append(up, dn, del);
     sum.append(chev, dot, title, rn, muteBtn, tag, tools);
@@ -341,8 +379,6 @@ function waveRenderList(){
     waveSeg(segT, WAVE_TYPES, wv.type, WAVE_FA.types, v => { wv.type = v; wavePersist(); waveRenderList(); });
     rType.append(tLab, segT);
     body.appendChild(rType);
-    // T3/3 bars EQ options: shape seg + count/gap sliders, only for bars waves.
-    // Same pattern as sibling segs: mutate + persist + re-render (fresh objects after).
     if (wv.type === 'bars') {
       const rBar = document.createElement('div');
       rBar.dataset.hygiene = 'bar-opts';
@@ -365,15 +401,12 @@ function waveRenderList(){
     waveSeg(segC, ['solid', 'gradient', 'rainbow'], wv.colorMode, WAVE_FA.colorModes, v => { wv.colorMode = v; dot.style.background = v === 'rainbow' ? 'conic-gradient(red,orange,yellow,green,blue,violet,red)' : wv.c1; wavePersist(); waveRenderList(); });
     rCm.append(cLab, segC);
     body.appendChild(rCm);
-    const rCol = document.createElement('div'); rCol.className = 'wave-row-btns';
-    const c1Lab = document.createElement('span'); c1Lab.className = 'wave-ctrl-label'; c1Lab.textContent = 'رنگ ۱';
-    const c1 = document.createElement('input'); c1.type = 'color'; c1.value = wv.c1; c1.setAttribute('aria-label', 'رنگ ۱');
-    c1.addEventListener('input', () => { wv.c1 = c1.value; dot.style.background = wv.colorMode === 'rainbow' ? dot.style.background : c1.value; wavePreview(); waveSchedulePersist(); });
-    c1.addEventListener('change', () => waveFlushPersist());
-    rCol.append(c1Lab, c1);
-    body.appendChild(rCol);
-    // T2 dead-setting hygiene (#109): `thick` is never read in drawBars (wave.js) —
-    // hide it on bars waves; it stays for the 6 line types.
+    body.appendChild(buildColorRow('رنگ ۱', wv.c1, (hex, commit) => {
+      wv.c1 = hex;
+      if (wv.colorMode !== 'rainbow') dot.style.background = hex;
+      wavePreview();
+      if (commit) waveFlushPersist(); else waveSchedulePersist();
+    }));
     [['opacity', 'شفافیت (مطلق هر موج)', 0, 100, '1', '٪', 100], ['glow', 'درخشش (مطلق هر موج)', 0, 100, '1', '٪', 70], ...(wv.type === 'bars' ? [] : [['thick', 'ضخامت (مطلق هر موج)', 1, 6, '0.5', '', 2]])].forEach(([k, fa, mn, mx, st, u, df]) => {
       const mount = document.createElement('div');
       mount.dataset.hygiene = k;
@@ -390,36 +423,32 @@ function waveRenderList(){
     const adv = document.createElement('details');
     adv.className = 'wave-adv'; adv.open = waveAdvIds.has(wv.id);
     adv.addEventListener('toggle', () => { adv.open ? waveAdvIds.add(wv.id) : waveAdvIds.delete(wv.id); });
-    const advSum = document.createElement('summary'); advSum.textContent = '⚙️ پیشرفته (باند، پروفایل، رونوشت‌ها، توقف دوم گرادیان)';
+    const advSum = document.createElement('summary'); advSum.textContent = 'تنظیمات پیشرفته لایه (باند، پروفایل، گرادیان)';
     adv.appendChild(advSum);
     if (wv.colorMode === 'gradient') {
-      const rC2 = document.createElement('div'); rC2.className = 'wave-row-btns';
+      const rC2 = buildColorRow('رنگ ۲ گرادیان', wv.c2, (hex, commit) => {
+        wv.c2 = hex;
+        wavePreview();
+        if (commit) waveFlushPersist(); else waveSchedulePersist();
+      });
       rC2.dataset.hygiene = 'c2-row';
-      const c2Lab = document.createElement('span'); c2Lab.className = 'wave-ctrl-label'; c2Lab.textContent = 'رنگ ۲ (توقف دوم گرادیان)';
-      const c2 = document.createElement('input'); c2.type = 'color'; c2.value = wv.c2; c2.setAttribute('aria-label', 'رنگ ۲');
-      c2.addEventListener('input', () => { wv.c2 = c2.value; wavePreview(); waveSchedulePersist(); });
-      c2.addEventListener('change', () => waveFlushPersist());
-      rC2.append(c2Lab, c2);
       adv.appendChild(rC2);
     }
     const rBd = document.createElement('div');
-    const bLab = document.createElement('div'); bLab.className = 'wave-ctrl-label'; bLab.textContent = 'محرک باند (کدام بخش صدا این موج را می‌راند)';
+    const bLab = document.createElement('div'); bLab.className = 'wave-ctrl-label'; bLab.textContent = 'محرک باند فرکانس';
     const segB = document.createElement('div'); segB.className = 'wave-seg';
     waveSeg(segB, ['low', 'mid', 'high', 'rms'], wv.band, WAVE_FA.bands, v => { wv.band = v; wavePersist(); waveRenderList(); });
     rBd.append(bLab, segB);
     adv.appendChild(rBd);
     const rPf = document.createElement('div');
-    const fLab = document.createElement('div'); fLab.className = 'wave-ctrl-label'; fLab.textContent = 'پروفایل دامنه (ضریب فضایی روی x)';
+    const fLab = document.createElement('div'); fLab.className = 'wave-ctrl-label'; fLab.textContent = 'پروفایل دامنه';
     const segF = document.createElement('div'); segF.className = 'wave-seg';
     waveSeg(segF, ['flat', 'center', 'edges', 'bands'], wv.profile || 'flat', WAVE_FA.profiles, v => { wv.profile = v; wavePersist(); waveRenderList(); });
     rPf.append(fLab, segF);
     adv.appendChild(rPf);
-    const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'رونوشت هر موج — چیپ «همگام با سراسری» = همان مقدار سراسری';
+    const ovLab = document.createElement('div'); ovLab.className = 'wave-ctrl-label'; ovLab.textContent = 'تنظیم اختصاصی این لایه';
     adv.appendChild(ovLab);
-    // T2 dead-setting hygiene (#109): per-wave ov.sensitivity only scales the preview
-    // gain in shown() (wave.js:182) — it never gates open/close like the global
-    // sensMap does. Labelled honestly (label, not gate: zero behavior risk).
-    [['speed', 'سرعت این موج'], ['intensity', 'شدت این موج'], ['attack', 'سرعت پاسخ این موج (اتک)'], ['smooth', 'نرمی این موج (رهایی)'], ['sensitivity', 'حساسیت این موج (گین پیش‌نمایش — گیت را عوض نمی‌کند)']].forEach(([key, label]) => {
+    [['speed', 'سرعت این موج'], ['intensity', 'شدت این موج'], ['attack', 'سرعت پاسخ این موج (اتک)'], ['smooth', 'نرمی این موج (رهایی)'], ['sensitivity', 'حساسیت این موج (گین پیش‌نمایش)']].forEach(([key, label]) => {
       const mount = document.createElement('div');
       adv.appendChild(mount);
       waveSlider(mount, { label, min: 0, max: 100, step: '1', unit: '٪', def: 50, scope: 'local',
@@ -436,8 +465,6 @@ function waveRenderList(){
   if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
 }
 function waveSyncHue(){
-  // T2 dead-setting hygiene (#109): aurora hue is dead while aurora is off
-  // (early-return in wave.js drawAurora) — hide its slider unless aurora.on.
   const rg = $('wave-aurora-hue');
   const mount = rg?.closest('.wslider');
   if (mount) mount.hidden = !waveCfg.aurora.on;
@@ -460,15 +487,22 @@ function waveSync(){
   waveSyncHue();
   txt('wave-count', waveCfg.waves.length + ' موج' + (waveCfg.waves.length >= 5 ? ' (سقف)' : ''));
   const nm = $('wave-name');
-  if (nm) nm.textContent = `«${waveCfg.starterId === 'custom-dice' ? 'ترکیب تصادفی 🎲' : starterById(waveCfg.starterId).n}» — ${waveCfg.waves.length} موج`;
+  if (nm) nm.textContent = `«${waveCfg.starterId === 'custom-dice' ? 'ترکیب تصادفی' : starterById(waveCfg.starterId).n}» — ${waveCfg.waves.length} موج`;
   const addBtn = $('wave-add');
   if (addBtn) addBtn.disabled = waveCfg.waves.length >= 5;
   const ft = $('wave-fake-toggle');
-  if (ft) ft.textContent = waveFakeOn ? '⏺ مصنوعی: روشن' : '⏺ مصنوعی: خاموش';
+  if (ft) {
+    ft.textContent = waveFakeOn ? 'موج مصنوعی: روشن' : 'موج مصنوعی: خاموش';
+    ft.classList.toggle('active', waveFakeOn);
+    ft.setAttribute('aria-pressed', String(waveFakeOn));
+  }
   const hb = $('wave-hide');
-  if (hb) hb.checked = waveHidden; // T3 (#109): persisted kill-switch (inverse of waveIdle)
+  if (hb) hb.checked = waveHidden;
   const mt = $('wave-mic-test');
-  if (mt) mt.textContent = waveMicStream ? '⏹ توقف میکروفون' : '🎤 تست با صدای من';
+  if (mt) {
+    mt.textContent = waveMicStream ? 'توقف تست میکروفون' : 'تست با صدای من';
+    mt.classList.toggle('active', !!waveMicStream);
+  }
 }
 function waveEnsure(){
   if (waveInit) { waveFollowStart(); waveSync(); return; }
@@ -561,19 +595,14 @@ function waveEnsure(){
   waveSync();
 }
 function waveFollowStart(){
-  if (waveFollowTimer != null) return;
-  waveFollowTimer = setInterval(() => {
-    if (!waveRenderer || waveMicStream) return;
-    try {
-      const an = Audio.getAnalyser();
-      waveRenderer.setAnalyser(an || null);
-    } catch {}
-  }, 1000);
+  if (!waveRenderer || waveMicStream) return;
+  try {
+    const an = Audio.getAnalyser();
+    waveRenderer.setAnalyser(an || null);
+  } catch {}
 }
 function waveFollowStop(){
-  if (waveFollowTimer == null) return;
-  clearInterval(waveFollowTimer);
-  waveFollowTimer = null;
+  // Event-driven sync replaces background 1s polling
 }
 function waveMicStop(){
   waveMicStream?.getTracks().forEach(t => { try { t.stop(); } catch {} });

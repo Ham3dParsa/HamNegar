@@ -35,6 +35,8 @@ let waveSync = () => {};
 let mainWaveSync = () => {};
 let isWaveMicActive = () => false;
 let onSettingsSync = () => {};
+let onPipelineOpen = () => {};
+let syncCustomProviderSelects = () => {};
 
 let geminiPersonalOpen = false;
 const BUILTIN_LABELS = { groq: 'Groq', google: 'Google Gemini', openrouter: 'OpenRouter' };
@@ -219,6 +221,7 @@ function renderProvidersStatus() {
     pill.textContent = has ? 'متصل' : 'بدون کلید';
   }
   renderRestoreProvidersBar();
+  try { syncCustomProviderSelects(); } catch {}
 }
 
 function hasAnyConfiguredKey() {
@@ -318,6 +321,10 @@ function switchTab(name) {
     if (tabs[k]) tabs[k].tabIndex = on ? 0 : -1;
     if (panels[k]) panels[k].hidden = !on;
   }
+  if (target === 'pipeline') {
+    try { syncCustomProviderSelects(); } catch {}
+    try { onPipelineOpen(); } catch {}
+  }
   if (target === 'wave') {
     waveEnsure();
     wavePrevStart();
@@ -406,6 +413,8 @@ export function mountSettingsModal(deps) {
   mainWaveSync = deps.mainWaveSync || mainWaveSync;
   isWaveMicActive = deps.isWaveMicActive || isWaveMicActive;
   onSettingsSync = deps.onSettingsSync || onSettingsSync;
+  onPipelineOpen = deps.onPipelineOpen || onPipelineOpen;
+  syncCustomProviderSelects = deps.syncCustomProviderSelects || syncCustomProviderSelects;
 
   if (els.keyGroq) els.keyGroq.addEventListener('input', validate);
   if (els.keyGemini) els.keyGemini.addEventListener('input', validate);

@@ -15,7 +15,7 @@ import {
   mountChains, getSttChain, setSttChain, getPolishChain, setPolishChain,
   renderAllChains, renderFlowListSoon, renderCustomProviders, flowInit, persistChains,
   providerIdOf, entryIdOf, sanitizeMsg, hasKeyFor,
-  chainPanelEls, chainPanelOpen, setChainPanel,
+  chainPanelEls, chainPanelOpen, setChainPanel, ensureLiveCatalog, syncCustomProviderSelects,
 } from './modules/chains.js';
 import { $ } from './modules/dom.js';
 import { fa } from './modules/format.js';
@@ -23,7 +23,7 @@ import { worstOf } from './modules/quota-badge.js';
 import { VoiceQueue } from './modules/voiceQueue.js';
 
 const els = {
-  btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnSettings: $('btn-settings'),
+  btnMic: $('btn-mic'), btnCopy: $('btn-copy'), btnClear: $('btn-clear'), btnPause: $('btn-pause'), btnSettings: $('btn-settings'),
   output: $('output'), statusText: $('status-text'), statusDot: $('status-dot'),
   modal: $('settings-modal'), keyGroq: $('key-groq'), keyGemini: $('key-gemini'), keyOpenrouter: $('key-openrouter'),
   groqBaseUrl: $('groq-base-url'), openrouterBaseUrl: $('openrouter-base-url'),
@@ -55,6 +55,14 @@ const els = {
   pendingVoices: $('pending-voices'), pvList: $('pv-list'), pvHeading: $('pv-heading'),
   pvNetDot: $('pv-net-dot'), pvNetNote: $('pv-net-note'), btnRetryAllVoices: $('btn-retry-all-voices'),
 };
+
+const IC_SEARCH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+const IC_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+const IC_RETRY = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 21v-5h5"/></svg>';
+const IC_PLAY = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="7 5 19 12 7 19 7 5"/></svg>';
+const IC_STOP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+const IC_DL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 18v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>';
+const IC_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/></svg>';
 // hoisted above loadSettings(): updateBadge→updateStageScope→stageScope reads these during initial load
 let selStart=0, selEnd=0;
 // stagebar seam lives in js/modules/stagebar.js — set once by mountStagebar() at file end
@@ -132,7 +140,7 @@ function buildFilterUI() {
   const closeBtn = document.createElement('button');
   closeBtn.type = 'button';
   closeBtn.id = 'log-search-close';
-  closeBtn.textContent = '✕';
+  closeBtn.innerHTML = IC_CLOSE;
   closeBtn.setAttribute('aria-label', 'بستن جستجو');
   closeBtn.addEventListener('click', () => collapseSearch(true));
   searchWrap.append(search, closeBtn);
@@ -144,7 +152,7 @@ function buildFilterUI() {
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.id = 'log-search-toggle';
-  toggle.textContent = '🔍';
+  toggle.innerHTML = IC_SEARCH;
   toggle.setAttribute('aria-label', 'جستجو در لاگ');
   toggle.title = 'جستجو در لاگ';
   toggle.setAttribute('aria-expanded', 'false');
@@ -263,6 +271,8 @@ const Settings = mountSettingsModal({
   chainPanelOpen, setChainPanel, chainPanelEls, STT_DEFAULTS, POLISH_DEFAULTS,
   waveEnsure, wavePrevStart, wavePrevStop, waveStarterPause, waveFollowStop, waveMicStop, waveSync, mainWaveSync,
   isWaveMicActive,
+  onPipelineOpen: () => ensureLiveCatalog(),
+  syncCustomProviderSelects,
   onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); },
 });
 const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey } = Settings;
@@ -304,9 +314,7 @@ function applyLogCollapsed(collapsed){
   els.logPanel.classList.toggle('collapsed', collapsed);
   const label = collapsed ? 'نمایش' : 'بستن';
   const tx = els.btnToggleLog.querySelector('.log-tx');
-  const ic = els.btnToggleLog.querySelector('.log-ic');
   if (tx) tx.textContent = label; else els.btnToggleLog.textContent = label;
-  if (ic) ic.textContent = collapsed ? '▴' : '▾';
   const full = collapsed ? 'نمایش لاگ' : 'بستن لاگ';
   els.btnToggleLog.title = full;
   els.btnToggleLog.setAttribute('aria-label', full);
@@ -335,8 +343,6 @@ function setInspectorOpen(open){
   els.inspectorToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
   els.btnInspector?.setAttribute('aria-expanded', open ? 'true' : 'false');
   els.btnInspector?.classList.toggle('active', open);
-  const chev = $('inspector-chev');
-  if (chev) chev.textContent = open ? '▴' : '▾';
 }
 els.inspectorToggle?.addEventListener('click', () => setInspectorOpen(!isInspectorOpen()));
 els.btnInspector?.addEventListener('click', () => setInspectorOpen(!isInspectorOpen()));
@@ -344,11 +350,10 @@ els.inspectorClose?.addEventListener('click', () => setInspectorOpen(false));
 
 // quota strip: collapsed slim head (today numbers + worst-provider dot); details toggle reveals grid/report
 function setQuotaExpanded(v){
-  const detail = $('quota-detail'), toggle = $('quota-toggle'), chev = $('quota-chev');
+  const detail = $('quota-detail'), toggle = $('quota-toggle');
   if(!detail || !toggle) return;
   detail.hidden = !v;
   toggle.setAttribute('aria-expanded', String(v));
-  if(chev) chev.textContent = v ? '▴' : '▾';
 }
 $('quota-toggle')?.addEventListener('click', ()=> setQuotaExpanded(!!$('quota-detail')?.hidden));
 function refreshQuotaStrip(){
@@ -553,24 +558,55 @@ function mainWaveInit(){
     mainWave = createWaveRenderer(els.wave);
     mainWave.setConfig(Storage.getWave());
     mainWave.setFakeEnabled(false); // main strip only: never dance without real voice
+    mainWave.setState('idle');
     if (!isWaveHidden()) mainWave.start(); // draws static line synchronously, zero idle rAF
   }catch{ mainWave = null; }
 }
-function mainWaveLive(){ try{ mainWave?.setAnalyser(Audio.getAnalyser() || null); if (!isWaveHidden()) mainWave?.start(); }catch{} syncRecStrip(); }
-function mainWaveIdle(){ try{ mainWave?.setAnalyser(null); mainWave?.stop(); }catch{} syncRecStrip(); } // detach → static line, zero rAF
+function mainWaveLive(){
+  try{
+    mainWave?.setAnalyser(Audio.getAnalyser() || null);
+    mainWave?.setState(isPaused ? 'paused' : 'recording');
+    if (!isWaveHidden()) mainWave?.start();
+  }catch{}
+  syncRecStrip();
+}
+function mainWaveTranscribing(){
+  try{
+    mainWave?.setAnalyser(null);
+    mainWave?.setState('transcribing');
+    if (!isWaveHidden()) mainWave?.start();
+  }catch{}
+  syncRecStrip();
+}
+function mainWaveIdle(){
+  try{
+    mainWave?.setAnalyser(null);
+    mainWave?.setState('idle');
+    mainWave?.stop();
+  }catch{}
+  syncRecStrip();
+} // detach → static line, zero rAF
 function mainWaveSync(){ try{ mainWave?.setConfig(Storage.getWave()); }catch{} }
 function syncRecStrip(){
   const strip = $('rec-strip');
   if(!strip) return;
-  strip.classList.toggle('recording', isRecording);
+  strip.classList.toggle('recording', isRecording && !isPaused);
+  strip.classList.toggle('paused', isRecording && isPaused);
   strip.classList.toggle('transcribing', isTranscribing && !isRecording);
+  if (mainWave) {
+    if (isRecording && isPaused) mainWave.setState('paused');
+    else if (isRecording) mainWave.setState('recording');
+    else if (isTranscribing) mainWave.setState('transcribing');
+    else mainWave.setState('idle');
+  }
 }
 
 let rtVersion = 0;
 let rtSnap = null;
+let rtPaused = false;
 
 function makeOnInterim(snap){
-  let lastPreview = snap.committed + snap.pending;
+  let lastPreview = (snap.archived || '') + snap.committed + snap.pending;
   return (preview, fin)=>{
     const finCum = fin || '';
     const interChunk = preview.slice(finCum.length);
@@ -580,8 +616,9 @@ function makeOnInterim(snap){
       if(newChunk.trim()) Logger.log('debug','realtime committed', newChunk.trim());
     }
     snap.pending = interChunk;
-    const fullPreview = snap.committed + snap.pending;
-    if(els.liveFinal) els.liveFinal.textContent = snap.committed;
+    const fullCommitted = (snap.archived || '') + snap.committed;
+    const fullPreview = fullCommitted + snap.pending;
+    if(els.liveFinal) els.liveFinal.textContent = fullCommitted;
     if(els.liveInterim) els.liveInterim.textContent = snap.pending;
     const expected = snap.before + lastPreview + snap.after;
     if(els.output.value !== expected){
@@ -598,7 +635,7 @@ function makeOnInterim(snap){
   };
 }
 
-let isRecording=false, vadTimer=null;
+let isRecording=false, isPaused=false, vadTimer=null;
 let recordingStarting=false;
 // ticket/106 — realtime failure surfaces (additive; engine untouched).
 // Every realtime failure lands here: unsupported browser, start()==false,
@@ -655,7 +692,7 @@ function handleRealtimeError(code, snap){
   Logger.toast(realtimeHint(c));
 }
 function handleRealtimeEnd(snap, onInterim){
-  if (!isRecording || !snap || rtSnap?.id !== snap.id || rtFatal) return;
+  if (!isRecording || isPaused || rtPaused || !snap || rtSnap?.id !== snap.id || rtFatal) return;
   if (rtRestarts >= RT_MAX_RESTARTS) {
     Logger.setStatus('⚠️ حالت آنی قطع شد — ضبط بدون متن زنده ادامه دارد', 'warn');
     Logger.toast('حالت آنی قطع شد — ضبط ادامه دارد');
@@ -668,48 +705,96 @@ function handleRealtimeEnd(snap, onInterim){
   rtClearRestart();
   rtRestartTimer = setTimeout(() => {
     rtRestartTimer = 0;
-    if (!isRecording || rtSnap?.id !== snap.id || rtFatal) return;
-    rtStartOrSurface(snap, onInterim);
+    if (!isRecording || isPaused || rtPaused || !snap || rtSnap?.id !== snap.id || rtFatal) return;
+    if (snap.committed) {
+      snap.archived = (snap.archived || '') + snap.committed;
+      snap.committed = '';
+      snap.pending = '';
+    }
+    rtStartOrSurface(snap, makeOnInterim(snap));
   }, RT_RESTART_BASE_MS * rtRestarts);
 }
 let isTranscribing=false;
 let transcribingAbort=null;
 let discardRecording=false; // cancel during rec: drop the blob instead of transcribing
-// ticket 15 — actionbar variant A: hero morph + cancel visible during rec AND transcribing + BIG timer chip
-let recStartMs=0, recTimerId=null;
+// ticket 15 — actionbar variant A: hero morph + pause/resume + cancel visible during rec AND transcribing + BIG timer chip
+let recStartMs=0, recTimerId=null, accumulatedRecMs=0, recSegmentStartMs=0;
+function getRecElapsedMs(){
+  if (!recSegmentStartMs) return accumulatedRecMs;
+  if (isPaused || !isRecording) return accumulatedRecMs;
+  return accumulatedRecMs + Math.max(0, performance.now() - recSegmentStartMs);
+}
 function recTimerPaint(){
   const el=document.getElementById('mic-timer');
   if(!el || el.hidden) return;
-  const s=Math.max(0, Math.floor((performance.now()-recStartMs)/1000));
+  const s=Math.max(0, Math.floor(getRecElapsedMs()/1000));
   el.textContent=`${fa(String(Math.floor(s/60)).padStart(2,'0'))}:${fa(String(s%60).padStart(2,'0'))}`;
 }
 function recTimerStart(){
   recStartMs=performance.now();
+  recSegmentStartMs=recStartMs;
+  accumulatedRecMs=0;
   const el=document.getElementById('mic-timer');
-  if(el){ el.hidden=false; el.classList.add('live'); }
+  if(el){ el.hidden=false; el.classList.add('live'); el.classList.remove('paused'); }
+  recTimerPaint();
+  if(recTimerId) clearInterval(recTimerId);
+  recTimerId=setInterval(recTimerPaint, 250);
+}
+function recTimerPause(){
+  if (recSegmentStartMs) {
+    accumulatedRecMs += Math.max(0, performance.now() - recSegmentStartMs);
+    recSegmentStartMs = 0;
+  }
+  if(recTimerId){ clearInterval(recTimerId); recTimerId=null; }
+  const el=document.getElementById('mic-timer');
+  if(el){ el.classList.remove('live'); el.classList.add('paused'); }
+  recTimerPaint();
+}
+function recTimerResume(){
+  recSegmentStartMs=performance.now();
+  const el=document.getElementById('mic-timer');
+  if(el){ el.classList.remove('paused'); el.classList.add('live'); }
   recTimerPaint();
   if(recTimerId) clearInterval(recTimerId);
   recTimerId=setInterval(recTimerPaint, 250);
 }
 function recTimerStop(){
+  if (recSegmentStartMs) {
+    accumulatedRecMs += Math.max(0, performance.now() - recSegmentStartMs);
+    recSegmentStartMs = 0;
+  }
   if(recTimerId){ clearInterval(recTimerId); recTimerId=null; }
-  document.getElementById('mic-timer')?.classList.remove('live');
+  const el=document.getElementById('mic-timer');
+  el?.classList.remove('live', 'paused');
 }
 function recTimerReset(){
   recTimerStop();
+  accumulatedRecMs=0;
+  recStartMs=0;
   const el=document.getElementById('mic-timer');
   if(el){ el.textContent='۰۰:۰۰'; el.hidden=true; }
 }
 function syncActionbar(){
-  const mic=els.btnMic, cb=els.btnCancel, tm=document.getElementById('mic-timer');
+  const mic=els.btnMic, cb=els.btnCancel, pb=els.btnPause, tm=document.getElementById('mic-timer');
   if(!mic) return;
   const active = isRecording || isTranscribing;
   els.actionbar?.classList.toggle('is-active', active);
   if (els.btnUploadAudio) els.btnUploadAudio.disabled = active;
+  if ($('tools-toggle')) $('tools-toggle').disabled = active;
   mic.classList.toggle('recording', isRecording);
+  mic.classList.toggle('paused', isRecording && isPaused);
   mic.classList.toggle('transcribing', isTranscribing);
   mic.setAttribute('aria-busy', active ? 'true' : 'false');
-  mic.setAttribute('aria-label', isRecording ? 'توقف و تبدیل' : isTranscribing ? 'در حال تبدیل' : 'شروع ضبط');
+  mic.setAttribute('aria-label', isRecording ? (isPaused ? 'پایان ضبط و تبدیل' : 'توقف و تبدیل') : isTranscribing ? 'در حال تبدیل' : 'شروع ضبط');
+  if(pb){
+    const showPause = isRecording && Audio.canPause();
+    pb.hidden = !showPause;
+    pb.classList.toggle('is-paused', isPaused);
+    pb.setAttribute('aria-pressed', isPaused ? 'true' : 'false');
+    pb.setAttribute('aria-label', isPaused ? 'ادامه ضبط' : 'مکث ضبط');
+    const lbl = $('pause-lbl');
+    if (lbl) lbl.textContent = isPaused ? 'ادامه' : 'مکث';
+  }
   if(cb){
     if(cb.hasAttribute('hidden')!==!active) cb.hidden=!active;
     cb.classList.remove('cancel-appear');
@@ -738,6 +823,8 @@ function shakeMic(){
 async function startRecording(){
   // T1 double-start guard: block re-entry while starting or already recording
   if (isRecording || recordingStarting || Audio.isRecording()) { Logger.toast('⏳ در حال شروع ضبط…', 1200); return; }
+  setToolsOpen(false);
+  setBehaviorOpen(false);
   discardRecording = false; // defensive: a missed onStop must never discard a later recording
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
@@ -751,12 +838,14 @@ async function startRecording(){
   let snap=null;
   recordingStarting = true;
   try{
-    snap = { id: ++rtVersion, startMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), committed:'', pending:'', keyless: keylessPreview };
+    snap = { id: ++rtVersion, startMs: 0, durationMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), archived:'', committed:'', pending:'', keyless: keylessPreview };
     rtSnap = snap;
     const vadMs = s.vad ? 250 : undefined;
     await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
     snap.startMs = performance.now();
     isRecording=true;
+    isPaused=false;
+    rtPaused=false;
     rtRestarts = 0; rtFatal = false; rtClearRestart(); // ticket/106: fresh restart budget per recording
     recTimerStart();
     if(s.realtime) els.btnMic.classList.add('realtime-active');
@@ -785,6 +874,7 @@ async function startRecording(){
   }catch(e){
     try { await Audio.stop(); } catch {}
     if(snap && rtSnap?.id===snap.id) rtSnap=null;
+    isPaused=false; rtPaused=false;
     const hint = micErrorHint(e);
     Logger.setStatus(hint,'error');
     Logger.log('error','getUserMedia',{ name: e?.name, msg: e?.message });
@@ -792,20 +882,66 @@ async function startRecording(){
   }
   finally { recordingStarting = false; }
 }
+function pauseRecording(){
+  if (!isRecording || isPaused) return;
+  if (!Audio.pause()) { Logger.toast('این مرورگر مکث وسط ضبط را پشتیبانی نمی‌کند'); return; }
+  isPaused = true;
+  rtPaused = true;
+  recTimerPause();
+  stopVAD();
+  rtClearRestart();
+  const snap = rtSnap;
+  if (snap && snap.committed) {
+    snap.archived = (snap.archived || '') + snap.committed;
+    snap.committed = '';
+    snap.pending = '';
+  }
+  Realtime.stop();
+  syncActionbar();
+  syncRecStrip();
+  Logger.setStatus('⏸ ضبط متوقف شد — برای ادامه دکمه «ادامه» را بزن', 'warn');
+  Logger.log('info', 'ضبط متوقف موقت شد', { elapsedMs: Math.round(getRecElapsedMs()) });
+}
+function resumeRecording(){
+  if (!isRecording || !isPaused) return;
+  if (!Audio.resume()) { Logger.toast('ادامه ضبط ممکن نشد'); return; }
+  isPaused = false;
+  rtPaused = false;
+  recTimerResume();
+  syncActionbar();
+  mainWaveLive();
+  const s = Storage.getSettings();
+  if (s.realtime && Realtime.isSupported() && rtSnap) {
+    rtStartOrSurface(rtSnap, makeOnInterim(rtSnap));
+  }
+  if (s.vad) startVAD();
+  Logger.setStatus('🔴 ادامه ضبط...' + (s.realtime ? ' (زنده)' : ''), 'rec');
+  Logger.log('info', 'ضبط از سر گرفته شد');
+}
+function togglePauseRecording(){
+  if (!isRecording) return;
+  if (isPaused) resumeRecording();
+  else pauseRecording();
+}
+els.btnPause?.addEventListener('click', togglePauseRecording);
 function stopRecording(){
   if(!isRecording) return;
   const snap = rtSnap;
-  Audio.stop(); isRecording=false;
-  recTimerStop(); // frozen chip stays visible through transcribing (variant A)
+  recTimerStop(); // capture exact active elapsedMs excluding pause
+  if (snap) snap.durationMs = Math.round(accumulatedRecMs);
+  Audio.stop(); isRecording=false; isPaused=false; rtPaused=false;
   setMicBusy(true);
   transcribingAbort = new AbortController();
   els.btnMic.classList.remove('realtime-active');
   syncActionbar();
-  stopVAD(); mainWaveIdle(); Realtime.stop();
+  stopVAD();
+  if (discardRecording) mainWaveIdle();
+  else mainWaveTranscribing();
+  Realtime.stop();
   rtClearRestart(); rtRestarts = 0; rtFatal = false; // ticket/106: user stopped — no restart after onend
   setTimeout(()=>{ if(els.livePreview) els.livePreview.classList.remove('on'); if(els.liveBadge) els.liveBadge.classList.remove('on'); },900);
-  if(snap && (snap.committed+snap.pending)){
-    const cursor = snap.basePos + (snap.committed+snap.pending).length;
+  if(snap && (snap.archived || snap.committed || snap.pending)){
+    const cursor = snap.basePos + ((snap.archived||'') + snap.committed + snap.pending).length;
     selStart=selEnd=cursor;
   }
   Logger.setStatus('⏳ در حال تبدیل...','warn');
@@ -820,24 +956,22 @@ function cancelTranscription(){
   // UI handled in handleTranscription catch — keep abort signal until finally
 }
 els.btnCancel?.addEventListener('click', cancelTranscription);
-// Recording-cancel is the LAST Esc resort (ticket/2x layering: tr-panel → diff
-// sheet (#83) → settings modal → cancel). Element-level layers consume via
-// stopPropagation; same-node document listeners cannot be stopped that way, so
-// this handler yields explicitly: it respects e.defaultPrevented AND skips while
-// the diff sheet / modal / tr-panel own Esc.
+// Recording-cancel is the LAST Esc resort (ticket/2x layering: tr-panel → tools-pop / behavior-pop → diff sheet → modal → cancel).
 document.addEventListener('keydown', (e)=>{
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   if (shortcutsOpen()) return; // guide owns Esc while open
   if (diffPending && diffEls().back && !diffEls().back.hidden) return; // diff owns Esc
   const trp = $('tr-panel');
   if (trp && !trp.hidden){ e.preventDefault(); trp.hidden = true; $('stage-tr-panel')?.setAttribute('aria-pressed', 'false'); return; }
+  const tpop = $('tools-pop');
+  if (tpop && !tpop.hidden){ e.preventDefault(); setToolsOpen(false); $('tools-toggle')?.focus?.(); return; }
   const bpop = $('behavior-pop');
   if (bpop && !bpop.hidden){ e.preventDefault(); setBehaviorOpen(false); $('behavior-toggle')?.focus?.(); return; }
   if (els.modal && els.modal.style.display === 'flex') return; // modal owns Esc
   if (isInspectorOpen() && window.innerWidth < 1080){ e.preventDefault(); setInspectorOpen(false); return; }
   if (isRecording || (isTranscribing && transcribingAbort)){ e.preventDefault(); e.stopPropagation(); cancelTranscription(); }
 });
-function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
+function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||isPaused||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
 async function handleTranscription(blob, snap){
@@ -855,22 +989,22 @@ async function handleTranscription(blob, snap){
     return;
   }
   // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
-  if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); }
-  Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? (snap.committed+snap.pending).length : 0});
+  if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); mainWaveTranscribing(); }
+  Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? ((snap.archived||'')+snap.committed+snap.pending).length : 0});
   if(blob.size<800){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
-    recTimerReset(); syncActionbar();
+    recTimerReset(); syncActionbar(); mainWaveIdle();
     if(!snap || snapId===rtVersion){ rtSnap=null; }
     if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent=''; if(els.livePreview) els.livePreview.classList.remove('on');
     return;
   }
+  const durationMs = snap?.durationMs || (snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0);
   // keyless preview session — preserve the recorded blob too so entering a key
   // lets the user convert what they just said without re-recording.
   {
     if(snap?.keyless && !hasAnyConfiguredKey()){
-      const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
       await preservePendingVoice({
         blob,
         durationMs,
@@ -889,7 +1023,6 @@ async function handleTranscription(blob, snap){
       return;
     }
   }
-  const durationMs = snap?.startMs ? Math.round(performance.now() - snap.startMs) : 0;
   // Fast offline guard: preserve audio immediately without waiting for fetch timeout
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     await preservePendingVoice({
@@ -918,7 +1051,7 @@ async function handleTranscription(blob, snap){
     const s=Storage.getSettings();
     if(s.realtime && snap){
       const finalText = text.trim();
-      const expected = snap.before + snap.committed + snap.pending + snap.after;
+      const expected = snap.before + (snap.archived || '') + snap.committed + snap.pending + snap.after;
       if(els.output.value !== expected){
         Logger.log('warn','realtime manual edit before final — fallback to cursor insert',{ snapId });
         const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length);
@@ -929,7 +1062,7 @@ async function handleTranscription(blob, snap){
         const cursor = snap.basePos + finalText.length;
         els.output.setSelectionRange(cursor, cursor);
       }
-      Logger.log('info','realtime polished',{snapId, preview:(snap.committed+snap.pending).slice(0,80), final: finalText.slice(0,80)});
+      Logger.log('info','realtime polished',{snapId, preview:((snap.archived||'')+snap.committed+snap.pending).slice(0,80), final: finalText.slice(0,80)});
     } else {
       const o=els.output.value, ps=Math.min(selStart,o.length), pe=Math.min(selEnd,o.length); els.output.value=o.substring(0,ps)+text+o.substring(pe); els.output.setSelectionRange(ps+text.length,ps+text.length);
     }
@@ -1057,6 +1190,7 @@ async function transcribeAudioFile(file) {
   }
   saveCursor();
   setMicBusy(true);
+  mainWaveTranscribing();
   transcribingAbort = new AbortController();
   Logger.setStatus(`در حال تبدیل فایل «${file.name.slice(0, 28)}»…`, 'warn');
   try {
@@ -1135,6 +1269,7 @@ async function transcribeAudioFile(file) {
   }
 }
 els.btnUploadAudio?.addEventListener('click', () => {
+  setToolsOpen(false);
   if (isRecording || isTranscribing) { Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 1800); return; }
   if (!hasAnyConfiguredKey()) { Logger.toast('برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200); openModal('keys'); return; }
   els.audioFileInput?.click();
@@ -1296,6 +1431,7 @@ async function retryPendingVoice(id) {
   saveCursor();
   retryingVoiceId = id;
   setMicBusy(true);
+  mainWaveTranscribing();
   transcribingAbort = new AbortController();
   renderPendingVoices();
   Logger.setStatus('در حال تلاش مجدد برای تبدیل صدای ذخیره‌شده…', 'warn');
@@ -1432,10 +1568,17 @@ function renderPendingVoices() {
     const actions = document.createElement('div');
     actions.className = 'voice-card__actions';
 
+    const setBtnLabel = (btn, iconHtml, txt) => {
+      btn.innerHTML = iconHtml;
+      const s = document.createElement('span');
+      s.textContent = txt;
+      btn.appendChild(s);
+    };
+
     const retryBtn = document.createElement('button');
     retryBtn.type = 'button';
     retryBtn.className = (isThisRetrying ? 'btn-ghost' : 'btn-primary') + ' btn-xs vc-retry';
-    retryBtn.textContent = isThisRetrying ? 'توقف تلاش' : 'تلاش مجدد';
+    setBtnLabel(retryBtn, isThisRetrying ? IC_STOP : IC_RETRY, isThisRetrying ? 'توقف تلاش' : 'تلاش مجدد');
     retryBtn.disabled = !isThisRetrying && (isRecording || isTranscribing);
     retryBtn.addEventListener('click', () => {
       if (isThisRetrying) cancelTranscription();
@@ -1445,20 +1588,20 @@ function renderPendingVoices() {
     const playBtn = document.createElement('button');
     playBtn.type = 'button';
     playBtn.className = 'btn-ghost btn-xs vc-btn';
-    playBtn.textContent = isPlaying ? 'توقف پخش' : 'پخش';
+    setBtnLabel(playBtn, isPlaying ? IC_STOP : IC_PLAY, isPlaying ? 'توقف پخش' : 'پخش');
     playBtn.addEventListener('click', () => toggleVoicePlayback(item));
 
     const dlBtn = document.createElement('button');
     dlBtn.type = 'button';
     dlBtn.className = 'btn-ghost btn-xs vc-btn';
-    dlBtn.textContent = 'دانلود';
+    setBtnLabel(dlBtn, IC_DL, 'دانلود');
     dlBtn.title = 'ذخیره فایل صوتی روی دستگاه';
     dlBtn.addEventListener('click', () => downloadPendingVoice(item));
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'btn-ghost btn-xs vc-cancel';
-    cancelBtn.textContent = 'لغو و حذف';
+    setBtnLabel(cancelBtn, IC_TRASH, 'لغو و حذف');
     cancelBtn.addEventListener('click', () => cancelPendingVoice(item));
 
     actions.append(retryBtn, playBtn, dlBtn, cancelBtn);
@@ -1527,6 +1670,7 @@ els.btnClear.onclick = () => {
     return;
   }
   setBehaviorOpen(false);
+  setToolsOpen(false);
   if (isRecording || isTranscribing) {
     rtVersion++;
     cancelTranscription();
@@ -1785,9 +1929,11 @@ const SHORTCUTS = [
 function shortcutById(id){ return SHORTCUTS.find(s => s.id === id); }
 const GUIDE = {
   tools: [
-    { id:'g-mic', title:'ضبط صدا', body:'دکمه میکروفون در مرکز نوار پایین ضبط را شروع و متوقف می‌کند؛ حین ضبط دکمه لغو و تایمر جایگزین دکمه‌های کناری می‌شوند.', ref:'btn-mic' },
+    { id:'g-mic', title:'ضبط، مکث و پایان', body:'دکمه میکروفون در مرکز نوار پایین ضبط را شروع و تمام می‌کند؛ حین ضبط می‌توانی با «مکث/ادامه» ضبط را موقت نگه داری و دوباره ادامه دهی یا با «لغو» آن را کنار بگذاری.', ref:'btn-mic' },
     { id:'g-mode', title:'حالت روزمره و کلاس', body:'در نوار بالا بین «روزمره» (توقف خودکار پس از سکوت) و «کلاس» (ضبط پیوسته برای سخنرانی و درس بدون قطع در مکث استاد) جابه‌جا شو.', ref:'mode-lecture' },
-    { id:'g-upload', title:'تبدیل فایل صوتی', body:'با دکمه «فایل صوتی» می‌توانی فایل ضبط‌شده کلاس یا مصاحبه (mp3، m4a، wav و…) را مستقیم به متن تبدیل کنی.', ref:'btn-upload-audio' },
+    { id:'g-tools', title:'منوی ابزارهای متن و صوت', body:'دکمه «ابزارها» در نوار پایین زیر شست قرار دارد و پالایش ساده/پیشرفته/دستوری، ساختاردهی متن، ترجمه سریع یا چندزبانه، برگشت به خام و تبدیل فایل صوتی را در یک پنجره جمع‌وجور باز می‌کند.', ref:'tools-toggle' },
+    { id:'g-upload', title:'تبدیل فایل صوتی', body:'از داخل منوی «ابزارها» گزینه «تبدیل فایل صوتی» را بزن تا فایل ضبط‌شده کلاس یا مصاحبه (mp3، m4a، wav و…) مستقیم به متن تبدیل شود.', ref:'btn-upload-audio' },
+    { id:'g-clear', title:'پاک کردن بوم با واگرد', body:'دکمه «پاک» در نوار پایین بوم متن را پاک می‌کند و تا چند ثانیه دکمه «واگرد» برای بازگرداندن متن نمایش داده می‌شود.', ref:'btn-clear' },
     { id:'g-vault', title:'نگهداری خودکار صدا در قطعی شبکه', body:'اگر اینترنت قطع شود یا تبدیل خطا بدهد، صدای ضبط‌شده امن در مرورگر می‌ماند و می‌توانی پس از وصل شدن شبکه «تلاش مجدد»، «پخش»، «دانلود» یا «لغو و حذف» بزنی.', ref:'pending-voices' },
     { id:'g-cancel', title:'لغو ضبط', body:'حین ضبط صدا را دور می‌ریزد؛ حین ارسالِ کند، ارسال را متوقف می‌کند و صدا را در صف انتظار نگه می‌دارد تا از بین نرود.', ref:'btn-cancel-stt' },
     { id:'g-undo', title:'واگرد و ازنو', body:'متن را قدم‌به‌قدم برمی‌گرداند؛ با دکمه‌های زیر کادر متن یا Ctrl+Z در حالت فوکوس.', ref:'btn-undo' },
@@ -1795,8 +1941,9 @@ const GUIDE = {
     { id:'g-simple', title:'پالایش ساده', body:'اصلاح املا، نیم‌فاصله و علائم نگارشی روی کل متن یا بخش انتخاب‌شده.', ref:'stage-simple' },
     { id:'g-advanced', title:'پالایش پیشرفته', body:'اصلاح هم‌زمان املا، نگارش و دستور زبان؛ کامل‌ترین ویرایش فارسی.', ref:'stage-advanced' },
     { id:'g-grammar', title:'پالایش دستوری', body:'فقط اصلاح ساختار دستوری بدون تغییر واژه‌ها و سبک.', ref:'stage-grammar' },
+    { id:'g-structure', title:'ساختاردهی متن', body:'گفتار را بر اساس محتوا به پاراگراف‌های منظم و در صورت بیان موارد یا مراحل به لیست نقطه‌ای تمیز تبدیل می‌کند؛ با اولویت هوشمند روی قوی‌ترین مدل متنی فعال زنجیره.', ref:'stage-structure' },
     { id:'g-trquick', title:'ترجمه سریع EN⇄FA', body:'ترجمه فوری فارسی ⇄ انگلیسی بدون نیاز به انتخاب زبان.', ref:'stage-tr-quick' },
-    { id:'g-trpanel', title:'زبان‌ها', body:'پنل جست‌وجوی زبان را باز می‌کند؛ با Enter به زبان انتخاب‌شده ترجمه می‌شود.', ref:'stage-tr-panel' },
+    { id:'g-trpanel', title:'سایر زبان‌ها', body:'پنل جست‌وجوی زبان را باز می‌کند؛ با Enter به زبان انتخاب‌شده ترجمه می‌شود.', ref:'stage-tr-panel' },
     { id:'g-raw', title:'برگشت به خام', body:'متن پیش از آخرین پالایش را برمی‌گرداند.', ref:'stage-raw' },
     { id:'g-diffapply', title:'اعمال نتیجه', body:'نتیجه بازبینی‌شده را روی متن می‌نشاند.', ref:'diff-apply' },
   ],
@@ -1952,15 +2099,51 @@ document.addEventListener('keydown', (e) => {
   openShortcuts();
 });
 applyShortcutHints();
-// Quick behavior popover + outside-click + quick-toggle bidirectional sync
+// Quick tools & behavior popovers (mutually exclusive thumb-zone droplets)
+const toolsToggle = $('tools-toggle'), toolsPop = $('tools-pop'), toolsClose = $('tools-close');
 const behaviorToggle = $('behavior-toggle'), behaviorPop = $('behavior-pop');
+
+function setToolsOpen(open) {
+  if (!toolsToggle || !toolsPop) return;
+  if (open) {
+    setBehaviorOpen(false);
+    try { Stagebar?.updateStageScope?.(); } catch {}
+  } else {
+    const trp = $('tr-panel');
+    if (trp) trp.hidden = true;
+    $('stage-tr-panel')?.setAttribute('aria-pressed', 'false');
+  }
+  toolsPop.hidden = !open;
+  toolsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  toolsToggle.classList.toggle('active', open);
+}
+
 function setBehaviorOpen(open) {
   if (!behaviorToggle || !behaviorPop) return;
+  if (open) setToolsOpen(false);
   behaviorPop.hidden = !open;
   behaviorToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
   behaviorToggle.classList.toggle('active', open);
   if (open) syncQuickToggles();
 }
+
+if (toolsToggle && toolsPop) {
+  toolsToggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setToolsOpen(toolsPop.hidden);
+  });
+  toolsClose?.addEventListener('click', () => {
+    setToolsOpen(false);
+    toolsToggle.focus?.();
+  });
+  document.addEventListener('click', (e) => {
+    if (!toolsPop.hidden && !e.target.closest('#tools-pop') && !e.target.closest('#tools-toggle')) {
+      setToolsOpen(false);
+    }
+  });
+  setToolsOpen(false);
+}
+
 if (behaviorToggle && behaviorPop) {
   behaviorToggle.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1981,6 +2164,10 @@ if (behaviorToggle && behaviorPop) {
       syncQuickToggles();
       syncModeUI();
     });
+  });
+  $('btn-quick-settings')?.addEventListener('click', () => {
+    setBehaviorOpen(false);
+    openModal();
   });
   document.addEventListener('click', (e) => {
     if (!behaviorPop.hidden && !e.target.closest('#behavior-pop') && !e.target.closest('#behavior-toggle')) {
@@ -2023,6 +2210,7 @@ Stagebar = mountStagebar({
   getDiffPending: () => diffPending,
   saveCursor, updateCounts, editorHistory, syncActionbar, engineInfo,
   entryIdOf, providerIdOf, sanitizeMsg, diffEls, openDiffRunning, fillDiffSheet, closeDiffSheet,
+  onActionTriggered: () => setToolsOpen(false),
 });
 mainWaveInit();
 waveKillApply();
@@ -2051,6 +2239,7 @@ async function initServerGeminiStatus() {
   Storage.setServerGeminiAvailable(available);
   Settings.validate();
   updateBadge();
+  try { Stagebar?.renderStageModelOptions?.(); } catch {}
   syncOnboarding();
   Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
   Dashboard.renderOverall();

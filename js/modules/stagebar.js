@@ -5,7 +5,7 @@
 import { Storage } from './storage.js';
 import { hasKeyById } from './provider.js';
 import { Logger } from './logger.js';
-import { Transcription } from './transcription.js';
+import { Transcription, smartModelScore } from './transcription.js';
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
 import { $ } from './dom.js';
@@ -28,6 +28,7 @@ let diffEls = () => ({});
 let openDiffRunning = () => {};
 let fillDiffSheet = () => {};
 let closeDiffSheet = () => {};
+let onActionTriggered = () => {};
 
 // --- stagebar (ticket/16): manual polish/translate stages on current text + per-run log groups ---
 // Behavior adapted from temp/hamnegar-demo runStage/runTranslate (same owner labels, scope,
@@ -40,6 +41,7 @@ const STAGE_LANGS = [
 const SYS_SIMPLE = 'You are a proofreader. Fix only spelling, orthography and punctuation in the SAME language as the input text; never change the language, meaning or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
 const SYS_ADV = 'You are a proofreader. Fix spelling, punctuation and grammar together in the SAME language as the input text; preserve meaning, numbers and names, never change the language or tone. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
 const SYS_GRAMMAR = 'Fix only grammar and word inflection in the SAME language as the input text. Do not change spelling, style or punctuation, do not rewrite, never change the language. Never emit timestamps, timecodes or duration markers (e.g. ۰:۲۴, 12:34). If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology.';
+const SYS_STRUCTURE = 'You are an expert editor and information architect. Organize and structure the spoken/dictated text according to what was said, in the SAME language as the input text (preserve Persian, English, or mixed technical terms accurately). Divide long continuous speech into clear logical paragraphs separated by a blank line. ONLY when the speaker enumerates items, steps, tasks, reasons, options, or distinct points, convert them into a clean bulleted list using "• " (or simple numbered lines when order clearly matters); do not force bullet lists on ordinary narrative prose. Fix minor spoken stutters, missing punctuation, and Persian orthography/ZWNJ (e.g. «رابطه کاربری» -> «رابط کاربری») while preserving ALL facts, numbers, names, and intended meaning verbatim. Do not invent new facts, headings that contradict the speech, or noisy Markdown (#, **, code fences). Never emit timestamps, timecodes, or commentary. Return ONLY the structured text.';
 // --- phantom-timestamp guard (#144, app-side column): STT rarely leaks lone
 // timecodes (۰:۲۴، 12:34، ۰۱:۱۵) that polish would otherwise pass through to
 // display/apply. Strip standalone mm:ss tokens; colon-less numbers (ورژن ۱۳،
@@ -87,18 +89,23 @@ function stageScope(){
   return { text: v, start: 0, end: v.length, kind: 'full' };
 }
 function updateStageScope(){
-  const badge = $('stage-scope');
-  if (!badge) return;
   const g = stageScope();
   const base = g.kind === 'selection'
     ? 'انتخاب («' + g.sel.slice(0, 22) + (g.sel.length > 22 ? '…' : '') + '»)'
     : 'کل متن';
   const eng = engineInfo();
-  badge.textContent = `${base} · ${eng.text}`;
-  badge.style.opacity = eng.hasKey ? '1' : '0.68';
+  const badge = $('stage-scope');
+  if (badge) {
+    badge.textContent = `${base} · ${eng.text}`;
+    badge.style.opacity = eng.hasKey ? '1' : '0.68';
+  }
+  const toolsScope = $('tools-scope-info');
+  if (toolsScope) {
+    toolsScope.textContent = `اعمال روی: ${base} · ${eng.text}`;
+  }
 }
 // stagebar button visibility (session-only: storage seam is locked, so no persistence here)
-const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…']];
+const STAGE_BTNS = [['stage-simple', 'پالایش ساده'], ['stage-advanced', 'پالایش پیشرفته'], ['stage-grammar', 'پالایش دستوری'], ['stage-structure', 'ساختاردهی متن'], ['stage-tr-quick', 'EN⇄FA'], ['stage-tr-panel', 'ترجمه…']];
 function stageBarApplyVisibility(){
   const menu = $('stage-edit-menu');
   if (menu && !menu.dataset.built) {
@@ -133,10 +140,12 @@ function renderStageModelOptions(){
   sel.innerHTML = '';
   const head = document.createElement('option');
   head.value = '';
-  head.textContent = 'خودکار: زنجیرهٔ پالایش به‌ترتیب';
-  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه زنجیرهٔ پالایش به‌ترتیب جلو می‌رود. مدل انتخابیِ بی‌کلید بی‌صدا نادیده گرفته می‌شود و زنجیره ادامه می‌دهد.';
+  head.textContent = 'خودکار: زنجیره پالایش (مدل هوشمند برای ساختاردهی)';
+  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه در پالایش زنجیره به‌ترتیب و در ساختاردهی متن قوی‌ترین مدل فعال زنجیره اجرا می‌شود.';
   sel.appendChild(head);
   const seen = new Set();
+  const chainGroup = document.createElement('optgroup');
+  chainGroup.label = 'زنجیره فعال پالایش';
   for (const e of polishChainState) {
     const id = entryIdOf(e), pid = providerIdOf(e, 'groq');
     const key = `${pid}:${id}`;
@@ -145,8 +154,38 @@ function renderStageModelOptions(){
     const o = document.createElement('option');
     o.value = JSON.stringify({ id, providerId: pid });
     o.textContent = `${id} (${pid})${e.enabled === false ? ' — خاموش' : ''}`;
-    sel.appendChild(o);
+    chainGroup.appendChild(o);
   }
+  if (chainGroup.children.length) sel.appendChild(chainGroup);
+
+  try {
+    const catalog = Storage.getModelCatalog?.() || {};
+    const providers = Storage.getProviders?.() || [];
+    const activeSet = new Set(providers.filter(p => !p.disabled && p.hasKey).map(p => p.id));
+    const liveExtras = [];
+    for (const [pid, info] of Object.entries(catalog)) {
+      if (!activeSet.has(pid)) continue;
+      for (const id of (info?.models || [])) {
+        if (/whisper|transcrib|\bstt\b|embedding|tts|guard/i.test(id)) continue;
+        const key = `${pid}:${id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        liveExtras.push({ id, pid, score: smartModelScore(id) });
+      }
+    }
+    if (liveExtras.length) {
+      liveExtras.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+      const catGroup = document.createElement('optgroup');
+      catGroup.label = 'سایر مدل‌های زنده کاتالوگ (دارای کلید)';
+      for (const item of liveExtras.slice(0, 80)) {
+        const o = document.createElement('option');
+        o.value = JSON.stringify({ id: item.id, providerId: item.pid });
+        o.textContent = `${item.id} (${item.pid})`;
+        catGroup.appendChild(o);
+      }
+      sel.appendChild(catGroup);
+    }
+  } catch {}
   if (prev) sel.value = prev;
 }
 function stageApply(scope, next){
@@ -165,10 +204,11 @@ function stageQuotaSplit(model, words, chars){
     Dashboard.renderOverall();
   } catch {}
 }
-function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } if(!b){ const raw = $('stage-raw'); if(raw) raw.disabled = !stageRawStack.length; } }
-async function runStage(kind, faLabel, sysPrompt, logTitle){
+function setStageBusy(b){ for(const id of ['stage-simple','stage-advanced','stage-grammar','stage-structure','stage-tr-quick','stage-tr-panel','stage-raw']){ const el = $(id); if(el) el.disabled = b; } if(!b){ const raw = $('stage-raw'); if(raw) raw.disabled = !stageRawStack.length; } }
+async function runStage(kind, faLabel, sysPrompt, logTitle, opts = {}){
   const scope = stageScope();
-  if (!scope.text.trim()) { Logger.toast('متنی برای پالایش نیست'); return; }
+  if (!scope.text.trim()) { Logger.toast('متنی برای پردازش نیست'); return; }
+  onActionTriggered();
   const invoker = document.activeElement;
   const _dpGuard = _getDiffPending(); // injected: live-read app.js-owned diff gate
   if (_dpGuard && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
@@ -181,15 +221,14 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
   const mySeq = _dpSeq ? _dpSeq.seq : -1;
   try {
     // Explicit stage-model choice (dropdown) goes first, rest of the enabled chain
-    // stays as fallback; default (head option) follows chain order. Layer 'polish'
-    // keeps the polish guards in validatePolishOutput.
+    // stays as fallback; default (head option) follows chain order (or smart order when opts.smart).
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
     const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
-    const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: 'polish', ...(explicit ? { prefer: explicit } : {}) });
+    const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: opts.layer || 'polish', smart: !!opts.smart, ...(explicit ? { prefer: explicit } : {}) });
     // phantom-timestamp guard (#144, app-side column): strip lone STT timecodes
-    // from the polish output before display/apply (sibling column owns the STT half).
+    // from the output before display/apply (sibling column owns the STT half).
     const cleanText = stripLoneTimecodes(out.text);
     if(cleanText !== out.text) Logger.log('info','phantom timecode stripped',{before:out.text.length, after:cleanText.length});
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
@@ -212,6 +251,7 @@ async function runStage(kind, faLabel, sysPrompt, logTitle){
 async function runTranslate(code){
   const scope = stageScope();
   if (!scope.text.trim()) { Logger.toast('متنی برای ترجمه نیست'); return; }
+  onActionTriggered();
   const invoker = document.activeElement;
   const _dpGuard = _getDiffPending(); // injected: live-read app.js-owned diff gate
   if (_dpGuard && diffEls().back && !diffEls().back.hidden){ Logger.toast('نتیجه بازبینی‌نشده — اول اعمال یا دور بریز'); return; }
@@ -296,11 +336,13 @@ export function mountStagebar(deps){
   openDiffRunning = deps.openDiffRunning;
   fillDiffSheet = deps.fillDiffSheet;
   closeDiffSheet = deps.closeDiffSheet;
+  onActionTriggered = deps.onActionTriggered || (() => {});
   ['select', 'keyup', 'mouseup'].forEach(ev => els.output.addEventListener(ev, updateStageScope));
   els.output.addEventListener('focus', updateStageScope);
   $('stage-simple')?.addEventListener('click', () => runStage('simple', 'پالایش ساده', SYS_SIMPLE, '✨ پالایش ساده'));
   $('stage-advanced')?.addEventListener('click', () => runStage('advanced', 'پالایش پیشرفته', SYS_ADV, '✨ پالایش پیشرفته'));
   $('stage-grammar')?.addEventListener('click', () => runStage('grammar', 'پالایش دستوری', SYS_GRAMMAR, '📝 پالایش دستوری'));
+  $('stage-structure')?.addEventListener('click', () => runStage('structure', 'ساختاردهی متن', SYS_STRUCTURE, '📐 ساختاردهی متن', { layer: 'structure', smart: true }));
   $('stage-tr-quick')?.addEventListener('click', () => {
     const t = els.output.value.trim();
     // Rationale: ASCII-only Latin text is most likely English → 'fa'. Latin with
@@ -333,6 +375,7 @@ export function mountStagebar(deps){
     const rawBtn = $('stage-raw');
     if (rawBtn) rawBtn.disabled = !stageRawStack.length;
     updateStageScope(); syncActionbar();
+    onActionTriggered();
     Logger.log('info', '↩ برگشت به خام (دامنه)', { chars: prev.text.length });
     Logger.toast('به خام برگشت');
   });

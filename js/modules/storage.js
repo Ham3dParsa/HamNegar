@@ -54,9 +54,9 @@ function normalizePolishEntry(x){
   if(typeof x === 'string'){
     const id = x.trim();
     if(!id) return null;
-    // legacy :free → openrouter, else groq (qwen/oss via Groq per new spec)
-    const providerId = id.includes(':free') ? 'openrouter' : 'groq';
-    const cleanId = id.replace(':free','');
+    // legacy :free → openrouter (preserve :free suffix for OpenRouter endpoints), else groq
+    const providerId = id.includes(':free') ? 'openrouter' : (/^gemini/i.test(id) ? 'google' : 'groq');
+    const cleanId = providerId === 'openrouter' ? id : id.replace(':free','');
     return { id: cleanId, providerId, enabled:true };
   }
   if(x && typeof x === 'object' && typeof x.id === 'string' && x.id.trim()){
@@ -69,8 +69,8 @@ function normalizePolishEntry(x){
     if(mig === null) return null; // purged provider entry dropped
     let providerId;
     if(mig) providerId = mig;
-    else providerId = id.includes(':free') ? 'openrouter' : 'groq';
-    const cleanId = id.replace(':free','');
+    else providerId = id.includes(':free') ? 'openrouter' : (/^gemini/i.test(id) ? 'google' : 'groq');
+    const cleanId = providerId === 'openrouter' ? id : id.replace(':free','');
     const enabled = x.enabled === false ? false : true;
     return { id: cleanId, providerId, enabled };
   }
@@ -162,6 +162,7 @@ const KEYS = {
   H_LOG: 'LOG_HEIGHT',
   LOG_COLLAPSED: 'LOG_COLLAPSED',
   REPORT_COLLAPSED: 'REPORT_COLLAPSED',
+  MODEL_CATALOG: 'MODEL_CATALOG_V1',
 };
 
 // ---- Ticket 39 (ref/storage): settings cache + normalize-on-write ----
@@ -232,9 +233,10 @@ function verifyChainList(arr){
     if(!x || typeof x !== 'object' || Array.isArray(x)) return null;
     const k = Object.keys(x);
     if(k.length !== 3 || !k.includes('id') || !k.includes('providerId') || !k.includes('enabled')) return null;
-    if(typeof x.id !== 'string' || !x.id.trim() || x.id !== x.id.trim() || x.id.includes(':free')) return null;
+    if(typeof x.id !== 'string' || !x.id.trim() || x.id !== x.id.trim()) return null;
     if(typeof x.providerId !== 'string' || !x.providerId.trim() || x.providerId !== x.providerId.trim()) return null;
     const pid = x.providerId;
+    if(x.id.includes(':free') && pid !== 'openrouter') return null;
     if(pid === 'gemini' || pid === 'zenspark') return null;
     if(x.enabled !== true && x.enabled !== false) return null;
     const key = `${pid}:${x.id}`;
@@ -760,6 +762,40 @@ export const Storage = {
     if (p.wave !== undefined) Storage.saveWave(p.wave);
     if (Array.isArray(p.dict)) Storage.saveDict(p.dict);
     return Storage.getPrefs().prefs;
+  },
+  getModelCatalog() {
+    try {
+      const raw = localStorage.getItem(KEYS.MODEL_CATALOG);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const out = {};
+      for (const [rawPid, val] of Object.entries(parsed)) {
+        const pid = migrateProviderId(rawPid) || String(rawPid || '').trim();
+        if (!pid || !val || typeof val !== 'object') continue;
+        const models = Array.isArray(val.models)
+          ? [...new Set(val.models.map(m => (typeof m === 'string' ? m.trim() : '')).filter(Boolean))].slice(0, 1500)
+          : [];
+        const updatedAt = typeof val.updatedAt === 'number' && Number.isFinite(val.updatedAt) ? val.updatedAt : 0;
+        if (models.length) out[pid] = { models, updatedAt };
+      }
+      return out;
+    } catch { return {}; }
+  },
+  saveModelCatalog(catalog) {
+    if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog)) return {};
+    const out = {};
+    for (const [rawPid, val] of Object.entries(catalog)) {
+      const pid = migrateProviderId(rawPid) || String(rawPid || '').trim();
+      if (!pid || !val || typeof val !== 'object') continue;
+      const models = Array.isArray(val.models)
+        ? [...new Set(val.models.map(m => (typeof m === 'string' ? m.trim() : '')).filter(Boolean))].slice(0, 1500)
+        : [];
+      const updatedAt = typeof val.updatedAt === 'number' && Number.isFinite(val.updatedAt) ? val.updatedAt : Date.now();
+      if (models.length) out[pid] = { models, updatedAt };
+    }
+    try { localStorage.setItem(KEYS.MODEL_CATALOG, JSON.stringify(out)); } catch {}
+    return out;
   },
   getSecretsMeta() {
     return {

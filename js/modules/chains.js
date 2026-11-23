@@ -10,8 +10,18 @@ import { Logger } from './logger.js';
 import { Transcription } from './transcription.js';
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
-import { esc } from './format.js';
+import { esc, fa } from './format.js';
 import { $ } from './dom.js';
+
+// --- inline stroke/vector SVG icons (safe static constants) ---
+const IC_GRIP = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>';
+const IC_UP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6"/></svg>';
+const IC_DOWN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+const IC_DOTS = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="18.5" r="1.6"/></svg>';
+const IC_TOP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14"/><path d="M12 20V9"/><path d="M7 14l5-5 5 5"/></svg>';
+const IC_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/></svg>';
+const IC_PLUS = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+const IC_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
 
 // --- injected app.js collaborators (assigned once in mountChains) ---
 // els is the shared element map built in app.js (single way to reach named
@@ -311,42 +321,50 @@ function renderChain(container, chain, type){
     item.tabIndex = 0; // keyboard reorder target: Ctrl+ArrowUp/Down
 
     let dotCls = hasKey ? 'ok' : 'missing';
-    let statusText = `● ${providerId} · ${hasKey ? '✓' : '⚠'}`;
-    let statusTitle = hasKey ? `${providerId} — کلید دارد` : `${providerId} — بی‌کلید (اول کلید را وارد کن)`;
+    let provLabel = flowProviderLabel(providerId);
+    let statusWord = hasKey ? 'آماده' : 'بدون کلید';
+    let statusTitle = hasKey ? `${provLabel} — کلید آماده است` : `${provLabel} — بی‌کلید (اول کلید را وارد کن)`;
     if (provRemoved) {
       dotCls = 'missing';
-      statusText = `● ${providerId} · حذف‌شده`;
-      statusTitle = `${providerId} — ارائه‌دهنده حذف شده است`;
+      statusWord = 'حذف‌شده';
+      statusTitle = `${provLabel} — ارائه‌دهنده حذف شده است`;
     } else if (provDisabled) {
       dotCls = 'off';
-      statusText = `● ${providerId} · خاموش`;
-      statusTitle = `${providerId} — ارائه‌دهنده خاموش است`;
+      statusWord = 'خاموش';
+      statusTitle = `${provLabel} — ارائه‌دهنده خاموش است`;
     }
 
     const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
     const menuLabel = `گزینه‌های مدل ${meta.label}: اولویت ۱، حذف`;
-    item.title = 'دستگیره ⠿ را بکش یا از ▲/▼ استفاده کن — Ctrl+↑/↓';
+    item.title = 'دستگیره را بکش یا از دکمه‌های بالا و پایین استفاده کن — Ctrl+↑/↓';
     item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
     item.innerHTML = `
-      <button type="button" class="chain-drag" aria-label="بکش برای تغییر اولویت ${esc(meta.label)}" title="بکش برای جابه‌جایی">⠿</button>
-      <span class="rank ${idx>0?'fallback':''}">${idx+1}</span>
-      <div class="chain-main">
-        <span class="chain-label" dir="auto" title="${esc(meta.label)}${meta.sub?` — ${esc(meta.sub)}`:''}">${esc(meta.label)}</span>
-        <span class="chain-meta">
-          ${meta.sub?`<span class="chain-sub">${esc(meta.sub)}</span><span aria-hidden="true">·</span>`:''}
-          <span class="chain-status ${dotCls}" title="${esc(statusTitle)}">${esc(statusText)}</span>
-        </span>
+      <div class="chain-row-top">
+        <button type="button" class="chain-drag" aria-label="بکش برای تغییر اولویت ${esc(meta.label)}" title="بکش برای جابه‌جایی">${IC_GRIP}</button>
+        <span class="rank ${idx>0?'fallback':''}">${fa(idx+1)}</span>
+        <div class="chain-head-info">
+          <span class="chain-label" dir="auto" title="${esc(meta.label)}${meta.sub?` — ${esc(meta.sub)}`:''}">${esc(meta.label)}</span>
+          <span class="chain-status ${dotCls}" title="${esc(statusTitle)}"><i class="chain-sdot" aria-hidden="true"></i>${esc(provLabel)} · ${esc(statusWord)}</span>
+        </div>
+        <label class="chain-switch" title="${esc(switchLabel)}">
+          <input type="checkbox" class="sr-only" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}">
+          <span class="chain-track" aria-hidden="true"></span>
+        </label>
       </div>
-      <div class="chain-step-btns">
-        <button type="button" class="chain-step-btn" data-step-up aria-label="انتقال ${esc(meta.label)} به بالا" title="یک پله بالاتر" ${idx===0?'disabled':''}>▲</button>
-        <button type="button" class="chain-step-btn" data-step-down aria-label="انتقال ${esc(meta.label)} به پایین" title="یک پله پایین‌تر" ${idx===chain.length-1?'disabled':''}>▼</button>
-      </div>
-      <label class="chain-switch"><input type="checkbox" class="sr-only" role="switch" data-toggle ${enabled?'checked':''} aria-checked="${enabled?'true':'false'}" aria-label="${esc(switchLabel)}"><span class="chain-track" aria-hidden="true"></span><span class="chain-state" aria-hidden="true">${enabled?'روشن':'خاموش'}</span></label>
-      <div class="chain-menu-wrap">
-        <button type="button" class="chain-menubtn" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}">⋮</button>
-        <div class="chain-menu ${idx===chain.length-1?'up':''}" role="menu" aria-label="${esc(menuLabel)}" hidden>
-          <button type="button" role="menuitem" data-top aria-label="انتقال ${esc(meta.label)} به اولویت ۱" ${idx===0?'disabled':''}>⤒ اولویت ۱</button>
-          <button type="button" role="menuitem" class="danger" data-remove aria-label="حذف مدل ${esc(meta.label)}">✕ حذف</button>
+      <div class="chain-row-bottom">
+        <span class="chain-sub">${esc(meta.sub || 'مدل سفارشی')}</span>
+        <div class="chain-controls">
+          <div class="chain-step-btns">
+            <button type="button" class="chain-step-btn" data-step-up aria-label="انتقال ${esc(meta.label)} به بالا" title="یک پله بالاتر" ${idx===0?'disabled':''}>${IC_UP}</button>
+            <button type="button" class="chain-step-btn" data-step-down aria-label="انتقال ${esc(meta.label)} به پایین" title="یک پله پایین‌تر" ${idx===chain.length-1?'disabled':''}>${IC_DOWN}</button>
+          </div>
+          <div class="chain-menu-wrap">
+            <button type="button" class="chain-menubtn" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(menuLabel)}" title="گزینه‌های بیشتر">${IC_DOTS}</button>
+            <div class="chain-menu ${idx===chain.length-1?'up':''}" role="menu" aria-label="${esc(menuLabel)}" hidden>
+              <button type="button" role="menuitem" data-top aria-label="انتقال ${esc(meta.label)} به اولویت ۱" ${idx===0?'disabled':''}>${IC_TOP}<span>انتقال به اولویت ۱</span></button>
+              <button type="button" role="menuitem" class="danger" data-remove aria-label="حذف مدل ${esc(meta.label)}">${IC_TRASH}<span>حذف از زنجیره</span></button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -464,6 +482,7 @@ export function renderAllChains(){
   renderChain(els.polishChain, polishChainState, 'polish');
   const hint = document.getElementById('polish-disabled-hint');
   if(hint) hint.style.display = els.togglePolish?.checked ? 'none' : 'block';
+  try { syncCustomProviderSelects(); } catch {}
   // Single deliberate non-verbatim line: replaces the old app.js end-of-file
   // `renderAllChains = ...Stagebar.renderStageModelOptions` reassignment, which
   // ES-module read-only imports make impossible — the refresh rides as a hook.
@@ -472,10 +491,13 @@ export function renderAllChains(){
 
 export function persistChains(){ scheduleChainsPersist(); }
 
-// --- models flow card (ticket/08): rail is single truth, inline key cards, ONE search + ONE chip row → flat list ---
-// Data source is modelCache (Transcription.listModels) + known chain labels; rows toggle real chains.
-const modelCache = new Map(); // providerId -> string[]
-const fetchStamp = new Map(); // providerId -> cache-line label
+// --- models flow card + live persisted catalog ---
+// Data source is Storage.getModelCatalog() + live Transcription.listModels + known/chain entries.
+const modelCache = new Map(); // canonical providerId -> string[]
+const fetchStamp = new Map(); // ui/canonical providerId -> cache-line label
+const catalogUpdatedAt = new Map(); // canonical providerId -> epoch ms
+let autoRefreshedThisSession = false;
+let catalogRefreshInFlight = null;
 let flowProv = 'all';
 let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capability OR, 'free' = AND modifier
 let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-retry (disabled pre-fetch)
@@ -527,28 +549,118 @@ function isSttEligible(id, pid){ return capsFor(id, pid).caps.includes('stt'); }
 // STT, t2t-only models to polish. Inline panels pass their own chain; the shared
 // models-tab list derives it per row so no stale-target muting can recur.
 function targetForModel(id, pid){ return isSttEligible(id, pid) ? 'stt' : 'polish'; }
+function formatCacheLine(ts, count){
+  if(!count) return 'نه هنوز — «بروزرسانی مدل‌ها» را بزن';
+  if(!ts) return `ذخیره‌شده (${fa(count)} مدل)`;
+  const timeStr = new Date(ts).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  return `به‌روزشده ${timeStr} (${fa(count)} مدل)`;
+}
+function updateCatalogStatus(customText){
+  const el = $('catalog-status');
+  if(!el) return;
+  if(customText){ el.textContent = customText; return; }
+  let total = 0, provCount = 0;
+  for(const [, ids] of modelCache){
+    if(Array.isArray(ids) && ids.length){ total += ids.length; provCount++; }
+  }
+  if(!provCount){
+    el.textContent = 'هنوز کاتالوگ زنده‌ای دریافت نشده — برای دریافت دکمه بروزرسانی را بزن';
+    return;
+  }
+  let latestTs = 0;
+  for(const ts of catalogUpdatedAt.values()) if(ts > latestTs) latestTs = ts;
+  const timePart = latestTs ? ` · ${new Date(latestTs).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}` : '';
+  el.textContent = `${fa(total)} مدل آماده از ${fa(provCount)} ارائه‌دهنده${timePart}`;
+}
+function persistModelCatalog(){
+  const payload = {};
+  for(const [pid, ids] of modelCache){
+    if(!Array.isArray(ids) || !ids.length) continue;
+    payload[pid] = { models: ids, updatedAt: catalogUpdatedAt.get(pid) || Date.now() };
+  }
+  Storage.saveModelCatalog?.(payload);
+  updateCatalogStatus();
+  try { onChainsRendered?.(); } catch {}
+}
+function hydrateCatalogFromStorage(){
+  try{
+    const saved = Storage.getModelCatalog?.() || {};
+    for(const [rawPid, info] of Object.entries(saved)){
+      const pid = canonicalize(rawPid) || rawPid;
+      if(!pid || !Array.isArray(info?.models) || !info.models.length) continue;
+      modelCache.set(pid, info.models);
+      const ts = Number(info.updatedAt || 0);
+      if(ts) catalogUpdatedAt.set(pid, ts);
+      const stampKey = pid === 'google' ? 'gemini' : pid;
+      fetchStamp.set(stampKey, formatCacheLine(ts, info.models.length));
+    }
+  }catch{}
+  syncCacheLines();
+  updateCatalogStatus();
+}
+function registerModelInCatalog(providerId, modelId){
+  const pid = canonicalize(providerId) || String(providerId || '').trim();
+  const mid = String(modelId || '').trim();
+  if(!pid || !mid) return;
+  const cur = modelCache.get(pid) ? [...modelCache.get(pid)] : [];
+  if(!cur.includes(mid)){
+    cur.unshift(mid);
+    modelCache.set(pid, cur);
+    catalogUpdatedAt.set(pid, Date.now());
+    const stampKey = pid === 'google' ? 'gemini' : pid;
+    fetchStamp.set(stampKey, formatCacheLine(catalogUpdatedAt.get(pid), cur.length));
+    persistModelCatalog();
+    syncCacheLines();
+  }
+}
+export function syncCustomProviderSelects(){
+  let providers = [];
+  try{ providers = Storage.getProviders?.() || []; }catch{ providers = []; }
+  const selects = [$('stt-custom-prov'), $('polish-custom-prov'), $('easy-provider-select')].filter(Boolean);
+  for(const sel of selects){
+    const prev = sel.value;
+    sel.innerHTML = '';
+    for(const p of providers){
+      const o = document.createElement('option');
+      o.value = p.id;
+      const suffix = p.disabled ? ' (خاموش)' : (!p.hasKey && p.id !== 'openrouter' ? ' (بدون کلید)' : '');
+      o.textContent = `${p.name || p.id}${suffix}`;
+      sel.appendChild(o);
+    }
+    if(prev && providers.some(p => p.id === prev)){
+      sel.value = prev;
+    } else {
+      const preferred = providers.find(p => !p.disabled && p.hasKey) || providers[0];
+      if(preferred) sel.value = preferred.id;
+    }
+  }
+}
 function allFlowModels(){
   const out = [], seen = new Set();
   const push = (id, pid) => {
     const clean = String(id || '').trim();
-    if (!clean) return;
-    if (Storage.isProviderRemoved(pid)) return;
-    const k = pid + ':' + clean;
+    const cpid = canonicalize(pid) || String(pid || '').trim();
+    if (!clean || !cpid) return;
+    if (Storage.isProviderRemoved(cpid)) return;
+    const k = cpid + ':' + clean;
     if (seen.has(k)) return;
     seen.add(k);
-    const { caps, free, fa } = capsFor(clean, pid);
-    out.push({ id: clean, providerId: pid, caps, free, fa });
+    const { caps, free, fa } = capsFor(clean, cpid);
+    out.push({ id: clean, providerId: cpid, caps, free, fa });
   };
   push('groq', 'groq');
   for (const id of Object.keys(STT_LABELS)) if (id !== 'groq') push(id, /^gemini/i.test(id) ? 'google' : 'groq');
   for (const id of Object.keys(POLISH_LABELS)) push(id, providerIdOf({ id }, 'groq'));
+  for (const e of sttChainState) push(entryIdOf(e), providerIdOf(e, 'google'));
+  for (const e of polishChainState) push(entryIdOf(e), providerIdOf(e, 'groq'));
   for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, canonicalize(pid) || pid);
   return out;
 }
 function chainLoc(id, pid){
-  const si = sttChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === pid);
+  const cpid = canonicalize(pid) || pid;
+  const si = sttChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === cpid);
   if (si >= 0) return { type: 'stt', index: si };
-  const pi = polishChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === pid);
+  const pi = polishChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === cpid);
   if (pi >= 0) return { type: 'polish', index: pi };
   return null;
 }
@@ -621,10 +733,25 @@ function renderFlowList(){
     b.dir = 'ltr';
     const badges = document.createElement('span');
     badges.className = 'mbadges';
-    for (const c of d.caps) { const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
-    if (d.free) { const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
+    const provTag = document.createElement('span');
+    provTag.className = 'mcap';
+    provTag.textContent = flowProviderLabel(d.providerId);
+    badges.appendChild(provTag);
+    for (const c of d.caps) {
+      const s = document.createElement('span');
+      s.className = 'mcap';
+      s.textContent = c === 'stt' ? 'صوتی' : 'متنی';
+      badges.appendChild(s);
+    }
+    if (d.free) { const f = document.createElement('span'); f.className = 'mcap free'; f.textContent = 'رایگان'; badges.appendChild(f); }
     title.append(b, badges);
     main.append(title);
+    if (disabled || !hasKey) {
+      const note = document.createElement('span');
+      note.className = 'mstatus';
+      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در تب «کلیدها»';
+      main.appendChild(note);
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-ghost btn-sm ' + (loc ? 'btn-remove' : 'btn-add');
@@ -633,7 +760,7 @@ function renderFlowList(){
     const targetNow = targetForModel(d.id, d.providerId);
     btn.title = disabled
       ? 'این ارائه‌دهنده خاموش است'
-      : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + '(' + targetNow + ')'));
+      : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + (targetNow === 'stt' ? 'صوتی' : 'پالیش')));
     btn.disabled = (!hasKey || disabled) && !loc;
     btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
     card.append(main, btn);
@@ -643,33 +770,20 @@ function renderFlowList(){
   const empty = $('m-empty'), err = $('m-err');
   if (empty) {
     empty.hidden = rows.length !== 0;
-    const mw = $('m-manual-wrap');
-    // Manual-id entry per rail (ticket/45): gemini/all → Gemini shape;
-    // other rails → foreign pid, hidden.
-    const manualPid = (flowProv === 'gemini' || flowProv === 'all') ? 'google' : null;
-    if (mw) {
-      mw.hidden = !(rows.length === 0 && manualPid);
-      if (!mw.hidden) {
-        const inp = $('easy-model-input'), addB = $('btn-easy-add'), hint = $('m-manual-hint');
-        if (inp) { inp.placeholder = 'gemini-…'; inp.setAttribute('aria-label', 'شناسه دستی Gemini'); }
-        if (addB) addB.textContent = 'افزودن دستی Gemini';
-        if (hint) hint.hidden = true;
-      }
-    }
   }
   if (err) { err.hidden = true; delete err.dataset.failed; }
   const retry = $('m-retry');
   if (retry) retry.disabled = !flowLastPid;
   updateNokey();
+  syncCustomProviderSelects();
   const count = $('m-count');
   if (count) {
     const total = sttChainState.length + polishChainState.length;
-    const chipLabel = flowChips.size ? [...flowChips].join('+') : 'all';
-    count.textContent = `${rows.length} مدل در ${flowScopeLabel()} (چیپ: ${chipLabel}) — ${total} مدل در زنجیره`;
+    count.textContent = `${fa(rows.length)} مدل یافت شد · ${fa(total)} مدل در زنجیره فعال`;
   }
 }
 function toggleFlowModel(modelId, providerId){
-  const mid = String(modelId || '').trim(), pid = String(providerId || '').trim();
+  const mid = String(modelId || '').trim(), pid = canonicalize(providerId) || String(providerId || '').trim();
   if (!mid || !pid) return;
   const loc = chainLoc(mid, pid);
   if (loc) {
@@ -683,8 +797,8 @@ function toggleFlowModel(modelId, providerId){
     return;
   }
   const target = targetForModel(mid, pid);
-  if (pid === 'google' && !/^gemini/i.test(mid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   if (target === 'stt') {
+    if (pid === 'google' && !/^gemini/i.test(mid)) { Logger.toast('این مدل Google فقط متنی است (برای STT از Gemini استفاده کن)'); return; }
     if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   }
   if (!hasKeyById(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
@@ -693,20 +807,49 @@ function toggleFlowModel(modelId, providerId){
 }
 function addModelToChain(modelId, providerId, target){
   const mid = String(modelId||'').trim();
-  const pid = String(providerId||'').trim();
-  if(!mid || !pid) return;
-  if(target==='stt' && !isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
+  const pid = canonicalize(providerId) || String(providerId||'').trim();
+  if(!mid || !pid) return false;
+  if(target==='stt' && !isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return false; }
   if(target==='stt'){
-    if(sttChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'google')===pid)){ Logger.toast('قبلاً هست'); return; }
+    if(sttChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'google')===pid)){ Logger.toast('قبلاً در زنجیره صوتی هست'); return false; }
     sttChainState.push({ id:mid, providerId:pid, enabled:true });
   } else {
-    if(polishChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'groq')===pid)){ Logger.toast('قبلاً هست'); return; }
+    if(polishChainState.some(x=> entryIdOf(x)===mid && providerIdOf(x,'groq')===pid)){ Logger.toast('قبلاً در زنجیره متنی هست'); return false; }
     polishChainState.push({ id:mid, providerId:pid, enabled:true });
   }
+  registerModelInCatalog(pid, mid);
   scheduleChainsPersist();
+  renderAllChains();
   const list = target === 'stt' ? sttChainState : polishChainState;
   announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
-  Logger.toast('افزوده شد');
+  return true;
+}
+function addCustomModelFromInputs(rawProviderId, rawModelId, target){
+  const pid = canonicalize(rawProviderId) || String(rawProviderId || '').trim();
+  const mid = String(rawModelId || '').trim();
+  if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return false; }
+  if(!mid){ Logger.toast('شناسه مدل را وارد کن'); return false; }
+  if(Storage.isProviderRemoved(pid)){ Logger.toast('این ارائه‌دهنده حذف شده است'); return false; }
+  if(target === 'stt'){
+    if(pid === 'google' && !/^gemini/i.test(mid)){
+      Logger.toast('مدل‌های غير Gemini فقط برای زنجیره متنی/پالیش مناسبند');
+      return false;
+    }
+    if(!isSttEligible(mid, pid)){
+      Logger.toast('مدل صوتی باید whisper/gemini/transcrib باشد');
+      return false;
+    }
+  }
+  const ok = addModelToChain(mid, pid, target);
+  if(!ok) return false;
+  renderFlowList();
+  if(chainPanelOpen(target)) renderChainPanel(target);
+  const disabled = Storage.isProviderDisabled(pid);
+  const hasKey = hasKeyById(pid);
+  if(disabled) Logger.toast(`«${mid}» افزوده شد (توجه: ${flowProviderLabel(pid)} الان خاموش است)`);
+  else if(!hasKey) Logger.toast(`«${mid}» افزوده شد — برای اجرا کلید ${flowProviderLabel(pid)} را ثبت کن`);
+  else Logger.toast(`«${mid}» به زنجیره ${target === 'stt' ? 'صوتی' : 'پالیش'} اضافه شد`);
+  return true;
 }
 async function fetchAndShowModels(providerId){
   flowLastPid = providerId;
@@ -720,14 +863,68 @@ async function fetchAndShowModels(providerId){
   try{
     saveSettings();
     const ids = await Transcription.listModels(providerId);
-    modelCache.set(canonicalize(providerId) || providerId, ids);
-    fetchStamp.set(providerId, 'به‌روزشده: همین حالا (حافظه)');
+    const cpid = canonicalize(providerId) || providerId;
+    const now = Date.now();
+    modelCache.set(cpid, ids);
+    catalogUpdatedAt.set(cpid, now);
+    fetchStamp.set(providerId, formatCacheLine(now, ids.length));
+    persistModelCatalog();
     if(errBox){ errBox.hidden = true; delete errBox.dataset.failed; }
     renderFlowList();
     Logger.toast(`مدل‌ها: ${ids.length}`);
     announce(`${ids.length} مدل برای ${providerId} بارگذاری شد`);
   }catch(e){ showFetchError(providerId, e); }
-  finally{ if(btn) btn.textContent='لیست مدل‌ها'; syncCacheLines(); }
+  finally{ if(btn) btn.textContent='بروزرسانی مدل‌ها'; syncCacheLines(); }
+}
+export async function refreshAllActiveCatalogs({ quiet = false } = {}){
+  if(catalogRefreshInFlight) return catalogRefreshInFlight;
+  const btn = $('btn-refresh-catalog');
+  const prevLabel = btn?.textContent || 'بروزرسانی کاتالوگ زنده';
+  if(btn){ btn.disabled = true; btn.textContent = 'در حال دریافت…'; }
+  updateCatalogStatus('در حال دریافت جدیدترین لیست مدل‌ها…');
+  catalogRefreshInFlight = (async () => {
+    try{
+      const providers = (Storage.getProviders?.() || []).filter(p => !p.disabled);
+      const targets = providers.filter(p => p.hasKey || (!quiet && p.id === 'openrouter') || (quiet && p.id === 'openrouter' && !modelCache.has('openrouter')));
+      if(!targets.length){
+        updateCatalogStatus('هیچ ارائه‌دهنده فعالی با کلید نیست — فقط فهرست OpenRouter عمومی در دسترس است');
+        if(!quiet) Logger.toast('کلیدی ثبت نشده است');
+        return { ok: 0, total: 0 };
+      }
+      let okCount = 0;
+      const results = await Promise.allSettled(targets.map(async (p) => {
+        const ids = await Transcription.listModels(p.id);
+        const cpid = canonicalize(p.id) || p.id;
+        const now = Date.now();
+        modelCache.set(cpid, ids);
+        catalogUpdatedAt.set(cpid, now);
+        fetchStamp.set(cpid === 'google' ? 'gemini' : cpid, formatCacheLine(now, ids.length));
+        okCount++;
+        return ids.length;
+      }));
+      persistModelCatalog();
+      syncCacheLines();
+      renderFlowList();
+      if(chainPanelOpen('stt')) renderChainPanel('stt');
+      if(chainPanelOpen('polish')) renderChainPanel('polish');
+      const total = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
+      if(!quiet){
+        if(okCount > 0) Logger.toast(`کاتالوگ زنده: ${fa(total)} مدل از ${fa(okCount)} ارائه‌دهنده`);
+        else Logger.toast('بروزرسانی کاتالوگ با خطا مواجه شد');
+      }
+      return { ok: okCount, total };
+    } finally {
+      catalogRefreshInFlight = null;
+      if(btn){ btn.disabled = false; btn.textContent = prevLabel; }
+      updateCatalogStatus();
+    }
+  })();
+  return catalogRefreshInFlight;
+}
+export function ensureLiveCatalog(){
+  if(autoRefreshedThisSession) return;
+  autoRefreshedThisSession = true;
+  refreshAllActiveCatalogs({ quiet: true }).catch(() => {});
 }
 
 // --- custom providers (providers tab only) ---
@@ -833,10 +1030,14 @@ function syncCustomModelsBtn(){
     btn.disabled = !Storage.getSettings().customProviders.some(x => x.name === name || x.id === slugifyCustomId(name));
   }catch{ btn.disabled = true; }
 }
-export function flowInit(){ renderFlowList(); }
+export function flowInit(){
+  hydrateCatalogFromStorage();
+  syncCustomProviderSelects();
+  renderFlowList();
+}
 
 // --- per-chain inline add panels (ticket/76-inline-chain-add): expander + panel under each .chain-foot ---
-const CHAIN_EXPAND_LABEL = { stt: '＋ افزودن مدل صوتی', polish: '＋ افزودن ویرایشگر' };
+const CHAIN_EXPAND_LABEL = { stt: 'افزودن مدل صوتی', polish: 'افزودن ویرایشگر' };
 export function chainPanelEls(target){
   return target === 'stt'
     ? { btn: els.btnExpandStt, panel: els.sttAddPanel, search: els.sttAddSearch, list: els.sttAddList }
@@ -849,14 +1050,27 @@ export function chainPanelOpen(target){
 function renderChainPanel(target){
   const { list, search } = chainPanelEls(target);
   if(!list) return;
-  const q = (search?.value || '').trim().toLowerCase();
+  const qRaw = (search?.value || '').trim();
+  const q = qRaw.toLowerCase();
   list.innerHTML = '';
   // Pre-scoped per chain from the same sources as the models tab: the STT panel
   // hides t2t-only models outright (no muted rows, no stale-target class); polish shows all.
   const rows = allFlowModels()
     .filter(d => target === 'stt' ? isSttEligible(d.id, d.providerId) : true)
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
-  if(!rows.length){ list.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن.'; return; }
+  if(!rows.length){
+    const emptyWrap = document.createElement('div');
+    emptyWrap.className = 'hint-inline';
+    if(qRaw){
+      emptyWrap.textContent = `مدل «${qRaw}» در کاتالوگ پیدا نشد — از کادر پایین همین پنل با انتخاب ارائه‌دهنده اضافه‌اش کن یا «بروزرسانی کاتالوگ زنده» را بزن.`;
+      const customInp = $(target === 'stt' ? 'stt-custom-id' : 'polish-custom-id');
+      if(customInp && !customInp.value) customInp.value = qRaw;
+    } else {
+      emptyWrap.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن یا کاتالوگ زنده را بروزرسانی کن.';
+    }
+    list.appendChild(emptyWrap);
+    return;
+  }
   const chainFa = target === 'stt' ? 'STT' : 'پالیش';
   const frag = document.createDocumentFragment();
   for(const d of rows){
@@ -877,10 +1091,25 @@ function renderChainPanel(target){
     b.dir = 'ltr';
     const badges = document.createElement('span');
     badges.className = 'mbadges';
-    for(const c of d.caps){ const s = document.createElement('span'); s.className = 'badge'; s.textContent = c; badges.appendChild(s); }
-    if(d.free){ const f = document.createElement('span'); f.className = 'badge free'; f.textContent = 'رایگان'; badges.appendChild(f); }
+    const provTag = document.createElement('span');
+    provTag.className = 'mcap';
+    provTag.textContent = flowProviderLabel(d.providerId);
+    badges.appendChild(provTag);
+    for(const c of d.caps){
+      const s = document.createElement('span');
+      s.className = 'mcap';
+      s.textContent = c === 'stt' ? 'صوتی' : 'متنی';
+      badges.appendChild(s);
+    }
+    if(d.free){ const f = document.createElement('span'); f.className = 'mcap free'; f.textContent = 'رایگان'; badges.appendChild(f); }
     title.append(b, badges);
     main.append(title);
+    if (!inTarget && (disabled || !hasKey)) {
+      const note = document.createElement('span');
+      note.className = 'mstatus';
+      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در تب «کلیدها»';
+      main.appendChild(note);
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn-ghost btn-sm';
@@ -908,7 +1137,7 @@ export function setChainPanel(target, open, focusSearch){
   if(!btn || !panel) return;
   panel.hidden = !open;
   btn.setAttribute('aria-expanded', String(open));
-  btn.textContent = open ? '－ بستن' : CHAIN_EXPAND_LABEL[target];
+  btn.innerHTML = (open ? IC_CLOSE : IC_PLUS) + `<span>${open ? 'بستن فهرست' : CHAIN_EXPAND_LABEL[target]}</span>`;
   if(open){
     renderChainPanel(target);
     if(focusSearch) search?.focus?.();
@@ -929,9 +1158,24 @@ export function mountChains(deps){
   els.btnGroqModels?.addEventListener('click', ()=> fetchAndShowModels('groq'));
   els.btnGeminiModels?.addEventListener('click', ()=> fetchAndShowModels('gemini'));
   els.btnOrModels?.addEventListener('click', ()=> fetchAndShowModels('openrouter'));
+  $('btn-refresh-catalog')?.addEventListener('click', ()=> refreshAllActiveCatalogs({ quiet: false }));
 
-  // --- models flow card wiring: ONE search + ONE chip row + manual Gemini id ---
+  // --- models flow card wiring: provider chips + capability chips + search + custom model add ---
   $('m-q')?.addEventListener('input', renderFlowListSoon);
+  document.querySelectorAll('#m-prov-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
+    flowProv = c.dataset.prov || 'all';
+    document.querySelectorAll('#m-prov-chips .fchip').forEach(x=>{
+      const on = (x.dataset.prov || 'all') === flowProv;
+      x.classList.toggle('active', on);
+      x.setAttribute('aria-pressed', String(on));
+    });
+    const easySel = $('easy-provider-select');
+    if(easySel && flowProv !== 'all' && flowProv !== 'custom'){
+      const cpid = canonicalize(flowProv) || flowProv;
+      if([...easySel.options].some(o => o.value === cpid)) easySel.value = cpid;
+    }
+    renderFlowList();
+  }));
   document.querySelectorAll('#m-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
     const cap = c.dataset.cap;
     if(cap === 'all') flowChips.clear();
@@ -971,7 +1215,7 @@ export function mountChains(deps){
       Storage.saveSettings({ customProviders: [...cur, { id, name, baseURL, key }] });
     }catch(e){ Logger.toast(e.message || 'BaseURL نامعتبر'); return; }
     els.customName.value=''; els.customBaseUrl.value=''; els.customKey.value='';
-    renderCustomProviders(); renderFlowList(); renderProvidersStatus();
+    renderCustomProviders(); syncCustomProviderSelects(); renderFlowList(); renderProvidersStatus();
     Logger.toast('ارائه‌دهنده اضافه شد');
   });
   $('btn-custom-test')?.addEventListener('click', async ()=>{
@@ -994,7 +1238,7 @@ export function mountChains(deps){
         try{
           Storage.saveSettings({ customProviders: [...cur, { id, name, baseURL, key }] });
         }catch(e){ Logger.setStatus('❌ سفارشی: '+sanitizeMsg(e.message || e),'error'); return; }
-        renderCustomProviders(); renderFlowList(); renderProvidersStatus();
+        renderCustomProviders(); syncCustomProviderSelects(); renderFlowList(); renderProvidersStatus();
       }
       await Transcription.listModels(id);
       Logger.setStatus('✅ ارائه‌دهنده سفارشی اوکی','info'); Logger.toast('ok');
@@ -1013,44 +1257,52 @@ export function mountChains(deps){
       const cur = Storage.getSettings().customProviders.slice();
       Storage.saveSettings({ customProviders: cur.map(x => x.id === stored.id ? { ...x, baseURL, key } : x) });
       const ids = await Transcription.listModels(stored.id);
+      const now = Date.now();
       modelCache.set(stored.id, ids);
-      fetchStamp.set(stored.id, 'به‌روزشده: همین حالا (حافظه)');
+      catalogUpdatedAt.set(stored.id, now);
+      fetchStamp.set(stored.id, formatCacheLine(now, ids.length));
+      persistModelCatalog();
       renderFlowList();
       Logger.toast(`مدل‌ها: ${ids.length}`);
       announce(`${ids.length} مدل بارگذاری شد`);
     }catch(e){ flowLastPid = stored.id; showFetchError(stored.id, e); }
   });
 
-  // --- manual Gemini id (empty-state action): rail provider + target radios → Add ---
-  $('btn-easy-add')?.addEventListener('click', ()=>{
-    let pid = flowProv === 'custom' ? '' : flowProv;
-    const mid = (els.easyModelInput?.value || '').trim();
-    if(!mid){ Logger.toast('مدل را انتخاب کن'); return; }
-    if(flowProv === 'all'){
-      // derive provider from the id itself so a Groq id never lands in the gemini chain;
-      // paid OpenRouter ids (vendor/model) are indistinguishable from Groq by shape, so:
-      // 1) exact hit in any fetched list (covers future releases + custom providers),
-      // 2) whisper- only (Groq-exclusive in our provider set) — anything else picks its rail
-      if(/^gemini/i.test(mid)) pid = 'google';
-      else if(mid.includes(':free')) pid = 'openrouter';
-      else {
-        let hit = '';
-        try{ for(const [p, ids] of modelCache){ if(Array.isArray(ids) && ids.includes(mid)){ hit = p; break; } } }catch{}
-        if(hit) pid = hit;
-        else if(/^whisper/i.test(mid)) pid = 'groq';
-        else { Logger.toast('ارائه‌دهنده نامشخص است — ریل ارائه‌دهنده را انتخاب کن'); return; }
-      }
-    }
-    if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return; }
-    const target = targetForModel(mid, pid);
-    if(pid === 'google' && !/^gemini/i.test(mid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
-    if(target === 'stt'){
-      if(!isSttEligible(mid, pid)){ Logger.toast('مدل نامعتبر برای STT'); return; }
-    }
-    if(!hasKeyById(pid)){ Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
-    addModelToChain(mid, pid, target);
-    renderFlowList();
+  // --- Always-visible custom model add box (Explorer) + per-chain custom model bars ---
+  const submitEasyAdd = () => {
+    const prov = $('easy-provider-select')?.value || '';
+    const target = $('easy-target-select')?.value || 'polish';
+    const inp = els.easyModelInput || $('easy-model-input');
+    const mid = (inp?.value || '').trim();
+    if(addCustomModelFromInputs(prov, mid, target) && inp) inp.value = '';
+  };
+  $('btn-easy-add')?.addEventListener('click', submitEasyAdd);
+  (els.easyModelInput || $('easy-model-input'))?.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); submitEasyAdd(); }
   });
+
+  const submitSttCustom = () => {
+    const prov = $('stt-custom-prov')?.value || '';
+    const inp = $('stt-custom-id');
+    const mid = (inp?.value || '').trim();
+    if(addCustomModelFromInputs(prov, mid, 'stt') && inp) inp.value = '';
+  };
+  $('btn-stt-custom-add')?.addEventListener('click', submitSttCustom);
+  $('stt-custom-id')?.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); submitSttCustom(); }
+  });
+
+  const submitPolishCustom = () => {
+    const prov = $('polish-custom-prov')?.value || '';
+    const inp = $('polish-custom-id');
+    const mid = (inp?.value || '').trim();
+    if(addCustomModelFromInputs(prov, mid, 'polish') && inp) inp.value = '';
+  };
+  $('btn-polish-custom-add')?.addEventListener('click', submitPolishCustom);
+  $('polish-custom-id')?.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){ e.preventDefault(); submitPolishCustom(); }
+  });
+
   $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه روشن'); });
   $('btn-polish-all-off')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه خاموش'); });
   $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه STT روشن'); });
@@ -1060,6 +1312,8 @@ export function mountChains(deps){
   els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));
   els.sttAddSearch?.addEventListener('input', ()=> renderChainPanel('stt'));
   els.polishAddSearch?.addEventListener('input', ()=> renderChainPanel('polish'));
+  hydrateCatalogFromStorage();
+  syncCustomProviderSelects();
   // --- persist flush hooks (ticket 41): modal-close + pagehide ensure no loss ---
   try{
     const flush = ()=> flushChains();
@@ -1071,5 +1325,5 @@ export function mountChains(deps){
     window.addEventListener('beforeunload', flush);
     document.addEventListener('visibilitychange', ()=>{ if(document.hidden) flush(); });
   }catch{}
-  return { renderAllChains, renderFlowList, renderChainPanel, renderCustomProviders, flowInit, persistChains };
+  return { renderAllChains, renderFlowList, renderChainPanel, renderCustomProviders, flowInit, persistChains, refreshAllActiveCatalogs, ensureLiveCatalog, syncCustomProviderSelects };
 }

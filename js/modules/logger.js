@@ -68,8 +68,8 @@ function renderProgressWindow() {
     rank.className = 'rank' + (idx > 0 ? ' fallback' : '');
     rank.textContent = fa(idx + 1);
     const label = document.createElement('span');
+    label.className = 'step-lbl';
     label.textContent = progressChain[idx].label;
-    label.style.fontSize = '12px';
     const icon = document.createElement('span');
     icon.className = 'step-icon';
     icon.setAttribute('aria-hidden', 'true');

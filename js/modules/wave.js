@@ -91,14 +91,57 @@ function fakeRaw(t) {
   const pluck = Math.pow(Math.max(0, Math.sin(2 * Math.PI * 3.1 * s + 1.1)), 6) * 0.7;
   return sm((b * sy * 1.35 + burst + pluck) * 0.72) * g;
 }
-function hx(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
-function rgba(h, a) { const c = hx(h); return `rgba(${c[0]},${c[1]},${c[2]},${a})`; }
-function sineY(x, Wd, H, A, cyc, ph) { return H / 2 + A * Math.sin(2 * Math.PI * cyc * x / Wd + ph) + A * 0.18 * Math.sin(4 * Math.PI * cyc * x / Wd + ph * 1.7); }
+
+const rgbCache = new Map();
+function parseHex(h) {
+  if (typeof h !== 'string') return { r: 138, g: 180, b: 248 };
+  let c = rgbCache.get(h);
+  if (c) return c;
+  if (h.length === 7 && h[0] === '#') {
+    c = {
+      r: parseInt(h.slice(1, 3), 16) || 0,
+      g: parseInt(h.slice(3, 5), 16) || 0,
+      b: parseInt(h.slice(5, 7), 16) || 0,
+    };
+  } else {
+    c = { r: 138, g: 180, b: 248 };
+  }
+  rgbCache.set(h, c);
+  return c;
+}
+function rgba(h, a) {
+  const c = parseHex(h);
+  return `rgba(${c.r},${c.g},${c.b},${a})`;
+}
+function hslToRgb(hDeg, sPct, lPct) {
+  const h = (((hDeg % 360) + 360) % 360) / 360;
+  const s = sPct / 100, l = lPct / 100;
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const hue2rgb = t => {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return {
+    r: Math.round(hue2rgb(h + 1 / 3) * 255),
+    g: Math.round(hue2rgb(h) * 255),
+    b: Math.round(hue2rgb(h - 1 / 3) * 255),
+  };
+}
+function sineY(x, Wd, H, A, cyc, ph) {
+  return H / 2 + A * Math.sin(2 * Math.PI * cyc * x / Wd + ph) + A * 0.18 * Math.sin(4 * Math.PI * cyc * x / Wd + ph * 1.7);
+}
 function profMul(p, u) {
   if (p === 'center') return 0.3 + 0.7 * Math.sin(Math.PI * Math.min(1, Math.max(0, u)));
   if (p === 'edges') return 0.3 + 0.7 * Math.abs(2 * u - 1);
   return 1;
 }
+const BAND_IDX = { low: 0, mid: 1, high: 2, rms: 3 };
+const BAND_LIST = ['low', 'mid', 'high', 'rms'];
 
 export function createWaveRenderer(canvas) {
   const g = canvas.getContext('2d');
@@ -108,23 +151,48 @@ export function createWaveRenderer(canvas) {
   let micBuf = null;
   let freqBuf = null;
   let fakeOn = true;
+  let stripState = 'idle'; // 'idle' | 'recording' | 'paused' | 'transcribing'
   let raf = 0;
   let active = false;
   let last = 0;
-  let lastF = 0; // renderFrame() clock for externally-driven thumbs (T3/3 shared loop)
+  let lastF = 0;
   const t0 = performance.now();
   let gateOpen = false, env = 0, envFast = 0, envSlow = 0;
+  // Per-wave numeric smoothing buffers [low, mid, high, rms] — zero string allocation per frame
   const wSm = new Map();
   const gradCache = new Map();
+  // Reusable geometry buffers (avoid Path2D + GC churn per frame)
+  let yBuf = new Float32Array(256);
+  let yMirrorBuf = new Float32Array(256);
+  let barGeoX = new Float32Array(48);
+  let barGeoY = new Float32Array(48);
+  let barGeoH = new Float32Array(48);
+  const blReusable = { low: 0, mid: 0, high: 0, rms: 0 };
+  const smBlReusable = { low: 0, mid: 0, high: 0, rms: 0 };
+  let auroraRgb = hslToRgb(220, 80, 60);
   let Wd = 0, H = 0;
 
   const eff = (wv, k) => (wv.ov && wv.ov[k] != null ? wv.ov[k] : cfg[k]);
   const sensMap = () => { const k = cfg.sensitivity / 100; return { open: 2.6 - 1.5 * k, close: 2.2 - 1.5 * k, gain: 0.5 + 1.3 * k }; };
   const atkOf = v => { const k = (v == null ? cfg.attack : v) / 100; return 0.15 - 0.145 * k + 0.004; };
   const relOf = v => { const k = (v == null ? cfg.smooth : v) / 100; return 0.02 + 0.58 * k; };
-  // T2/3 vertical fit (ticket/52): headroom 0.52→0.40 so crests + halo stay inside
-  // the taller preview at normal levels; extremes still soft-clip at the edge (reads as loud).
   const ampOf = (HH, L, wv) => HH * IDLE_FRAC + HH * 0.40 * sm(L / (1 + 0.12 * L)) * (0.15 + 1.85 * (eff(wv, 'intensity') / 100));
+
+  function ensureYBuf(need) {
+    if (yBuf.length < need) {
+      yBuf = new Float32Array(need + 32);
+      yMirrorBuf = new Float32Array(need + 32);
+    }
+  }
+
+  function warmColorCache() {
+    if (cfg?.aurora?.hue != null) auroraRgb = hslToRgb(cfg.aurora.hue, 80, 60);
+    for (const wv of (cfg?.waves || [])) {
+      if (wv.c1) parseHex(wv.c1);
+      if (wv.c2) parseHex(wv.c2);
+    }
+  }
+  warmColorCache();
 
   function fit(nextW, nextH) {
     const d = Math.min(devicePixelRatio || 1, 2);
@@ -146,11 +214,63 @@ export function createWaveRenderer(canvas) {
     gradCache.clear();
   }
 
-  function drawStaticLine() {
+  function drawStaticLine(colorCss = 'rgba(255,255,255,0.14)') {
     if (Wd <= 2 || H <= 2) fit();
     g.clearRect(0, 0, Wd, H);
-    g.fillStyle = '#333439';
+    g.fillStyle = colorCss;
     g.fillRect(0, H / 2 - 1, Wd, 2);
+  }
+
+  function drawPausedState(t) {
+    if (Wd <= 2 || H <= 2) fit();
+    g.clearRect(0, 0, Wd, H);
+    if (reduced) {
+      drawStaticLine('rgba(229, 160, 13, 0.55)');
+      return;
+    }
+    const s = t / 1000;
+    const breath = 0.55 + 0.45 * Math.sin(s * 2.1);
+    const N = Math.max(48, Math.floor(Wd / 3));
+    g.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const x = u * Wd;
+      const envEnv = Math.sin(Math.PI * u);
+      const y = H / 2 + Math.sin(u * Math.PI * 5 + 0.6) * (1.8 + 1.4 * breath) * envEnv;
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.globalAlpha = 0.25 + 0.15 * breath;
+    g.lineWidth = 6;
+    g.strokeStyle = '#E5A00D';
+    g.stroke();
+    g.globalAlpha = 0.72 + 0.2 * breath;
+    g.lineWidth = 1.8;
+    g.stroke();
+    g.globalAlpha = 1;
+  }
+
+  function drawTranscribingState(t) {
+    if (Wd <= 2 || H <= 2) fit();
+    g.clearRect(0, 0, Wd, H);
+    const cy = H / 2;
+    g.fillStyle = 'rgba(91, 141, 239, 0.16)';
+    g.fillRect(0, cy - 1, Wd, 2);
+    if (reduced) {
+      g.fillStyle = 'rgba(139, 177, 250, 0.7)';
+      g.fillRect(Wd * 0.25, cy - 1.5, Wd * 0.5, 3);
+      return;
+    }
+    const s = (t / 1150) % 1;
+    const segW = Math.max(48, Wd * 0.34);
+    const x0 = -segW + (Wd + segW * 2) * s;
+    const gr = g.createLinearGradient(x0, 0, x0 + segW, 0);
+    gr.addColorStop(0, 'rgba(91, 141, 239, 0)');
+    gr.addColorStop(0.5, 'rgba(139, 177, 250, 0.95)');
+    gr.addColorStop(1, 'rgba(91, 141, 239, 0)');
+    g.fillStyle = gr;
+    g.fillRect(Math.max(0, x0), cy - 1.5, segW, 3);
   }
 
   if (typeof ResizeObserver === 'function') {
@@ -159,7 +279,11 @@ export function createWaveRenderer(canvas) {
         const cr = entries[0]?.contentRect;
         if (!cr) return;
         fit(cr.width, cr.height);
-        if (!raf && active && (reduced || (!analyser && !fakeOn))) drawStaticLine();
+        if (!raf && active && !canAnimate()) {
+          if (stripState === 'paused') drawPausedState(performance.now() - t0);
+          else if (stripState === 'transcribing') drawTranscribingState(performance.now() - t0);
+          else drawStaticLine();
+        }
       });
       ro.observe(canvas);
     } catch {}
@@ -175,7 +299,7 @@ export function createWaveRenderer(canvas) {
       const mm = sensMap();
       const raw = Math.sqrt(sum / micBuf.length) / 0.22 * 1.4 * mm.gain;
       const o = Math.max(FLOOR_MIN, FAKE_FLOOR * mm.open), c = Math.max(FLOOR_MIN, FAKE_FLOOR * mm.close);
-      gateOpen = gateOpen ? (raw >= c) : (raw > o); // floor frozen while open (fixed-floor hysteresis)
+      gateOpen = gateOpen ? (raw >= c) : (raw > o);
       tg = gateOpen ? perc(sm((raw - c) / Math.max(0.05, LOUD_REF - c))) : 0;
     } else if (fakeOn && !reduced) {
       const mm = sensMap(), raw = fakeRaw(t) * mm.gain;
@@ -192,9 +316,12 @@ export function createWaveRenderer(canvas) {
 
   function bandLevels() {
     if (!analyser) {
-      return { low: sm(envSlow), mid: sm(env), high: sm(envFast), rms: sm((env + envFast + envSlow) / 3) };
+      blReusable.low = sm(envSlow);
+      blReusable.mid = sm(env);
+      blReusable.high = sm(envFast);
+      blReusable.rms = sm((env + envFast + envSlow) / 3);
+      return blReusable;
     }
-    // Mic spectrum shape × gated level: silence → 0 (stillness), speech → opens.
     const n = analyser.frequencyBinCount;
     if (!freqBuf || freqBuf.length !== n) freqBuf = new Uint8Array(n);
     const buf = freqBuf;
@@ -208,21 +335,47 @@ export function createWaveRenderer(canvas) {
     m = sm((Math.sqrt(m / Math.max(1, q2 - q1)) - 0.02) / 0.2);
     h = sm((Math.sqrt(h / Math.max(1, n - q2)) - 0.015) / 0.18);
     const gate = sm(env / 0.12);
-    return { low: l * gate, mid: m * gate, high: h * gate, rms: sm(env) };
+    blReusable.low = l * gate;
+    blReusable.mid = m * gate;
+    blReusable.high = h * gate;
+    blReusable.rms = sm(env);
+    return blReusable;
   }
 
-  function shown(wv, band, raw, dt) {
-    const key = `${wv.id}:${band}`;
+  function getSmArr(wv) {
+    let arr = wSm.get(wv.id);
+    if (!arr) {
+      arr = new Float64Array(4);
+      arr[0] = -1;
+      wSm.set(wv.id, arr);
+    }
+    return arr;
+  }
+
+  function smoothWaveBands(wv, bl, dt) {
+    const arr = getSmArr(wv);
     const gain = wv.ov && wv.ov.sensitivity != null ? 0.4 + 1.2 * (wv.ov.sensitivity / 100) : 1;
-    const tgt = sm(raw * gain);
-    const prev = wSm.has(key) ? wSm.get(key) : tgt;
-    const nx = dt > 0 ? smoothE(prev, tgt, dt, atkOf(eff(wv, 'attack')), relOf(eff(wv, 'smooth'))) : tgt;
-    wSm.set(key, nx);
-    return nx;
+    const a = atkOf(eff(wv, 'attack')), r = relOf(eff(wv, 'smooth'));
+    const uninit = arr[0] < 0;
+    for (let bi = 0; bi < 4; bi++) {
+      const bKey = BAND_LIST[bi];
+      const tgt = sm((bl[bKey] ?? bl.rms) * gain);
+      arr[bi] = (dt > 0 && !uninit) ? smoothE(arr[bi], tgt, dt, a, r) : tgt;
+    }
+    return arr;
   }
 
-  function ampAt(x, bl, wv) {
-    const u = Wd > 0 ? x / Wd : 0;
+  function fillSmBl(wv, bl) {
+    const arr = getSmArr(wv);
+    if (arr[0] < 0) smoothWaveBands(wv, bl, 0);
+    smBlReusable.low = arr[0];
+    smBlReusable.mid = arr[1];
+    smBlReusable.high = arr[2];
+    smBlReusable.rms = arr[3];
+    return smBlReusable;
+  }
+
+  function ampAtU(u, bl, wv) {
     if ((wv.profile || 'flat') === 'bands') {
       const Al = ampOf(H, bl.low, wv), Am = ampOf(H, bl.mid, wv), Ah = ampOf(H, bl.high, wv);
       if (u < 0.5) { const k = u * 2; return Al * (1 - k) + Am * k; }
@@ -245,27 +398,18 @@ export function createWaveRenderer(canvas) {
     if (wv.colorMode === 'rainbow') {
       const rate = 0.1 + 3.0 * (eff(wv, 'speed') / 100);
       const gr = g.createLinearGradient(0, 0, Wd, 0), flow = (t / 1000) * 40 * rate;
-      for (let k = 0; k <= 6; k++) gr.addColorStop(k / 6, `hsl(${((flow + k * 60) % 360).toFixed(0)} 90% 65%)`);
+      for (let k = 0; k <= 6; k++) gr.addColorStop(k / 6, `hsl(${((flow + k * 60) | 0) % 360} 90% 65%)`);
       return gr;
     }
     return wv.c1;
   }
-  function halo(p, w, colorCss, alpha) {
-    if (alpha <= 0) return;
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.lineWidth = w; g.strokeStyle = colorCss; g.globalAlpha = sm(alpha); g.lineCap = 'round';
-    g.stroke(p);
-    g.restore();
-  }
-  function basePathP(ampFn, cyc) {
-    const p = new Path2D(), N = Math.max(64, Math.floor(Wd / 2));
+
+  function traceBuf(N, buf) {
+    g.beginPath();
     for (let i = 0; i <= N; i++) {
-      const x = i / N * Wd;
-      const y = sineY(x, Wd, H, ampFn(x), cyc, PH0); // standing: PH0 fixed, never travels
-      i ? p.lineTo(x, y) : p.moveTo(x, y);
+      const x = (i / N) * Wd;
+      i ? g.lineTo(x, buf[i]) : g.moveTo(x, buf[i]);
     }
-    return p;
   }
 
   function drawWave(t, wv, bl) {
@@ -274,58 +418,82 @@ export function createWaveRenderer(canvas) {
     const rate = 0.1 + 3.0 * (eff(wv, 'speed') / 100);
     const s = t / 1000;
     const wob = 0.7 + 0.3 * Math.sin(2 * Math.PI * 0.9 * rate * s + 0.7) * Math.sin(2 * Math.PI * 1.3 * rate * s);
-    const ampFn = x => {
-      let a = ampAt(x, bl, wv);
-      if (wv.type === 'flat-glow-line') a = Math.max(a * 0.15, 1.5);
-      return a * wob; // vertical pulsation only
-    };
+    const isFlat = wv.type === 'flat-glow-line';
+    const isSteps = wv.type === 'steps';
+    const isMirror = wv.type === 'mirror-sine';
+    const avgL = bl[wv.band] ?? bl.rms;
+    const baseA = ampOf(H, avgL, wv);
+    const st = isSteps ? (baseA / 4 + 0.5) : 0;
+    const N = Math.max(64, Math.floor(Wd / 2));
+    ensureYBuf(N + 1);
+
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const x = u * Wd;
+      let a = ampAtU(u, bl, wv);
+      if (isFlat) a = Math.max(a * 0.15, 1.5);
+      a *= wob;
+      let y = sineY(x, Wd, H, a, cyc, PH0);
+      if (isSteps) y = H / 2 + Math.round((y - H / 2) / st) * st;
+      yBuf[i] = y;
+      if (isMirror) yMirrorBuf[i] = sineY(x, Wd, H, a * 0.3, cyc, PH0);
+    }
+
     const col = strokeFor(wv, t);
     const colSolid = wv.colorMode === 'rainbow' ? '#9adcff' : wv.c1;
     const lwBase = +wv.thick || 2;
     const op = wv.opacity / 100, gl = wv.glow / 100;
-    const avgL = bl[wv.band] ?? bl.rms;
-    const thick = lwBase + 1.2 * sm(avgL); // thickness coupling
+    const thick = lwBase + 1.2 * sm(avgL);
+
     if (wv.type === 'ribbon') {
-      const p = basePathP(ampFn, cyc);
-      const baseA = ampOf(H, avgL, wv);
       const gr = g.createLinearGradient(0, H / 2 - baseA, 0, H / 2 + baseA + 14);
       gr.addColorStop(0, wv.colorMode === 'gradient' ? wv.c2 : rgba(colSolid, 0.35));
       gr.addColorStop(1, 'rgba(0,0,0,0)');
-      const f2 = new Path2D(p);
-      f2.lineTo(Wd, H); f2.lineTo(0, H); f2.closePath();
-      g.save(); g.globalAlpha = op * 0.8; g.fillStyle = wv.colorMode === 'rainbow' ? col : gr; g.fill(f2); g.restore();
+      traceBuf(N, yBuf);
+      g.lineTo(Wd, H);
+      g.lineTo(0, H);
+      g.closePath();
+      g.globalAlpha = op * 0.8;
+      g.fillStyle = wv.colorMode === 'rainbow' ? col : gr;
+      g.fill();
     }
-    let p;
-    if (wv.type === 'steps') {
-      p = new Path2D();
-      const N = Math.max(64, Math.floor(Wd / 2)), st = ampOf(H, avgL, wv) / 4 + 0.5;
-      for (let i = 0; i <= N; i++) {
-        const x = i / N * Wd;
-        let y = sineY(x, Wd, H, ampFn(x), cyc, PH0);
-        y = H / 2 + Math.round((y - H / 2) / st) * st;
-        i ? p.lineTo(x, y) : p.moveTo(x, y);
-      }
-    } else p = basePathP(ampFn, cyc);
-    g.save(); g.globalAlpha = op;
-    if (gl > 0) { halo(p, thick + 4 + gl * 14, col, 0.35 * gl); halo(p, thick + 2 + gl * 6, col, 0.22 * gl); }
+
+    // Build wave path ONCE — reused across halo passes and main stroke
+    traceBuf(N, yBuf);
+    g.lineCap = 'round';
+    g.lineJoin = isSteps ? 'miter' : 'round';
+    g.strokeStyle = col;
+
+    if (gl > 0) {
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = op * sm(0.35 * gl);
+      g.lineWidth = thick + 4 + gl * 14;
+      g.stroke();
+      g.globalAlpha = op * sm(0.22 * gl);
+      g.lineWidth = thick + 2 + gl * 6;
+      g.stroke();
+      g.globalCompositeOperation = 'source-over';
+    }
+
+    g.globalAlpha = op;
+    g.lineWidth = thick;
     if (wv.type === 'dash') {
-      g.save(); g.setLineDash([8, 7]); g.lineWidth = thick; g.strokeStyle = col; g.lineCap = 'round'; g.stroke(p); g.restore();
+      g.setLineDash([8, 7]);
+      g.stroke();
+      g.setLineDash([]);
     } else {
-      g.lineWidth = thick; g.strokeStyle = col; g.lineCap = 'round';
-      g.lineJoin = wv.type === 'steps' ? 'miter' : 'round';
-      g.stroke(p);
+      g.stroke();
     }
-    if (wv.type === 'mirror-sine') {
-      g.save(); g.globalAlpha = op * 0.3; g.lineWidth = Math.max(1, thick - 0.5); g.strokeStyle = col;
-      g.stroke(basePathP(x => ampFn(x) * 0.3, cyc)); g.restore();
+
+    if (isMirror) {
+      traceBuf(N, yMirrorBuf);
+      g.globalAlpha = op * 0.3;
+      g.lineWidth = Math.max(1, thick - 0.5);
+      g.stroke();
     }
-    g.restore();
+    g.globalAlpha = 1;
   }
 
-  // T3/3 (ticket/53): `bars` EQ type — vertical columns driven by the SAME
-  // smoothed band levels as the 6 line types (shown()/bandLevels), center-mirrored
-  // so it sits in the standing-wave family. Shape/count/gap persist per wave.
-  // Existing line renderers above are untouched.
   function barBase(u, bl, wv) {
     if ((wv.profile || 'flat') === 'bands') {
       if (u < 0.5) { const k = u * 2; return bl.low * (1 - k) + bl.mid * k; }
@@ -346,43 +514,41 @@ export function createWaveRenderer(canvas) {
     const bw = Math.max(1, slot - gap);
     const col = strokeFor(wv, t);
     const op = wv.opacity / 100, gl = wv.glow / 100;
-    const geo = [];
     for (let i = 0; i < count; i++) {
       const u = (i + 0.5) / count;
       const amp = ampOf(H, sm(barBase(u, bl, wv)), wv);
       const mod = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(2 * Math.PI * cyc * u + 0.9 * Math.sin(2 * Math.PI * 0.9 * rate * s + u * 3) + 0.4 * Math.sin(2 * Math.PI * 1.7 * rate * s)));
-      let h = Math.max(2, Math.min(H, amp * 2 * mod * profMul(wv.profile || 'flat', u) * wob));
-      geo.push({ x: i * slot + (slot - bw) / 2, y: H / 2 - h / 2, h });
+      const h = Math.max(2, Math.min(H, amp * 2 * mod * profMul(wv.profile || 'flat', u) * wob));
+      barGeoX[i] = i * slot + (slot - bw) / 2;
+      barGeoY[i] = H / 2 - h / 2;
+      barGeoH[i] = h;
     }
-    g.save();
-    g.globalAlpha = op;
     if (gl > 0) {
-      // One cheap glow pass (wider translucent columns, no shadowBlur) + main pass.
-      g.save();
       g.globalCompositeOperation = 'lighter';
       g.globalAlpha = op * 0.22 * gl;
       g.fillStyle = col;
-      for (const b of geo) g.fillRect(b.x - 1, b.y - 1, bw + 2, b.h + 2);
-      g.restore();
+      for (let i = 0; i < count; i++) g.fillRect(barGeoX[i] - 1, barGeoY[i] - 1, bw + 2, barGeoH[i] + 2);
+      g.globalCompositeOperation = 'source-over';
     }
+    g.globalAlpha = op;
     if (shape === 'needle') {
       g.strokeStyle = col;
       g.lineWidth = Math.max(1, Math.min(2.5, bw * 0.4));
       g.lineCap = 'round';
       g.beginPath();
-      for (const b of geo) { const nx = b.x + bw / 2; g.moveTo(nx, b.y); g.lineTo(nx, b.y + b.h); }
+      for (let i = 0; i < count; i++) { const nx = barGeoX[i] + bw / 2; g.moveTo(nx, barGeoY[i]); g.lineTo(nx, barGeoY[i] + barGeoH[i]); }
       g.stroke();
     } else {
       g.fillStyle = col;
       g.beginPath();
       const r = shape === 'square' ? 0 : Math.min(bw / 2, 3);
-      for (const b of geo) {
-        if (r > 0 && g.roundRect) { g.moveTo(b.x, b.y); g.roundRect(b.x, b.y, bw, b.h, r); }
-        else g.rect(b.x, b.y, bw, b.h);
+      for (let i = 0; i < count; i++) {
+        if (r > 0 && g.roundRect) { g.moveTo(barGeoX[i], barGeoY[i]); g.roundRect(barGeoX[i], barGeoY[i], bw, barGeoH[i], r); }
+        else g.rect(barGeoX[i], barGeoY[i], bw, barGeoH[i]);
       }
       g.fill();
     }
-    g.restore();
+    g.globalAlpha = 1;
   }
 
   const PARTS = Array.from({ length: 24 }, (_, i) => ({ u: (i + 0.5) / 24, sz: 1 + (i % 2), al: 0.22 + 0.28 * ((i * 53 % 10) / 10), j: (i * 7919 % 100) / 100 * 6.283 }));
@@ -392,47 +558,67 @@ export function createWaveRenderer(canvas) {
     const rate = 0.1 + 3.0 * (cfg.speed / 100);
     const A = ampOf(H, sm(env), top);
     const col = top.colorMode === 'rainbow' ? '#9adcff' : top.c1;
+    const rgb = parseHex(col);
+    g.fillStyle = `rgb(${rgb.r},${rgb.g},${rgb.b})`;
     for (let i = 0; i < n; i++) {
       const q = PARTS[i], x = q.u * Wd;
       const y = sineY(x, Wd, H, A, 3, PH0) + Math.sin(t / 700 * rate + q.j) * (0.6 + A * 0.12);
-      g.fillStyle = rgba(col, +q.al.toFixed(2));
+      g.globalAlpha = q.al;
       g.beginPath(); g.arc(x, y, q.sz, 0, 7); g.fill();
     }
+    g.globalAlpha = 1;
   }
   function drawAurora() {
     if (!cfg.aurora?.on) return;
-    const a = 0.05 + 0.14 * sm(envSlow);
+    const a = +(0.05 + 0.14 * sm(envSlow)).toFixed(3);
     const gr = g.createLinearGradient(0, 0, 0, H);
-    gr.addColorStop(0, `hsla(${cfg.aurora.hue} 80% 60% / ${a.toFixed(3)})`);
-    gr.addColorStop(1, `hsla(280 60% 70% / ${a.toFixed(3)})`);
+    gr.addColorStop(0, `rgba(${auroraRgb.r},${auroraRgb.g},${auroraRgb.b},${a})`);
+    gr.addColorStop(1, `rgba(191,115,245,${a})`);
     g.fillStyle = gr; g.fillRect(0, 0, Wd, H);
   }
 
   function drawStack(t, dt, bl0) {
     drawAurora();
     const bl = bl0 || { low: 0, mid: 0, high: 0, rms: 0 };
-    const vis = cfg.waves.filter(w => !w.mute);
-    if (dt > 0) vis.forEach(wv => { ['low', 'mid', 'high', 'rms'].forEach(b => shown(wv, b, bl[b] ?? bl.rms, dt)); });
-    const smBl = wv => ({ low: shown(wv, 'low', bl.low, 0), mid: shown(wv, 'mid', bl.mid, 0), high: shown(wv, 'high', bl.high, 0), rms: shown(wv, 'rms', bl.rms, 0) });
-    // list TOP = front: draw back-to-front so index 0 lands on top.
+    const vis = cfg.waves;
+    if (dt > 0) {
+      for (let i = 0; i < vis.length; i++) {
+        if (!vis[i].mute) smoothWaveBands(vis[i], bl, dt);
+      }
+    }
+    let top = null;
     for (let i = vis.length - 1; i >= 0; i--) {
       const wv = vis[i];
-      if (wv.type === 'bars') drawBars(t, wv, smBl(wv));
-      else drawWave(t, wv, smBl(wv));
+      if (wv.mute) continue;
+      if (!top) top = wv;
+      const smBl = fillSmBl(wv, bl);
+      if (wv.type === 'bars') drawBars(t, wv, smBl);
+      else drawWave(t, wv, smBl);
     }
-    const top = vis[0];
-    if (top) drawParts(t, top);
+    // Note: top-most visible wave is index 0
+    let front = null;
+    for (let i = 0; i < vis.length; i++) { if (!vis[i].mute) { front = vis[i]; break; } }
+    if (front) drawParts(t, front);
   }
 
   function canAnimate() {
-    return !reduced && !document.hidden && (Boolean(analyser) || fakeOn);
+    if (reduced || document.hidden) return false;
+    if (stripState === 'paused' || stripState === 'transcribing') return true;
+    return Boolean(analyser) || fakeOn;
+  }
+
+  function paintIdleSnapshot() {
+    if (document.hidden) return;
+    if (stripState === 'paused') drawPausedState(performance.now() - t0);
+    else if (stripState === 'transcribing') drawTranscribingState(performance.now() - t0);
+    else drawStaticLine();
   }
 
   function ensureLoop() {
     if (!active) return;
     if (!canAnimate()) {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
-      if (!document.hidden) drawStaticLine();
+      paintIdleSnapshot();
       return;
     }
     if (Wd <= 2 || H <= 2) fit();
@@ -455,17 +641,23 @@ export function createWaveRenderer(canvas) {
   function frame(now) {
     if (!raf || !active || !canAnimate()) {
       raf = 0;
-      if (!document.hidden && active) drawStaticLine();
+      if (active) paintIdleSnapshot();
       return;
     }
-    // Cap at ~60fps: skip frames arriving <16ms after the previous one.
-    if (now - last < 15) { raf = requestAnimationFrame(frame); return; }
+    const minInterval = (stripState === 'paused' || stripState === 'transcribing') ? 32 : 15;
+    if (now - last < minInterval) { raf = requestAnimationFrame(frame); return; }
     const dt = Math.min(0.05, (now - last) / 1000 || 0.016);
     last = now;
     const t = now - t0;
-    g.clearRect(0, 0, Wd, H);
-    stepLevel(t, dt);
-    drawStack(t, dt, bandLevels());
+    if (stripState === 'paused') {
+      drawPausedState(t);
+    } else if (stripState === 'transcribing') {
+      drawTranscribingState(t);
+    } else {
+      g.clearRect(0, 0, Wd, H);
+      stepLevel(t, dt);
+      drawStack(t, dt, bandLevels());
+    }
     raf = requestAnimationFrame(frame);
   }
 
@@ -473,8 +665,17 @@ export function createWaveRenderer(canvas) {
   return {
     setConfig(c) {
       cfg = c;
+      warmColorCache();
+      gradCache.clear();
       const alive = new Set(c.waves.map(w => w.id));
-      [...wSm.keys()].forEach(k => { if (!alive.has(String(k).split(':')[0])) wSm.delete(k); });
+      for (const k of wSm.keys()) { if (!alive.has(k)) wSm.delete(k); }
+    },
+    setState(mode) {
+      const next = (mode === 'recording' || mode === 'paused' || mode === 'transcribing') ? mode : 'idle';
+      if (stripState === next) return;
+      stripState = next;
+      if (active) ensureLoop();
+      else paintIdleSnapshot();
     },
     setAnalyser(node) {
       analyser = node || null;
@@ -495,10 +696,8 @@ export function createWaveRenderer(canvas) {
       active = false;
       if (raf) cancelAnimationFrame(raf);
       raf = 0;
-      drawStaticLine();
+      paintIdleSnapshot();
     },
-    // T3/3: one synchronous frame on the caller's clock — lets app.js drive ALL
-    // starter thumbs from ONE shared rAF instead of N per-renderer loops.
     renderFrame(now) {
       if (Wd <= 2 || H <= 2) fit();
       g.clearRect(0, 0, Wd, H);
@@ -516,7 +715,11 @@ export function createWaveRenderer(canvas) {
       fit();
       g.clearRect(0, 0, Wd, H);
       const bl = { low: 0.4, mid: 0.55, high: 0.45, rms: 0.5 };
-      cfg.waves.filter(w => !w.mute).forEach(wv => { ['low', 'mid', 'high', 'rms'].forEach(b => wSm.set(`${wv.id}:${b}`, bl[b])); });
+      for (const wv of cfg.waves) {
+        if (wv.mute) continue;
+        const arr = getSmArr(wv);
+        arr[0] = bl.low; arr[1] = bl.mid; arr[2] = bl.high; arr[3] = bl.rms;
+      }
       drawStack(1200, 0, bl);
     },
   };
