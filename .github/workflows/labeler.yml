@@ -17,3 +17,67 @@ jobs:
           configuration-path: ".github/labeler.yml"
           sync-labels: true
           dot: true
+
+      - name: Label by PR title (type & priority)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const title = (pr.title || '').trim();
+
+            const typeRules = [
+              ['type/feat', /^feat(\(.*\))?:\s/i],
+              ['type/fix', /^fix(\(.*\))?:\s/i],
+              ['type/refactor', /^refactor(\(.*\))?:\s/i],
+              ['type/style', /^style(\(.*\))?:\s/i],
+              ['type/perf', /^perf(\(.*\))?:\s/i],
+              ['type/chore', /^chore(\(.*\))?:\s/i],
+              ['type/docs', /^docs(\(.*\))?:\s/i],
+              ['type/test', /^test(\(.*\))?:\s/i],
+            ];
+
+            const priorityRules = [
+              ['priority/critical', /^fix.*(auth|security|secret|breach|cors|leak|exploit|bypass|inject|data[ ._-]?loss)/i],
+              ['priority/high', /^fix.*(transcript|transcription|recording|audio|realtime|stream|mic|pipeline|buffer|chunk|engine|stt|polish|fallback|quota)/i],
+              ['priority/medium', /^fix.*(settings|stagebar|wave|button|icon|css|class|color|font|size|margin|padding|scroll|layout|modal|drawer|sheet|panel|tab|nav|menu|tooltip|hover|focus|align|position|z-index|ui|ci|mobile)/i],
+              ['priority/low', /^fix.*(whitespace|indent|comment|doc|readme|typo|format|lint|spell|grammar|minor|trivial|cosmetic)/i],
+            ];
+
+            const desired = new Set();
+            for (const [label, re] of typeRules) {
+              if (re.test(title)) {
+                desired.add(label);
+                break;
+              }
+            }
+            if (desired.has('type/fix')) {
+              for (const [label, re] of priorityRules) {
+                if (re.test(title)) {
+                  desired.add(label);
+                  break;
+                }
+              }
+            }
+
+            const existing = pr.labels.map((l) => l.name);
+            const toRemove = existing.filter(
+              (l) => (l.startsWith('type/') || l.startsWith('priority/')) && !desired.has(l)
+            );
+            const toAdd = [...desired].filter((l) => !existing.includes(l));
+
+            for (const label of toRemove) {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                name: label,
+              }).catch(() => {});
+            }
+            if (toAdd.length > 0) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                labels: toAdd,
+              });
+            }
