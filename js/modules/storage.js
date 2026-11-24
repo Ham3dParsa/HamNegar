@@ -439,15 +439,36 @@ function parsePolishChain(raw, defaults){
   return defaults.map(e=>({ ...e }));
 }
 
-// Wave personalization (ticket/50): stack model v3 under its own key. Never logs colors/keys.
+// Wave personalization (ticket/50+56): stack model v3 with 8 distinct renderers + legacy migration. Never logs colors/keys.
 export const WAVE_KEY = 'hamnegar.wave.v3';
 export const WAVE_IDLE_KEY = 'hamnegar.wave.idle';
-export const WAVE_TYPES = ['silk', 'droplet', 'pulse-orb', 'capsule-eq', 'bars', 'sine', 'mirror-sine', 'ribbon', 'dash', 'steps', 'flat-glow-line'];
+export const WAVE_TYPES = [
+  'pixel-2bit',
+  'siri-ribbon',
+  'capsule-eq',
+  'droplet-orb',
+  'laser-scope',
+  'sonic-rings',
+  'starburst-particles',
+  'aurora-curtain',
+];
+const LEGACY_WAVE_TYPE_MAP = {
+  silk: 'siri-ribbon',
+  droplet: 'droplet-orb',
+  'pulse-orb': 'sonic-rings',
+  'capsule-eq': 'capsule-eq',
+  bars: 'capsule-eq',
+  sine: 'laser-scope',
+  'mirror-sine': 'laser-scope',
+  'flat-glow-line': 'laser-scope',
+  ribbon: 'aurora-curtain',
+  steps: 'pixel-2bit',
+  dash: 'pixel-2bit',
+};
 export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
 export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
 export const WAVE_PROFILES = ['flat', 'center', 'edges', 'bands'];
 export const WAVE_PEAKS = ['low', 'mid', 'high'];
-// T3/3 (ticket/53): bars EQ column options — shape/count/gap persist per wave.
 export const WAVE_BAR_SHAPES = ['rounded', 'square', 'needle'];
 export const WAVE_BAR_DEFAULTS = { shape: 'rounded', count: 24, gap: 2 };
 export const DICT_KEY = 'hamnegar.dict.v1';
@@ -471,27 +492,40 @@ function waveOv(v) {
   if (!Number.isFinite(n)) return null;
   return Math.max(0, Math.min(100, Math.round(n)));
 }
+function mapLegacyPeaksToDetail(peaks) {
+  if (peaks === 'low') return 2;
+  if (peaks === 'high') return 5;
+  return 3;
+}
 function normalizeWaveEntry(x, idx) {
   if (!x || typeof x !== 'object') return null;
   const ov = (x.ov && typeof x.ov === 'object') ? x.ov : {};
   const name = typeof x.name === 'string' && x.name.trim()
     ? x.name.trim().slice(0, 24)
     : `موج ${idx + 1}`;
+  const rawType = typeof x.type === 'string' ? x.type.trim() : '';
+  const mappedType = LEGACY_WAVE_TYPE_MAP[rawType] || rawType;
+  const type = wavePick(mappedType, WAVE_TYPES, 'siri-ribbon');
+  const legacyMirror = rawType === 'mirror-sine' ? true : undefined;
   return {
     id: typeof x.id === 'string' && x.id.trim() ? x.id.trim().slice(0, 32) : `w${idx + 1}`,
     name,
-    type: wavePick(x.type, WAVE_TYPES, 'sine'),
-    colorMode: wavePick(x.colorMode, WAVE_COLOR_MODES, 'solid'),
-    c1: waveColor(x.c1, '#8ab4f8'),
-    c2: waveColor(x.c2, '#c4b5fd'),
-    opacity: waveClampInt(x.opacity, 0, 100, 100),
-    glow: waveClampInt(x.glow, 0, 100, 70),
+    type,
+    colorMode: wavePick(x.colorMode, WAVE_COLOR_MODES, 'gradient'),
+    c1: waveColor(x.c1, '#60a5fa'),
+    c2: waveColor(x.c2, '#a78bfa'),
+    opacity: waveClampInt(x.opacity, 0, 100, 96),
+    glow: waveClampInt(x.glow, 0, 100, 68),
     thick: (() => { const n = Number(x.thick); return Number.isFinite(n) ? Math.max(1, Math.min(6, Math.round(n * 2) / 2)) : 2; })(),
+    detail: waveClampInt(x.detail, 1, 5, mapLegacyPeaksToDetail(x.peaks)),
     peaks: wavePick(x.peaks, WAVE_PEAKS, 'mid'),
     band: wavePick(x.band, WAVE_BANDS, 'rms'),
-    profile: wavePick(x.profile, WAVE_PROFILES, 'flat'),
+    profile: wavePick(x.profile, WAVE_PROFILES, 'center'),
+    mirror: typeof x.mirror === 'boolean' ? x.mirror : (legacyMirror ?? (type !== 'aurora-curtain')),
+    grid: typeof x.grid === 'boolean' ? x.grid : (type === 'pixel-2bit'),
+    peakHold: typeof x.peakHold === 'boolean' ? x.peakHold : true,
+    pixelSize: waveClampInt(x.pixelSize, 3, 12, 5),
     mute: x.mute === true,
-    // T3/3 bars EQ: old entries safely fall back to defaults (never wiped).
     barShape: wavePick(x.barShape, WAVE_BAR_SHAPES, WAVE_BAR_DEFAULTS.shape),
     barCount: waveClampInt(x.barCount, 8, 48, WAVE_BAR_DEFAULTS.count),
     barGap: waveClampInt(x.barGap, 0, 8, WAVE_BAR_DEFAULTS.gap),
@@ -508,7 +542,7 @@ function normalizeWaveList(arr) {
   if (!Array.isArray(arr)) return [];
   const out = [];
   const seen = new Set();
-  arr.forEach((raw, i) => {
+  arr.forEach((raw) => {
     if (out.length >= WAVE_MAX) return;
     const e = normalizeWaveEntry(raw, out.length);
     if (!e) return;
@@ -524,28 +558,30 @@ function normalizeWaveList(arr) {
 export function defaultWaveConfig() {
   return {
     version: 3,
-    starterId: 'liquid-silk',
-    sensitivity: 50,
-    attack: 52,
-    speed: 50,
-    intensity: 54,
-    smooth: 58,
-    particles: 10,
-    aurora: { on: false, hue: 220 },
+    starterId: 'siri-aurora',
+    sensitivity: 56,
+    attack: 60,
+    speed: 52,
+    intensity: 62,
+    smooth: 54,
+    particles: 8,
+    aurora: { on: true, hue: 225 },
     waves: [
       {
-        id: 'w1', name: 'موج ۱', type: 'silk', colorMode: 'gradient',
-        c1: '#6ea0ff', c2: '#5eead4', opacity: 96, glow: 72, thick: 2,
-        peaks: 'mid', band: 'rms', profile: 'center', mute: false,
+        id: 'w1', name: 'موج اصلی', type: 'siri-ribbon', colorMode: 'gradient',
+        c1: '#60a5fa', c2: '#c084fc', opacity: 96, glow: 72, thick: 2,
+        detail: 3, peaks: 'mid', band: 'rms', profile: 'center',
+        mirror: true, grid: false, peakHold: true, pixelSize: 5, mute: false,
         barShape: 'rounded', barCount: 24, barGap: 2,
         ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
       },
       {
-        id: 'w2', name: 'موج ۲', type: 'silk', colorMode: 'solid',
-        c1: '#c4b5fd', c2: '#8ab4f8', opacity: 52, glow: 48, thick: 1.5,
-        peaks: 'high', band: 'mid', profile: 'center', mute: false,
+        id: 'w2', name: 'لایه مکمل', type: 'siri-ribbon', colorMode: 'solid',
+        c1: '#5eead4', c2: '#60a5fa', opacity: 48, glow: 52, thick: 1.5,
+        detail: 4, peaks: 'high', band: 'mid', profile: 'center',
+        mirror: true, grid: false, peakHold: true, pixelSize: 5, mute: false,
         barShape: 'rounded', barCount: 24, barGap: 2,
-        ov: { speed: 62, intensity: null, attack: null, smooth: null, sensitivity: null },
+        ov: { speed: 66, intensity: null, attack: null, smooth: null, sensitivity: null },
       },
     ],
   };
@@ -565,7 +601,7 @@ function normalizeWaveConfig(raw) {
     smooth: waveClampInt(o.smooth, 0, 100, fb.smooth),
     particles: waveClampInt(o.particles, 0, 24, fb.particles),
     aurora: {
-      on: aur.on === true,
+      on: typeof aur.on === 'boolean' ? aur.on : fb.aurora.on,
       hue: waveClampInt(aur.hue, 0, 360, fb.aurora.hue),
     },
     waves: waves.length ? waves : fb.waves,

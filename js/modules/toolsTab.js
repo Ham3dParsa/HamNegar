@@ -22,6 +22,7 @@ const SVG_DEL = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" str
 
 let editingId = null; // null = creating new tool when editor open, or string tool id
 let editorVisible = false;
+let sandboxTargetId = 'stage-structure'; // '__editor__' or a prompt tool id
 let bound = false;
 let onChanged = () => {};
 
@@ -30,6 +31,113 @@ function effectivePromptFor(tool) {
   const custom = (tool.system || '').trim();
   if (custom) return custom;
   return BUILTIN_PROMPTS[tool.id] || '';
+}
+
+function getPromptTools() {
+  return Storage.getToolsConfig().filter(t => t.kind === 'prompt');
+}
+
+function resolveSandboxSpec() {
+  const promptTools = getPromptTools();
+  const useEditor = editorVisible && sandboxTargetId === '__editor__';
+  if (useEditor) {
+    const draftName = ($('tool-ed-label')?.value || '').trim();
+    const editingTool = editingId ? promptTools.find(t => t.id === editingId) : null;
+    const label = draftName || editingTool?.label || 'ابزار سفارشی جدید';
+    const baseSystem = ($('tool-ed-system')?.value || '').trim() || BUILTIN_PROMPTS['stage-structure'];
+    const respectTone = !!$('tool-ed-tone')?.checked;
+    const smart = !!$('tool-ed-smart')?.checked;
+    return {
+      id: '__editor__',
+      editToolId: editingId,
+      isDraft: true,
+      label,
+      sourceNote: editingId ? 'پیش‌نویسِ ذخیره‌نشده ویرایشگر' : 'پیش‌نویسِ ابزار جدید',
+      baseSystem,
+      respectTone,
+      smart,
+    };
+  }
+  const picked = promptTools.find(t => t.id === sandboxTargetId)
+    || promptTools.find(t => t.id === 'stage-structure')
+    || promptTools[0];
+  if (picked) {
+    sandboxTargetId = picked.id;
+    return {
+      id: picked.id,
+      editToolId: picked.id,
+      isDraft: false,
+      label: picked.label,
+      sourceNote: picked.builtin
+        ? ((picked.system || '').trim() ? 'ابزار داخلی با پرامپت ویرایش‌شده' : 'پرامپت پیش‌فرض داخلی')
+        : 'ابزار سفارشی ذخیره‌شده',
+      baseSystem: effectivePromptFor(picked),
+      respectTone: picked.respectTone !== false,
+      smart: !!picked.smart,
+    };
+  }
+  return {
+    id: 'stage-structure',
+    editToolId: 'stage-structure',
+    isDraft: false,
+    label: 'ساختاردهی متن',
+    sourceNote: 'پرامپت پیش‌فرض داخلی',
+    baseSystem: BUILTIN_PROMPTS['stage-structure'],
+    respectTone: true,
+    smart: true,
+  };
+}
+
+function renderSandboxTargetUI() {
+  const sel = $('tool-test-target');
+  const banner = $('tool-test-banner');
+  const peekTxt = $('tool-test-prompt-text');
+  const runBtn = $('btn-tool-test');
+  const editBtn = $('btn-sandbox-edit-target');
+  const promptTools = getPromptTools();
+
+  if (sel) {
+    if (!editorVisible && sandboxTargetId === '__editor__') {
+      sandboxTargetId = editingId || promptTools[0]?.id || 'stage-structure';
+    }
+    sel.innerHTML = '';
+    if (editorVisible) {
+      const draftLabel = ($('tool-ed-label')?.value || '').trim() || (editingId ? 'ابزار در حال ویرایش' : 'ابزار جدید');
+      const opt = document.createElement('option');
+      opt.value = '__editor__';
+      opt.textContent = `پیش‌نویس ویرایشگر: «${draftLabel}»`;
+      sel.appendChild(opt);
+    }
+    for (const t of promptTools) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = `${t.label}${t.builtin ? '' : ' (سفارشی)'}`;
+      sel.appendChild(opt);
+    }
+    const validVals = [...sel.options].map(o => o.value);
+    if (!validVals.includes(sandboxTargetId)) {
+      sandboxTargetId = editorVisible ? '__editor__' : (promptTools.find(t => t.id === 'stage-structure')?.id || validVals[0] || '');
+    }
+    sel.value = sandboxTargetId;
+  }
+
+  const spec = resolveSandboxSpec();
+  const sampleText = ($('tool-test-input')?.value || '').trim();
+  const finalPrompt = applyTonePreference(spec.baseSystem, { respectTone: spec.respectTone, text: sampleText || 'نمونه' });
+
+  if (banner) {
+    const toneTxt = spec.respectTone ? 'با لحاظ تنظیم لحن' : 'مستقل از لحن';
+    const smartTxt = spec.smart ? 'مسیریابی هوشمند (قوی‌ترین مدل)' : 'مدل عادی زنجیره';
+    banner.textContent = `هدف فعال: «${spec.label}» · ${spec.sourceNote} · ${toneTxt} · ${smartTxt}`;
+    banner.classList.toggle('is-draft', spec.isDraft);
+  }
+  if (peekTxt) peekTxt.textContent = finalPrompt;
+  if (runBtn && !runBtn.disabled) {
+    runBtn.textContent = `اجرای تست «${spec.label}»`;
+  }
+  if (editBtn) {
+    editBtn.hidden = spec.isDraft || !spec.editToolId;
+  }
 }
 
 function renderToolsManagerList() {
@@ -132,6 +240,7 @@ function renderToolsManagerList() {
       [list[idx - 1], list[idx]] = [list[idx], list[idx - 1]];
       Storage.saveToolsConfig(list);
       renderToolsManagerList();
+      renderSandboxTargetUI();
       onChanged();
     });
 
@@ -148,6 +257,7 @@ function renderToolsManagerList() {
       [list[idx], list[idx + 1]] = [list[idx + 1], list[idx]];
       Storage.saveToolsConfig(list);
       renderToolsManagerList();
+      renderSandboxTargetUI();
       onChanged();
     });
 
@@ -158,7 +268,7 @@ function renderToolsManagerList() {
       editBtn.type = 'button';
       editBtn.className = 'btn-ghost btn-xs';
       editBtn.innerHTML = SVG_EDIT;
-      editBtn.title = 'ویرایش نام و پرامپت سیستمی';
+      editBtn.title = 'ویرایش و تست پرامپت سیستمی';
       editBtn.setAttribute('aria-label', 'ویرایش ' + tool.label);
       editBtn.addEventListener('click', () => openToolEditor(tool.id));
       actions.appendChild(editBtn);
@@ -176,13 +286,16 @@ function renderToolsManagerList() {
         const next = snapshot.filter(x => x.id !== tool.id);
         Storage.saveToolsConfig(next);
         if (editingId === tool.id) closeToolEditor();
+        if (sandboxTargetId === tool.id) sandboxTargetId = 'stage-structure';
         renderToolsManagerList();
+        renderSandboxTargetUI();
         onChanged();
         Logger.toast(`«${tool.label}» حذف شد`, 7000, {
           actionLabel: 'واگرد',
           onAction: () => {
             Storage.saveToolsConfig(snapshot);
             renderToolsManagerList();
+            renderSandboxTargetUI();
             onChanged();
             Logger.toast(`«${tool.label}» برگردانده شد`);
           },
@@ -209,6 +322,7 @@ function openToolEditor(toolId = null) {
 
   editorVisible = true;
   editingId = toolId;
+  sandboxTargetId = '__editor__';
   card.hidden = false;
 
   if (toolId) {
@@ -233,17 +347,23 @@ function openToolEditor(toolId = null) {
   }
 
   renderToolsManagerList();
+  renderSandboxTargetUI();
   labelEl?.focus?.();
 }
 
 function closeToolEditor() {
   const card = $('tool-editor-card');
   const sysEl = $('tool-ed-system');
+  const wasEditing = editingId;
   editorVisible = false;
   editingId = null;
+  if (sandboxTargetId === '__editor__') {
+    sandboxTargetId = wasEditing || 'stage-structure';
+  }
   if (sysEl) sysEl.value = '';
   if (card) card.hidden = true;
   renderToolsManagerList();
+  renderSandboxTargetUI();
 }
 
 function saveToolFromEditor() {
@@ -257,6 +377,7 @@ function saveToolFromEditor() {
   if (!systemRaw) { Logger.toast('پرامپت سیستمی نمی‌تواند خالی باشد'); $('tool-ed-system')?.focus?.(); return; }
 
   const list = Storage.getToolsConfig();
+  let savedId = editingId;
   if (editingId) {
     const target = list.find(t => t.id === editingId);
     if (!target) return;
@@ -274,9 +395,9 @@ function saveToolFromEditor() {
   } else {
     const customCount = list.filter(t => !t.builtin).length;
     if (customCount >= 30) { Logger.toast('سقف ۳۰ ابزار سفارشی پر شده است'); return; }
-    const newId = 'custom-' + Date.now().toString(36);
+    savedId = 'custom-' + Date.now().toString(36);
     list.push({
-      id: newId,
+      id: savedId,
       builtin: false,
       kind: 'prompt',
       label,
@@ -290,6 +411,7 @@ function saveToolFromEditor() {
     Storage.saveToolsConfig(list);
     Logger.toast(`ابزار «${label}» ساخته شد و در نوار سریع پین شد`);
   }
+  sandboxTargetId = savedId || 'stage-structure';
   closeToolEditor();
   onChanged();
 }
@@ -318,7 +440,7 @@ function renderSandboxModels() {
 
   const head = document.createElement('option');
   head.value = '';
-  head.textContent = 'خودکار (مطابق اولویت و Smart Routing)';
+  head.textContent = 'خودکار (مطابق اولویت ابزار)';
   sel.appendChild(head);
 
   const seen = new Set();
@@ -364,8 +486,8 @@ function syncSandboxToneNote() {
   if (!note) return;
   const tone = Storage.getSettings().tonePref;
   note.textContent = tone === 'formal'
-    ? 'حالت لحن فعلی: رسمی و کتابی (قابل تغییر در تب رفتار)'
-    : 'حالت لحن فعلی: حفظ لحن خودمانی گوینده (پیش‌فرض)';
+    ? 'لحن فعال: رسمی و کتابی (تب رفتار)'
+    : 'لحن فعال: حفظ لحن خودمانی گوینده';
 }
 
 async function runPromptSandbox() {
@@ -373,7 +495,6 @@ async function runPromptSandbox() {
   const outEl = $('tool-test-output');
   const metaEl = $('tool-test-meta');
   const btn = $('btn-tool-test');
-  const sysInput = editorVisible ? ($('tool-ed-system')?.value || '').trim() : '';
   const sampleText = (inputEl?.value || '').trim();
 
   if (!sampleText) {
@@ -382,10 +503,8 @@ async function runPromptSandbox() {
     return;
   }
 
-  const baseSystem = sysInput || BUILTIN_PROMPTS['stage-structure'];
-  const respectTone = editorVisible ? !!$('tool-ed-tone')?.checked : true;
-  const smart = editorVisible ? !!$('tool-ed-smart')?.checked : true;
-  const finalSystem = applyTonePreference(baseSystem, { respectTone, text: sampleText });
+  const spec = resolveSandboxSpec();
+  const finalSystem = applyTonePreference(spec.baseSystem, { respectTone: spec.respectTone, text: sampleText });
 
   let prefer = null;
   const selVal = $('tool-test-model')?.value || '';
@@ -393,29 +512,32 @@ async function runPromptSandbox() {
     try { prefer = JSON.parse(selVal); } catch { prefer = null; }
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'در حال اجرای تست…'; }
-  if (outEl) { outEl.hidden = false; outEl.classList.remove('is-error'); outEl.textContent = 'در حال دریافت پاسخ از مدل…'; }
+  if (btn) { btn.disabled = true; btn.textContent = `در حال تست «${spec.label}»…`; }
+  if (outEl) { outEl.hidden = false; outEl.classList.remove('is-error'); outEl.textContent = `در حال اجرای «${spec.label}»…`; }
   if (metaEl) metaEl.textContent = '';
 
   const t0 = performance.now();
   try {
     const res = await Transcription.textChain(sampleText, {
       system: finalSystem,
-      layer: smart ? 'structure' : 'polish',
-      smart,
+      layer: spec.smart ? 'structure' : 'polish',
+      smart: spec.smart,
       ...(prefer ? { prefer } : {}),
     });
     const sec = ((performance.now() - t0) / 1000).toFixed(1);
     if (outEl) outEl.textContent = res.text;
-    if (metaEl) metaEl.textContent = `مدل: ${res.model} (${res.providerId}) · زمان: ${fa(sec)} ثانیه`;
+    if (metaEl) metaEl.textContent = `ابزار: ${spec.label} · مدل: ${res.model} (${res.providerId}) · زمان: ${fa(sec)} ثانیه`;
   } catch (e) {
     if (outEl) {
       outEl.classList.add('is-error');
-      outEl.textContent = 'خطا در اجرای تست: ' + (e?.message || 'ناموفق');
+      outEl.textContent = `خطا در تست «${spec.label}»: ` + (e?.message || 'ناموفق');
     }
     if (metaEl) metaEl.textContent = '';
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'اجرای تست پرامپت'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = `اجرای تست «${resolveSandboxSpec().label}»`;
+    }
   }
 }
 
@@ -423,6 +545,7 @@ export function refreshToolsTab() {
   renderToolsManagerList();
   renderSandboxModels();
   syncSandboxToneNote();
+  renderSandboxTargetUI();
 }
 
 export function mountToolsTab(deps = {}) {
@@ -437,17 +560,33 @@ export function mountToolsTab(deps = {}) {
       const prev = Storage.getToolsConfig();
       Storage.resetToolsConfig();
       closeToolEditor();
+      sandboxTargetId = 'stage-structure';
       renderToolsManagerList();
+      renderSandboxTargetUI();
       onChanged();
       Logger.toast('چیدمان و پرامپت ابزارها بازنشانی شد', 7000, {
         actionLabel: 'واگرد',
         onAction: () => {
           Storage.saveToolsConfig(prev);
           renderToolsManagerList();
+          renderSandboxTargetUI();
           onChanged();
           Logger.toast('چیدمان قبلی برگردانده شد');
         },
       });
+    });
+
+    $('tool-test-target')?.addEventListener('change', (e) => {
+      sandboxTargetId = e.target.value || 'stage-structure';
+      renderSandboxTargetUI();
+    });
+    $('btn-sandbox-edit-target')?.addEventListener('click', () => {
+      const spec = resolveSandboxSpec();
+      if (spec.editToolId) openToolEditor(spec.editToolId);
+    });
+    ['tool-ed-label', 'tool-ed-system', 'tool-ed-tone', 'tool-ed-smart'].forEach(id => {
+      $(id)?.addEventListener('input', () => { if (editorVisible) renderSandboxTargetUI(); });
+      $(id)?.addEventListener('change', () => { if (editorVisible) renderSandboxTargetUI(); });
     });
 
     document.querySelectorAll('[data-sandbox-sample]').forEach(btn => {
@@ -457,14 +596,16 @@ export function mountToolsTab(deps = {}) {
         const inp = $('tool-test-input');
         if (txt && inp) {
           inp.value = txt;
+          renderSandboxTargetUI();
           inp.focus();
         }
       });
     });
 
     const testInp = $('tool-test-input');
-    if (testInp && !testInp.value.trim()) {
-      testInp.value = SANDBOX_SAMPLES.casual;
+    if (testInp) {
+      if (!testInp.value.trim()) testInp.value = SANDBOX_SAMPLES.casual;
+      testInp.addEventListener('input', () => renderSandboxTargetUI());
     }
 
     $('btn-tool-test')?.addEventListener('click', runPromptSandbox);

@@ -1713,18 +1713,31 @@ function faNormalizeDiff(s){
     .replace(/ة/g, 'ه')
     .replace(/[\u064B-\u0652\u0670\u0640]/g, ''); // Arabic diacritics + superscript-alef + tatweel
 }
-function faTokenizeDiff(s){
-  // Words = letters/digits/marks/ZWNJ runs (ZWNJ never splits: «می‌شود» stays one
-  // token; diacritics/tatweel stay glued so raw/render token counts match normalized
-  // ones); every other non-space char (punctuation «،.؟!;:«»()…» etc.) is its own
-  // token, so an unchanged word stays white while attached punctuation highlights alone.
-  const m = String(s ?? '').match(/[\p{L}\p{M}\p{N}\u200C]+|[^\s\p{L}\p{M}\p{N}\u200C]/gu);
-  return m || [];
+const DIFF_TOK_RE = /[\p{L}\p{M}\p{N}\u200C]+|[^\s\p{L}\p{M}\p{N}\u200C]/gu;
+function faTokenizeWithGaps(s){
+  const str = String(s ?? '');
+  const tokens = [];
+  const gaps = [];
+  let lastIdx = 0;
+  DIFF_TOK_RE.lastIndex = 0;
+  let m;
+  while ((m = DIFF_TOK_RE.exec(str)) !== null) {
+    gaps.push(str.slice(lastIdx, m.index));
+    tokens.push(m[0]);
+    lastIdx = m.index + m[0].length;
+  }
+  return { tokens, gaps, tail: str.slice(lastIdx) };
 }
-function diffFaTokens(a, b){
+function faTokenizeDiff(s){
+  return faTokenizeWithGaps(s).tokens;
+}
+function faLineSig(gap){
+  return (String(gap || '').match(/\r?\n/g) || []).length;
+}
+function diffFaTokens(a, b, gapsA, gapsB, tailA, tailB){
   const n = a.length, m = b.length;
-  if (!n && !m) return { ops: [], changed: 0, total: 0, empty: true, fallback: false };
-  if (n * m > 40000) return { ops: null, changed: n + m, total: Math.max(n, m), empty: false, fallback: true };
+  if (!n && !m) return { ops: [], changed: 0, breakChanges: 0, total: 0, empty: true, layoutOnly: false, fallback: false };
+  if (n * m > 40000) return { ops: null, changed: n + m, breakChanges: 0, total: Math.max(n, m), empty: false, layoutOnly: false, fallback: true };
   const W = m + 1;
   const dp = new Uint32Array((n + 1) * W);
   const at = (i, j) => dp[i * W + j];
@@ -1741,10 +1754,38 @@ function diffFaTokens(a, b){
   while (j < m) { ops.push({ t: 'ins', b: j }); j++; }
   diffPairSubstitutions(ops);
   let changed = 0;
-  for (const o of ops) if (o.t !== 'eq') changed++;
+  let breakChanges = 0;
+  for (const o of ops) {
+    if (o.t !== 'eq') {
+      changed++;
+      const nlB = (gapsB && o.b !== undefined) ? faLineSig(gapsB[o.b]) : 0;
+      const nlA = (gapsA && o.a !== undefined) ? faLineSig(gapsA[o.a]) : 0;
+      if (o.t === 'ins' && nlB > 0) {
+        o.nlDelta = nlB;
+        breakChanges += nlB;
+      } else if (o.t === 'del' && nlA > 0) {
+        o.nlDelta = -nlA;
+        breakChanges += nlA;
+      } else if (o.t === 'chg' && nlA !== nlB) {
+        o.nlDelta = nlB - nlA;
+        breakChanges += Math.abs(nlB - nlA);
+      }
+    } else if (gapsA && gapsB) {
+      const nlA = faLineSig(gapsA[o.a]);
+      const nlB = faLineSig(gapsB[o.b]);
+      if (nlA !== nlB) {
+        o.nlDelta = nlB - nlA; // >0: newline added before token in b; <0: newline removed from a
+        breakChanges++;
+      }
+    }
+  }
+  if (tailA !== undefined && tailB !== undefined && faLineSig(tailA) !== faLineSig(tailB)) {
+    breakChanges++;
+  }
   const total = Math.max(n, m);
-  if (total > 0 && changed / total > 0.6) return { ops: null, changed, total, empty: false, fallback: true };
-  return { ops, changed, total, empty: changed === 0, fallback: false };
+  if (total > 0 && changed / total > 0.6) return { ops: null, changed, breakChanges, total, empty: false, layoutOnly: false, fallback: true };
+  const layoutOnly = changed === 0 && breakChanges > 0;
+  return { ops, changed, breakChanges, total, empty: changed === 0 && breakChanges === 0, layoutOnly, fallback: false };
 }
 function diffPairSubstitutions(ops){
   // Post-pass: an adjacent DEL+INS run (either order) of small size is a substituted
@@ -1764,7 +1805,9 @@ function diffPairSubstitutions(ops){
   return ops;
 }
 function diffFaSummary(before, after){
-  return diffFaTokens(faTokenizeDiff(faNormalizeDiff(before)), faTokenizeDiff(faNormalizeDiff(after)));
+  const normA = faTokenizeWithGaps(faNormalizeDiff(before));
+  const normB = faTokenizeWithGaps(faNormalizeDiff(after));
+  return diffFaTokens(normA.tokens, normB.tokens, normA.gaps, normB.gaps, normA.tail, normB.tail);
 }
 function diffFaSegments(ops){
   let n = 0, inSeg = false;
@@ -1786,26 +1829,46 @@ function diffEls(){
 }
 function diffFaDigits(n){ return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]); }
 function diffScopeLabel(scope){ return scope.kind === 'selection' ? 'دامنه: انتخاب' : 'دامنه: کل متن'; }
-function diffRenderSide(el, verbTokens, ops, side){
+function diffRenderSide(el, parsed, ops, side){
   el.textContent = '';
   const frag = document.createDocumentFragment();
-  let first = true;
-  const push = (text, cls) => {
-    if (!first) frag.appendChild(document.createTextNode(' '));
-    first = false;
+  const { tokens, gaps, tail } = parsed;
+  let emitted = false;
+  const appendGap = (gap, nlDelta) => {
+    if (!gap) return;
+    if (nlDelta && ((side === 'b' && nlDelta > 0) || (side === 'a' && nlDelta < 0))) {
+      const nlIdx = gap.indexOf('\n');
+      if (nlIdx >= 0) {
+        if (nlIdx > 0) frag.appendChild(document.createTextNode(gap.slice(0, nlIdx)));
+        const mark = document.createElement('span');
+        mark.className = side === 'b' ? 'dd-nl' : 'dd-nl-del';
+        mark.setAttribute('aria-hidden', 'true');
+        mark.textContent = '↵';
+        frag.appendChild(mark);
+        frag.appendChild(document.createTextNode(gap.slice(nlIdx)));
+        return;
+      }
+    }
+    frag.appendChild(document.createTextNode(gap));
+  };
+  const push = (idx, cls, nlDelta) => {
+    if (idx === undefined || tokens[idx] === undefined) return;
+    appendGap(gaps[idx] || '', nlDelta);
+    emitted = true;
     const s = document.createElement('span');
     s.className = cls;
-    s.textContent = text;
+    s.textContent = tokens[idx];
     frag.appendChild(s);
   };
   for (const o of ops){
-    if (o.t === 'eq') push(verbTokens[side === 'a' ? o.a : o.b], 'dd-eq');
-    else if (o.t === 'del' && side === 'a') push(verbTokens[o.a], 'dd-del');
-    else if (o.t === 'ins' && side === 'b') push(verbTokens[o.b], 'dd-ins');
-    else if (o.t === 'chg' && side === 'a' && o.a !== undefined) push(verbTokens[o.a], 'dd-chg');
-    else if (o.t === 'chg' && side === 'b' && o.b !== undefined) push(verbTokens[o.b], 'dd-chg');
+    if (o.t === 'eq') push(side === 'a' ? o.a : o.b, 'dd-eq', o.nlDelta || 0);
+    else if (o.t === 'del' && side === 'a') push(o.a, 'dd-del', o.nlDelta || 0);
+    else if (o.t === 'ins' && side === 'b') push(o.b, 'dd-ins', o.nlDelta || 0);
+    else if (o.t === 'chg' && side === 'a' && o.a !== undefined) push(o.a, 'dd-chg', o.nlDelta || 0);
+    else if (o.t === 'chg' && side === 'b' && o.b !== undefined) push(o.b, 'dd-chg', o.nlDelta || 0);
   }
-  if (!first) el.appendChild(frag);
+  if (tail) frag.appendChild(document.createTextNode(tail));
+  if (emitted || tail) el.appendChild(frag);
 }
 function openDiffRunning(faLabel, scope, invoker){
   const d = diffEls();
@@ -1850,10 +1913,14 @@ function fillDiffSheet(p, seq){
     d.count.textContent = 'تغییری نیست';
     d.apply.disabled = true;
   } else {
-    diffRenderSide(d.orig, faTokenizeDiff(before), r.ops, 'a');
-    diffRenderSide(d.res, faTokenizeDiff(after), r.ops, 'b');
+    diffRenderSide(d.orig, faTokenizeWithGaps(before), r.ops, 'a');
+    diffRenderSide(d.res, faTokenizeWithGaps(after), r.ops, 'b');
     d.note.hidden = true;
-    d.count.textContent = diffFaDigits(diffFaSegments(r.ops)) + ' تغییر';
+    const wordSegs = diffFaSegments(r.ops);
+    const totalCount = wordSegs + (r.breakChanges || 0);
+    d.count.textContent = r.layoutOnly
+      ? `بازآرایی ساختار (${diffFaDigits(r.breakChanges)} خط)`
+      : (r.breakChanges ? `${diffFaDigits(totalCount)} تغییر (واژه و خط‌بندی)` : `${diffFaDigits(wordSegs)} تغییر`);
     d.apply.disabled = false;
   }
   d.back.hidden = false;

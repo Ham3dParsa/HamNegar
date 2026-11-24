@@ -679,7 +679,18 @@
           <h4>آزمایشگاه زنده پرامپت</h4>
           <span class="hint-inline" id="tool-test-tone-note"></span>
         </div>
-        <p class="pref-sub">پیش از ذخیره می‌توانی پرامپت بالا را با متن آماده یا متن دلخواه خودت تست کنی.</p>
+        <div class="sandbox-target-row">
+          <label class="sandbox-target-field" for="tool-test-target">
+            <span>ابزار مورد تست</span>
+            <select id="tool-test-target" aria-label="انتخاب ابزار مورد تست"></select>
+          </label>
+          <button type="button" class="btn-ghost btn-xs" id="btn-sandbox-edit-target" title="باز کردن پرامپت همین ابزار در ویرایشگر بالا">ویرایش پرامپت</button>
+        </div>
+        <div class="sandbox-status-bar" id="tool-test-banner" aria-live="polite"></div>
+        <details class="sandbox-prompt-peek" id="tool-test-prompt-peek">
+          <summary>مشاهده متن پرامپت ارسالی</summary>
+          <pre id="tool-test-prompt-text" dir="auto"></pre>
+        </details>
         <div class="sandbox-samples" role="group" aria-label="متن‌های آماده تست">
           <button type="button" class="fchip" data-sandbox-sample="casual">نمونه خودمانی روزمره</button>
           <button type="button" class="fchip" data-sandbox-sample="tasks">نمونه نکات و لیست کارها</button>
@@ -689,7 +700,7 @@
         <textarea id="tool-test-input" class="tool-sandbox-area" rows="3" dir="auto" placeholder="متن نمونه برای تست پرامپت…" aria-label="متن نمونه برای تست پرامپت"></textarea>
         <div class="sandbox-run-bar">
           <select id="tool-test-model" aria-label="مدل تست پرامپت"></select>
-          <button type="button" class="btn-primary btn-sm" id="btn-tool-test">اجرای تست پرامپت</button>
+          <button type="button" class="btn-primary btn-sm" id="btn-tool-test">اجرای تست</button>
         </div>
         <div id="tool-test-output" class="sandbox-output" dir="auto" hidden></div>
         <div id="tool-test-meta" class="hint-inline sandbox-meta"></div>
@@ -708,23 +719,28 @@
             <span class="wave-meta-count" id="wave-count">۱ موج</span>
           </div>
           <div class="wave-stage-actions">
-            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-xs">مصنوعی: روشن</button>
+            <div class="wave-state-seg" id="wave-state-seg" role="group" aria-label="حالت نمایش موج">
+              <button type="button" data-wave-state="recording" class="active">صحبت</button>
+              <button type="button" data-wave-state="paused">مکث</button>
+              <button type="button" data-wave-state="transcribing">تبدیل</button>
+            </div>
+            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-xs">شبیه‌ساز: روشن</button>
             <button type="button" id="wave-mic-test" class="btn-ghost btn-xs">تست با صدای من</button>
           </div>
         </div>
-        <div class="wslider-mount wslider-compact" data-label="حساسیت ورودی پیش‌نمایش" data-unit="٪" data-def="50"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="50" aria-label="حساسیت پیش‌نمایش"></div>
+        <div class="wslider-mount wslider-compact" data-label="حساسیت ورودی پیش‌نمایش" data-unit="٪" data-def="56"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="56" aria-label="حساسیت پیش‌نمایش"></div>
       </div>
 
       <div class="wave-section" aria-label="طرح‌های آماده">
-        <div class="pref-head"><h4>طرح‌های آماده</h4><span class="pref-sub">لمس برای اعمال فوری</span></div>
+        <div class="pref-head"><h4>سبک‌ها و پریست‌های آماده</h4><span class="pref-sub">انتخاب با یک لمس — شامل ۲بیتی رترو</span></div>
         <div class="wave-cards" id="wave-starters"></div>
       </div>
 
       <div class="wave-section" aria-label="پشته موج">
         <div class="pref-head">
-          <h4>لایه‌های موج</h4>
+          <h4>سفارشی‌سازی لایه‌ها</h4>
           <div class="row-actions">
-            <button type="button" id="wave-dice" class="btn-ghost btn-xs" title="ترکیب تصادفی رنگ و موج">
+            <button type="button" id="wave-dice" class="btn-ghost btn-xs" title="ترکیب تصادفی رنگ و سبک">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
               <span>تصادفی</span>
             </button>
@@ -737,30 +753,29 @@
         <div id="wave-list" class="wave-list"></div>
       </div>
 
-      <div class="wave-section wave-globals" aria-label="تنظیمات سراسری موج">
+      <div class="wave-section wave-globals" aria-label="تنظیمات کلی و حرکت موج">
         <div class="pref-head">
-          <h4>تنظیمات کلی و نورپردازی</h4>
+          <h4>رفتار، حرکت و نورپردازی</h4>
           <button type="button" id="wave-reset" class="btn-ghost btn-xs">بازنشانی</button>
         </div>
         <div class="wave-globals-grid">
-          <div class="wslider-mount" data-label="حساسیت" data-unit="٪" data-def="50"><input type="range" id="wave-sens" min="0" max="100" step="1" value="50" aria-label="حساسیت"></div>
-          <div class="wslider-mount" data-label="سرعت پاسخ (اتک)" data-unit="٪" data-def="50"><input type="range" id="wave-atk" min="0" max="100" step="1" value="50" aria-label="سرعت پاسخ"></div>
-          <div class="wslider-mount" data-label="سرعت جریان" data-unit="٪" data-def="50"><input type="range" id="wave-spd" min="0" max="100" step="1" value="50" aria-label="سرعت"></div>
-          <div class="wslider-mount" data-label="شدت نوسان" data-unit="٪" data-def="50"><input type="range" id="wave-int" min="0" max="100" step="1" value="50" aria-label="شدت"></div>
-          <div class="wslider-mount" data-label="نرمی محو شدن" data-unit="٪" data-def="50"><input type="range" id="wave-sm" min="0" max="100" step="1" value="50" aria-label="نرمی"></div>
-          <div class="wslider-mount" data-label="تعداد ذرات" data-unit="" data-def="12"><input type="range" id="wave-parts" min="0" max="24" step="1" value="12" aria-label="ذرات"></div>
+          <div class="wslider-mount" data-label="حساسیت میکروفون" data-unit="٪" data-def="56"><input type="range" id="wave-sens" min="0" max="100" step="1" value="56" aria-label="حساسیت میکروفون"></div>
+          <div class="wslider-mount" data-label="شدت نوسان" data-unit="٪" data-def="62"><input type="range" id="wave-int" min="0" max="100" step="1" value="62" aria-label="شدت نوسان"></div>
+          <div class="wslider-mount" data-label="سرعت جریان" data-unit="٪" data-def="52"><input type="range" id="wave-spd" min="0" max="100" step="1" value="52" aria-label="سرعت جریان"></div>
+          <div class="wslider-mount" data-label="نرمی واکنش" data-unit="٪" data-def="54"><input type="range" id="wave-sm" min="0" max="100" step="1" value="54" aria-label="نرمی واکنش"></div>
+          <div class="wslider-mount" data-label="جرقه و ذرات محیطی" data-unit="" data-def="8"><input type="range" id="wave-parts" min="0" max="24" step="1" value="8" aria-label="جرقه و ذرات محیطی"></div>
         </div>
         <div class="wave-toggles-strip">
           <label class="wave-switch-row">
             <input type="checkbox" id="wave-aurora">
-            <span class="wave-switch-copy"><strong>هاله زمینه (Aurora)</strong><small>درخشش ملایم پشت موج</small></span>
+            <span class="wave-switch-copy"><strong>هاله پس‌زمینه (Aurora)</strong><small>نور ملایم پشت موج حین ضبط</small></span>
           </label>
           <label class="wave-switch-row">
             <input type="checkbox" id="wave-hide">
-            <span class="wave-switch-copy"><strong>پنهان‌سازی نوار موج</strong><small>مصرف باتری کمتر</small></span>
+            <span class="wave-switch-copy"><strong>پنهان‌سازی نوار موج</strong><small>مناسب صرفه‌جویی باتری</small></span>
           </label>
         </div>
-        <div class="wslider-mount" data-label="ته‌رنگ هاله زمینه" data-unit="°" data-def="220"><input type="range" id="wave-aurora-hue" min="0" max="360" step="1" value="220" aria-label="ته‌رنگ زمینه"></div>
+        <div class="wslider-mount" data-label="رنگ هاله پس‌زمینه" data-unit="°" data-def="225"><input type="range" id="wave-aurora-hue" min="0" max="360" step="1" value="225" aria-label="رنگ هاله پس‌زمینه"></div>
       </div>
     </section>
 
