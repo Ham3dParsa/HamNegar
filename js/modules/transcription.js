@@ -6,7 +6,7 @@ import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.j
 import { canonicalize, hasKey as hasProviderKey, displayPair } from './provider.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
-import { stripTimecodes } from './format.js';
+import { stripTimecodes, scrubSecrets, stripUrlSecret } from './format.js';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',413:'ورودی طولانی (413)',429:'سهمیه یا ظرفیت پر شد (429)',500:'خطای سرور (500)',502:'خطای دروازه سرویس (502)',503:'مدل موقتاً شلوغ یا در دسترس نیست (503)',504:'تایم‌اوت سرور سرویس (504)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
@@ -20,7 +20,7 @@ function assertTrustedBase(base, allowed){
     } else {
       throw Object.assign(new Error('BaseURL نامعتبر — تأیید لازم است'),{status:400});
     }
-    Logger.log('warn','untrusted BaseURL', { base, host:h });
+    Logger.log('warn','untrusted BaseURL', { base: stripUrlSecret(base), host:h });
   }
 }
 function isHtmlPayload(body, ct = ''){
@@ -29,23 +29,24 @@ function isHtmlPayload(body, ct = ''){
 async function parseErr(res){
   let b='';
   try{
-    b=await res.text();
+    b=scrubSecrets(await res.text());
     if(isHtmlPayload(b, res.headers?.get?.('content-type') || '')){
       return { text: b, msg: 'پاسخ HTML به‌جای JSON از سرویس برگشت (نشست، فیلترشکن یا آدرس سرویس را بررسی کن)', isHtml: true };
     }
     try{
       const j=JSON.parse(b);
       const bodyStatus = Number(j.error?.status);
+      const rawMsg = j.error?.message||j.error||j.message||b.slice(0,600);
       return {
         text:b,
-        msg:j.error?.message||j.error||j.message||b.slice(0,600),
+        msg:scrubSecrets(typeof rawMsg === 'string' ? rawMsg : JSON.stringify(rawMsg)),
         status: Number.isInteger(bodyStatus) && bodyStatus >= 400 ? bodyStatus : res.status,
       };
     }catch{
       return {text:b, msg:b.slice(0,600), status: res.status};
     }
   }catch{
-    return {text:'', msg:res.statusText};
+    return {text:'', msg:scrubSecrets(res.statusText || '')};
   }
 }
 async function readJsonSafe(res, label = 'API'){
@@ -55,7 +56,7 @@ async function readJsonSafe(res, label = 'API'){
     return JSON.parse(txt);
   }catch{
     const isHtml = isHtmlPayload(txt, ct);
-    Logger.log('error', `${label} invalid json`, { status: res.status, ct, isHtml, preview: txt.slice(0, 120) });
+    Logger.log('error', `${label} invalid json`, { status: res.status, ct, isHtml, preview: scrubSecrets(txt.slice(0, 120)) });
     const msg = isHtml
       ? 'پاسخ غیرمنتظره HTML به‌جای JSON — اتصال، نشست یا آدرس سرویس را بررسی کن'
       : 'پاسخ سرویس JSON معتبر نیست';
@@ -106,12 +107,17 @@ const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const MIN_AUDIO_BYTES = 800;
 const UNSUPPORTED_THINKING_CACHE = new Set();
 
-function audioFilenameForMime(mime){
-  const m = String(mime || '').toLowerCase();
+export function audioFilenameForBlob(blob){
+  const m = String(blob?.type || '').toLowerCase();
   if(/mp4|m4a/.test(m)) return 'speech.m4a';
   if(/ogg/.test(m)) return 'speech.ogg';
   if(/mpeg|mp3/.test(m)) return 'speech.mp3';
   if(/wav/.test(m)) return 'speech.wav';
+  if(/flac/.test(m)) return 'speech.flac';
+  if(/aac/.test(m)) return 'speech.aac';
+  if(/webm/.test(m)) return 'speech.webm';
+  const extMatch = String(blob?.name || '').trim().match(/\.(flac|aac|mp3|m4a|ogg|wav|webm)$/i);
+  if(extMatch) return `speech.${extMatch[1].toLowerCase()}`;
   return 'speech.webm';
 }
 
@@ -121,7 +127,7 @@ async function queryGroq(blob, externalSignal){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} نیست`),{status:401});
   if(!k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} باید gsk_ باشد`),{status:401});
   if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
-  const filename = audioFilenameForMime(blob.type);
+  const filename = audioFilenameForBlob(blob);
   const fd=new FormData(); fd.append('file',blob,filename); fd.append('model','whisper-large-v3'); fd.append('response_format','json');
   const t0 = performance.now();
   Logger.log('info',`[STT] ارسال به ${displayPair('groq', STT_GROQ_MODEL)}`,{model:STT_GROQ_MODEL, sizeKB:+(blob.size / 1024).toFixed(1), mime:blob.type || 'audio/webm', filename});
@@ -129,7 +135,7 @@ async function queryGroq(blob, externalSignal){
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   const base = (groqBaseURL || 'https://api.groq.com/openai/v1').replace(/\/+$/,'');
   assertTrustedBase(base, ['api.groq.com']);
-  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{'Accept':'application/json',Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('groq', STT_GROQ_MODEL)}: `+e.message),{status:0}); }
+  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{'Accept':'application/json',Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('groq', STT_GROQ_MODEL)}: `+scrubSecrets(e.message)),{status:0}); }
   clearTimeout(to);
   if(!res.ok){ const ms=Math.round(performance.now()-t0); const er=await parseErr(res); Logger.log('error',`${displayPair('groq', STT_GROQ_MODEL)} fail`,{status:res.status, ms, errorMsg:er.msg, body:er.text?.slice(0,400)}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
   const ms=Math.round(performance.now()-t0);
@@ -477,13 +483,13 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
         const ms=Math.round(performance.now()-t0);
         const er2 = await parseErr(res);
         const err=new Error(`${fmt(res.status)} — ${er2.msg}`); err.status=res.status;
-        Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base, errorMsg:er2.msg, body:er2.text?.slice(0,400) || er.text?.slice(0,400)});
+        Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base: stripUrlSecret(base), errorMsg:er2.msg, body:er2.text?.slice(0,400) || er.text?.slice(0,400)});
         throw err;
       }
     } else {
       const ms=Math.round(performance.now()-t0);
       const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status;
-      Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base, errorMsg:er.msg, body:er.text?.slice(0,400)});
+      Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base: stripUrlSecret(base), errorMsg:er.msg, body:er.text?.slice(0,400)});
       throw err;
     }
   }

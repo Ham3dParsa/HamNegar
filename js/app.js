@@ -82,7 +82,10 @@ function passes(level, text, el) {
   if (isSep(el)) return true; // separators are structural — always visible
   if (isolatedRun != null && String(el?.dataset?.run || '') !== String(isolatedRun)) return false;
   if (currentFilter !== 'all' && level !== currentFilter) return false;
-  if (searchQuery && !text.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+  if (searchQuery) {
+    const hay = el?.dataset?.rawText || text || '';
+    if (!hay.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+  }
   return true;
 }
 function applyFilters() {
@@ -1114,7 +1117,7 @@ async function handleTranscription(blob, snap, audioMeta){
   // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
   if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); mainWaveTranscribing(); }
   if(blob.size < 800){
-    Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
+    Logger.setStatus('صدایی ضبط نشد','warn',{ log: true }); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
     recTimerReset(); syncActionbar(); mainWaveIdle();
@@ -1342,7 +1345,7 @@ async function transcribeAudioFile(file) {
     const { text, engine, polishModel } = await Transcription.transcribe(file, { durationMs: 0, signal });
     if (signal.aborted) throw Object.assign(new Error('لغو شد'), { code: 'ABORTED', aborted: true });
     if (!text) {
-      Logger.setStatus('متنی از فایل استخراج نشد', 'warn');
+      Logger.setStatus('متنی از فایل استخراج نشد', 'warn', { log: true });
       Logger.toast('متنی در فایل پیدا نشد');
       Logger.dismissProgress(800);
       return;
@@ -1602,7 +1605,7 @@ async function retryPendingVoice(id) {
     if (signal.aborted) throw Object.assign(new Error('لغو شد'), { code: 'ABORTED', aborted: true });
     if (!text) {
       await VoiceQueue.updateReason(id, 'متنی از این صدا استخراج نشد — می‌توانی پخش کنی یا حذفش کنی', 0);
-      Logger.setStatus('متنی از صدا استخراج نشد', 'warn');
+      Logger.setStatus('متنی از صدا استخراج نشد', 'warn', { log: true });
       Logger.toast('متنی از این صدا برنگشت', 3000);
       Logger.dismissProgress(800);
       return false;
@@ -1804,8 +1807,8 @@ window.addEventListener('offline', () => {
 
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
-$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','info'); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
-$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus(`✅ Google اوکی`,'info'); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','success',{ log: true }); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus('✅ Google اوکی','success',{ log: true }); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');

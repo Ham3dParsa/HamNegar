@@ -1794,16 +1794,16 @@ select.model {
 .log-tag {
   display: inline-flex;
   align-items: center;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: "Vazirmatn", sans-serif;
   font-size: 10.5px;
+  font-weight: 500;
   padding: 0 6px;
   min-height: 18px;
   border-radius: 5px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border);
   color: var(--text);
-  direction: ltr;
-  unicode-bidi: isolate;
+  unicode-bidi: plaintext;
   flex-shrink: 0;
 }
 .log-msg {

@@ -1,7 +1,7 @@
 // Module: logger
 // Interface: log(level,msg,data) + setStatus(text,type,opts) + toast(msg) + setProgress/dismissProgress + groupRun(label)/clearRun — small surface, hides DOM/progress behind calls.
 // Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock, per-run grouping behind calls.
-import { fa, esc } from './format.js';
+import { fa, esc, scrubSecrets } from './format.js';
 
 const VALID_LEVELS = new Set(['info', 'success', 'warn', 'error', 'debug']);
 const LVL_BADGE = { info: 'INFO', success: 'OK', warn: 'WARN', error: 'ERR', debug: 'DBG' };
@@ -141,7 +141,7 @@ export const Logger = {
     line.className = 'log-line ' + lvl;
     line.dataset.level = lvl;
 
-    const msgStr = String(msg ?? '');
+    const msgStr = scrubSecrets(String(msg ?? ''));
     const tagMatch = msgStr.match(/^\[([^\]]{1,24})\]\s*([\s\S]+)$/);
     const msgHtml = tagMatch
       ? `<span class="log-tag">${esc(tagMatch[1])}</span><span class="log-msg">${esc(tagMatch[2])}</span>`
@@ -149,7 +149,7 @@ export const Logger = {
 
     const chips = extractMetrics(data);
     const metricsHtml = chips.length
-      ? `<span class="log-metrics">${chips.map((c) => `<span class="log-metric">${esc(c)}</span>`).join('')}</span>`
+      ? `<span class="log-metrics">${chips.map((c) => `<span class="log-metric">${esc(scrubSecrets(c))}</span>`).join('')}</span>`
       : '';
 
     let fullDetail = '';
@@ -162,6 +162,7 @@ export const Logger = {
         raw = String(data);
       }
       if (raw === undefined) raw = String(data);
+      raw = scrubSecrets(raw);
       fullDetail = raw.length > MAX_FULL_DETAIL ? raw.slice(0, MAX_FULL_DETAIL) + ' …' : raw;
       uiDetail = fullDetail.length > MAX_UI_DETAIL
         ? fullDetail.slice(0, MAX_UI_DETAIL) + '\n… (ادامه در کپی)'
@@ -181,7 +182,7 @@ export const Logger = {
     if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
     logBody.scrollTop = logBody.scrollHeight;
     const fn = lvl === 'error' ? console.error : lvl === 'warn' ? console.warn : console.log;
-    fn(`[${lvl}] ${msgStr}`, data ?? '');
+    fn(`[${lvl}] ${msgStr}`, fullDetail || '');
   },
   formatLineText(el) {
     if (!el) return '';
