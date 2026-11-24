@@ -51,16 +51,52 @@
       <!-- Integrated Acoustic Wave Ribbon -->
       <div class="rec-strip" id="rec-strip"><canvas id="wave"></canvas></div>
 
-      <!-- Calm First-Run Onboarding Card (auto-hides once any API key is saved) -->
+      <!-- Guided First-Run Quick-Start Card (stays helpful until a ready STT key + model is configured) -->
       <section class="onboarding-card" id="onboarding-card" hidden aria-label="شروع سریع هم‌نگار">
         <div class="onboarding-head">
-          <h2>شروع تایپ صوتی دقیق در کمتر از یک دقیقه</h2>
-          <button type="button" id="btn-onboard-dismiss" class="icon-btn icon-btn--xs" aria-label="بستن راهنمای شروع" title="فعلاً نه">✕</button>
+          <div class="onboarding-title-wrap">
+            <h2>شروع سریع هم‌نگار در ۳ گام</h2>
+            <span class="onboarding-sub" id="onb-status-sub">رایگان با کلید Google AI Studio — کلید فقط روی دستگاه خودت می‌ماند</span>
+          </div>
+          <button type="button" id="btn-onboard-dismiss" class="icon-btn icon-btn--xs" aria-label="بستن راهنمای شروع" title="فعلاً ببند">✕</button>
         </div>
-        <p class="onboarding-desc">هم‌نگار مستقیم در مرورگر کار می‌کند و کلیدهایت فقط روی دستگاه خودت می‌ماند. برای تبدیل دقیق فارسی و پالیش خودکار، یک کلید رایگان Groq یا Google وارد کن.</p>
+
+        <ol class="onb-steps" aria-label="وضعیت آماده‌سازی">
+          <li class="onb-step" id="onb-step-key">
+            <span class="onb-step-num" aria-hidden="true">۱</span>
+            <span class="onb-step-copy">
+              <strong>کلید رایگان بساز</strong>
+              <small>در <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" dir="ltr">aistudio.google.com/apikey</a> وارد شو و <span dir="ltr">Create API key</span> را بزن.</small>
+            </span>
+          </li>
+          <li class="onb-step" id="onb-step-chain">
+            <span class="onb-step-num" aria-hidden="true">۲</span>
+            <span class="onb-step-copy">
+              <strong>کلید را وارد کن</strong>
+              <small>کلید را در تنظیمات ← «کلیدها و ارائه‌دهندگان» بچسبان (ذخیره خودکار).</small>
+            </span>
+          </li>
+          <li class="onb-step" id="onb-step-ready">
+            <span class="onb-step-num" aria-hidden="true">۳</span>
+            <span class="onb-step-copy">
+              <strong>آماده ضبط دقیق</strong>
+              <small>زنجیره پیش‌فرض <span dir="ltr">Flash ← Flash-Lite ← Whisper</span> خودکار فعال می‌شود.</small>
+            </span>
+          </li>
+        </ol>
+
         <div class="onboarding-actions">
-          <button type="button" id="btn-onboard-keys" class="btn-primary">راه‌اندازی کلید در ۱ دقیقه</button>
-          <button type="button" id="btn-onboard-live" class="btn-ghost">امتحان زنده بدون کلید</button>
+          <button type="button" id="btn-onboard-keys" class="btn-primary">ثبت کلید گوگل / ارائه‌دهنده</button>
+          <button type="button" id="btn-onboard-guide" class="btn-ghost">راهنمای گام‌به‌گام</button>
+        </div>
+
+        <div class="onboarding-demos" aria-label="پیش‌نمایش تعاملی بدون کلید">
+          <span class="onb-demos-lbl">قبل از ثبت کلید ببین چطور کار می‌کند:</span>
+          <div class="onb-demos-btns">
+            <button type="button" id="btn-demo-voice" class="btn-ghost btn-xs">دموی تایپ صوتی</button>
+            <button type="button" id="btn-demo-tools" class="btn-ghost btn-xs">دموی ابزارهای متن</button>
+            <button type="button" id="btn-onboard-live" class="btn-ghost btn-xs">تست زنده میکروفون</button>
+          </div>
         </div>
       </section>
 
@@ -164,11 +200,23 @@
         <div id="log-header">
           <b>گزارش سیستم</b>
           <div id="log-actions">
-            <button type="button" class="btn-ghost btn-xs" id="btn-copy-log" title="کپی لاگ" aria-label="کپی لاگ">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
-              <span class="log-tx">کپی</span>
+            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-expand-log" title="بزرگ‌نمایی پنل لاگ" aria-label="بزرگ‌نمایی پنل لاگ" aria-pressed="false">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+              <span class="log-tx">بزرگ</span>
             </button>
-            <button type="button" class="btn-ghost btn-xs" id="btn-clear-log" title="پاک کردن لاگ" aria-label="پاک کردن لاگ">
+            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-recent-log" title="کپی ۲۰ پیام اخیر لاگ" aria-label="کپی ۲۰ پیام اخیر لاگ">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+              <span class="log-tx">۲۰ اخیر</span>
+            </button>
+            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-log" title="کپی همه سطرهای نمایش‌داده‌شده" aria-label="کپی همه لاگ">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+              <span class="log-tx">کپی همه</span>
+            </button>
+            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-prune-log" title="حذف لاگ‌های قدیمی (نگهداری ۲۰ پیام اخیر)" aria-label="حذف لاگ‌های قدیمی">
+              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
+              <span class="log-tx">قدیمی‌ها</span>
+            </button>
+            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-clear-log" title="پاک کردن کل لاگ" aria-label="پاک کردن کل لاگ">
               <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>
               <span class="log-tx">پاک</span>
             </button>
@@ -320,52 +368,10 @@
 
       <section id="panel-keys" class="ai-subpanel" role="tabpanel" aria-labelledby="tab-keys">
       <div class="setup-intro">
-        <p>فقط وارد کردن <strong>یک کلید رایگان</strong> (Groq برای سرعت و دقت فارسی، یا Google AI Studio) کافیست. کلیدها روی دستگاه خودت ذخیره می‌شوند و هر ارائه‌دهنده را می‌توانی هر زمان روشن، خاموش یا حذف کنی.</p>
+        <p>ساده‌ترین شروع: یک <strong>کلید رایگان Google AI Studio</strong> از <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" dir="ltr">aistudio.google.com/apikey</a> بساز و اینجا بچسبان (ذخیره خودکار). برای سرعت بالاتر پالیش یا پشتیبان ویسپر، کلید رایگان <strong>Groq</strong> و مدل‌های رایگان <strong>OpenRouter</strong> هم اختیاری‌اند.</p>
       </div>
 
       <div id="provider-drawer" class="providers-stack">
-        <details class="provider-card" id="provider-card-groq" data-provider="groq">
-          <summary class="provider-head">
-            <label class="prov-switch" title="روشن یا خاموش کردن Groq">
-              <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="groq" checked aria-label="فعال بودن Groq">
-              <span class="prov-track" aria-hidden="true"></span>
-            </label>
-            <div class="provider-title-wrap">
-              <b>Groq</b>
-              <span class="provider-rec">پیشنهادی برای سرعت فارسی</span>
-            </div>
-            <span class="provider-status" id="pill-groq">بدون کلید</span>
-            <button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست اتصال</button>
-            <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="groq" title="حذف Groq" aria-label="حذف ارائه‌دهنده Groq">حذف</button>
-          </summary>
-          <div class="provider-body">
-            <label for="key-groq">کلید API سرویس Groq</label>
-            <div class="key-row">
-              <input type="password" id="key-groq" placeholder="gsk_..." autocomplete="off" dir="ltr">
-              <button type="button" class="btn-ghost btn-sm" id="btn-groq-models">بروزرسانی مدل‌ها</button>
-            </div>
-            <div id="hint-groq" class="hint">رایگان و بسیار سریع برای فارسی؛ با <code>gsk_</code> شروع می‌شود.</div>
-            <div class="hint-inline cacheline" id="cache-groq">مدل‌ها هنوز دریافت نشده‌اند</div>
-            <details class="sub-accordion">
-              <summary>تنظیمات پیشرفته (Base URL و سقف رایگان)</summary>
-              <div class="sub-accordion__body">
-                <label for="groq-base-url">Groq Base URL</label>
-                <input type="text" id="groq-base-url" placeholder="https://api.groq.com/openai/v1" dir="ltr">
-                <table class="quota-ref-table" aria-label="سقف رایگان مدل‌های متنی Groq">
-                  <thead><tr><th>مدل</th><th>RPM</th><th>RPD</th><th>TPM</th><th>TPD</th></tr></thead>
-                  <tbody>
-                    <tr><td>allam-2-7b</td><td>30</td><td>7K</td><td>6K</td><td>500K</td></tr>
-                    <tr><td>qwen/qwen3.6-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
-                    <tr><td>qwen/qwen3.8-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
-                    <tr><td>openai/gpt-oss-20b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
-                    <tr><td>openai/gpt-oss-120b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </details>
-          </div>
-        </details>
-
         <details class="provider-card" id="provider-card-gemini" data-provider="google">
           <summary class="provider-head">
             <label class="prov-switch" title="روشن یا خاموش کردن Google Gemini">
@@ -374,7 +380,7 @@
             </label>
             <div class="provider-title-wrap">
               <b>Google Gemini</b>
-              <span class="provider-rec" id="gemini-rec">کلید Google AI Studio</span>
+              <span class="provider-rec" id="gemini-rec">پیشنهادی برای شروع (صدا + متن)</span>
             </div>
             <span class="provider-status" id="pill-google">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-gemini">تست اتصال</button>
@@ -395,8 +401,50 @@
             <div id="gemini-models-row" class="row-actions" hidden>
               <button type="button" class="btn-ghost btn-sm" id="btn-gemini-models-srv">بروزرسانی مدل‌ها</button>
             </div>
-            <div id="hint-gemini" class="hint">برای اجرا در مرورگر (مانند GitHub Pages)، کلید رایگان Google AI Studio را وارد کن. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a></div>
+            <div id="hint-gemini" class="hint">در <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" dir="ltr">aistudio.google.com/apikey</a> یک پروژه انتخاب کن و کلید بساز؛ به محض چسباندن، خودکار ذخیره می‌شود.</div>
             <div class="hint-inline cacheline" id="cache-gemini">مدل‌ها هنوز دریافت نشده‌اند</div>
+          </div>
+        </details>
+
+        <details class="provider-card" id="provider-card-groq" data-provider="groq">
+          <summary class="provider-head">
+            <label class="prov-switch" title="روشن یا خاموش کردن Groq">
+              <input type="checkbox" class="sr-only" role="switch" data-provider-toggle="groq" checked aria-label="فعال بودن Groq">
+              <span class="prov-track" aria-hidden="true"></span>
+            </label>
+            <div class="provider-title-wrap">
+              <b>Groq</b>
+              <span class="provider-rec">بسیار سریع برای پالیش متنی + پشتیبان Whisper</span>
+            </div>
+            <span class="provider-status" id="pill-groq">بدون کلید</span>
+            <button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست اتصال</button>
+            <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="groq" title="حذف Groq" aria-label="حذف ارائه‌دهنده Groq">حذف</button>
+          </summary>
+          <div class="provider-body">
+            <label for="key-groq">کلید API سرویس Groq</label>
+            <div class="key-row">
+              <input type="password" id="key-groq" placeholder="gsk_..." autocomplete="off" dir="ltr">
+              <button type="button" class="btn-ghost btn-sm" id="btn-groq-models">بروزرسانی مدل‌ها</button>
+            </div>
+            <div id="hint-groq" class="hint">رایگان و فوق‌سریع برای ابزارهای متنی و پشتیبان ویسپر؛ از <a href="https://console.groq.com/keys" target="_blank" rel="noopener" dir="ltr">console.groq.com/keys</a> بگیر (با <code dir="ltr">gsk_</code> شروع می‌شود).</div>
+            <div class="hint-inline cacheline" id="cache-groq">مدل‌ها هنوز دریافت نشده‌اند</div>
+            <details class="sub-accordion">
+              <summary>تنظیمات پیشرفته (Base URL و سقف رایگان)</summary>
+              <div class="sub-accordion__body">
+                <label for="groq-base-url">Groq Base URL</label>
+                <input type="text" id="groq-base-url" placeholder="https://api.groq.com/openai/v1" dir="ltr">
+                <table class="quota-ref-table" aria-label="سقف رایگان مدل‌های متنی Groq">
+                  <thead><tr><th>مدل</th><th>RPM</th><th>RPD</th><th>TPM</th><th>TPD</th></tr></thead>
+                  <tbody>
+                    <tr><td>allam-2-7b</td><td>30</td><td>7K</td><td>6K</td><td>500K</td></tr>
+                    <tr><td>qwen/qwen3.6-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+                    <tr><td>qwen/qwen3.8-27b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+                    <tr><td>openai/gpt-oss-20b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+                    <tr><td>openai/gpt-oss-120b</td><td>30</td><td>1K</td><td>8K</td><td>200K</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </div>
         </details>
 
@@ -482,8 +530,16 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="stt-add-panel" hidden>
-          <label for="stt-add-search" class="hint-inline">جست‌وجو در مدل‌های صوتی یا افزودن مدل دلخواه:</label>
-          <input type="search" id="stt-add-search" placeholder="مثلاً whisper یا gemini-2.5-flash…">
+          <div class="chain-filter-head">
+            <div class="fchips fchips--scroll" id="stt-add-filters" role="group" aria-label="فیلتر مدل‌های صوتی">
+              <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
+              <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
+              <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
+              <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+            </div>
+            <span class="hint-inline chain-add-count" id="stt-add-count" aria-live="polite"></span>
+          </div>
+          <input type="search" id="stt-add-search" placeholder="جست‌وجو در مدل‌های صوتی (مثلاً flash، lite یا whisper)…" aria-label="جست‌وجو در مدل‌های صوتی">
           <div id="stt-add-list" role="listbox" aria-label="فهرست مدل‌های صوتی"></div>
           <div class="custom-model-bar">
             <select id="stt-custom-prov" aria-label="ارائه‌دهنده مدل صوتی دلخواه"></select>
@@ -501,7 +557,7 @@
             <button type="button" class="btn-ghost btn-xs" id="btn-polish-all-off">همه خاموش</button>
           </div>
         </div>
-        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود (ابزارهای هوشمند مدل قوی‌تر را در اولویت می‌گذارند)؛ با ⤒/▲/▼/⤓ و 🗑 جایگاه هر مدل را تنظیم کن.</p>
+        <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود (پیش‌فرض روی مدل‌های سریع و پرسهمیه با حداقل تأخیر تفکر)؛ با ⤒/▲/▼/⤓ و 🗑 جایگاه هر مدل را تنظیم کن.</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
           <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">
@@ -511,8 +567,18 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="polish-add-panel" hidden>
-          <label for="polish-add-search" class="hint-inline">جست‌وجو در کاتالوگ زنده یا ثبت شناسه دلخواه:</label>
-          <input type="search" id="polish-add-search" placeholder="مثلاً llama-3.3-70b، qwen یا :free…">
+          <div class="chain-filter-head">
+            <div class="fchips fchips--scroll" id="polish-add-filters" role="group" aria-label="فیلتر مدل‌های متنی">
+              <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
+              <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
+              <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
+              <button type="button" class="fchip" data-panel-prov="openrouter" aria-pressed="false">OpenRouter</button>
+              <button type="button" class="fchip" data-panel-prov="custom" aria-pressed="false">سفارشی</button>
+              <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+            </div>
+            <span class="hint-inline chain-add-count" id="polish-add-count" aria-live="polite"></span>
+          </div>
+          <input type="search" id="polish-add-search" placeholder="جست‌وجو در مدل‌های متنی (مثلاً qwen، flash-lite یا :free)…" aria-label="جست‌وجو در مدل‌های متنی">
           <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌های متنی"></div>
           <div class="custom-model-bar">
             <select id="polish-custom-prov" aria-label="ارائه‌دهنده مدل متنی دلخواه"></select>
@@ -708,74 +774,97 @@
     </section>
 
 
-    <!-- TAB 5: Wave Studio -->
+    <!-- TAB 4: Wave Studio (v4 — Minimal, Modern, 5 Distinct Styles + 8 Presets) -->
     <section id="panel-wave" class="settings-panel" role="tabpanel" aria-labelledby="tab-wave" hidden>
-      <div class="wave-sticky wave-stage" aria-label="پیش‌نمایش زنده موج">
+      <div class="wave-sticky wave-stage" aria-label="پیش‌نمایش زنده موج صدا">
         <div class="wave-preview-wrap"><canvas id="wave-preview"></canvas></div>
         <div class="wave-stage-bar">
           <div class="wave-sticky-meta">
-            <span class="wave-meta-name" id="wave-name"></span>
+            <span class="wave-meta-name" id="wave-name">سینوسی اقیانوس</span>
             <span class="wave-meta-sep" aria-hidden="true">·</span>
-            <span class="wave-meta-count" id="wave-count">۱ موج</span>
+            <span class="wave-meta-badge" id="wave-style-badge">سینوسی نرم</span>
           </div>
           <div class="wave-stage-actions">
             <div class="wave-state-seg" id="wave-state-seg" role="group" aria-label="حالت نمایش موج">
-              <button type="button" data-wave-state="recording" class="active">صحبت</button>
-              <button type="button" data-wave-state="paused">مکث</button>
-              <button type="button" data-wave-state="transcribing">تبدیل</button>
+              <button type="button" data-wave-state="recording" class="active" aria-pressed="true">صحبت</button>
+              <button type="button" data-wave-state="paused" aria-pressed="false">مکث</button>
+              <button type="button" data-wave-state="transcribing" aria-pressed="false">تبدیل</button>
             </div>
-            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-xs">شبیه‌ساز: روشن</button>
+            <button type="button" id="wave-fake-toggle" class="btn-ghost btn-xs" aria-pressed="true">شبیه‌ساز: روشن</button>
             <button type="button" id="wave-mic-test" class="btn-ghost btn-xs">تست با صدای من</button>
           </div>
         </div>
-        <div class="wslider-mount wslider-compact" data-label="حساسیت ورودی پیش‌نمایش" data-unit="٪" data-def="56"><input type="range" id="wave-sens-mini" min="0" max="100" step="1" value="56" aria-label="حساسیت پیش‌نمایش"></div>
       </div>
 
-      <div class="wave-section" aria-label="طرح‌های آماده">
-        <div class="pref-head"><h4>سبک‌ها و پریست‌های آماده</h4><span class="pref-sub">انتخاب با یک لمس — شامل ۲بیتی رترو</span></div>
-        <div class="wave-cards" id="wave-starters"></div>
-      </div>
-
-      <div class="wave-section" aria-label="پشته موج">
+      <div class="wave-section" aria-label="پریست‌های آماده موج صدا">
         <div class="pref-head">
-          <h4>سفارشی‌سازی لایه‌ها</h4>
+          <h4>پریست‌های آماده</h4>
           <div class="row-actions">
-            <button type="button" id="wave-dice" class="btn-ghost btn-xs" title="ترکیب تصادفی رنگ و سبک">
+            <button type="button" id="wave-dice" class="btn-ghost btn-xs" title="ترکیب تصادفی سبک و رنگ">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
               <span>تصادفی</span>
             </button>
-            <button type="button" id="wave-add" class="btn-ghost btn-xs">
-              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-              <span>لایه جدید</span>
-            </button>
+            <button type="button" id="wave-reset" class="btn-ghost btn-xs">بازنشانی</button>
           </div>
         </div>
-        <div id="wave-list" class="wave-list"></div>
+        <div class="wave-presets-grid" id="wave-presets-grid" role="group" aria-label="انتخاب پریست موج صدا"></div>
       </div>
 
-      <div class="wave-section wave-globals" aria-label="تنظیمات کلی و حرکت موج">
-        <div class="pref-head">
-          <h4>رفتار، حرکت و نورپردازی</h4>
-          <button type="button" id="wave-reset" class="btn-ghost btn-xs">بازنشانی</button>
+      <div class="wave-section" aria-label="سبک موج صدا">
+        <div class="pref-head"><h4>سبک موج</h4><span class="pref-sub">۵ سبک مینیمال و مدرن</span></div>
+        <div class="wave-seg-row" id="wave-style-seg" role="group" aria-label="سبک رسم موج"></div>
+      </div>
+
+      <div class="wave-section" aria-label="رنگ و نورپردازی">
+        <div class="pref-head"><h4>رنگ، گرادیانت و نئون</h4></div>
+        <div class="wave-seg-row wave-seg-row--3" id="wave-colormode-seg" role="group" aria-label="حالت رنگ‌آمیزی"></div>
+        <div class="wave-pal-chips" id="wave-palette-chips" role="group" aria-label="پالت‌های آماده رنگ"></div>
+        <div class="wave-color-pickers" id="wave-color-pickers">
+          <label class="wave-color-field" for="wave-c1">
+            <span>رنگ اصلی</span>
+            <input type="color" id="wave-c1" value="#5b8def" aria-label="رنگ اصلی موج">
+          </label>
+          <label class="wave-color-field" id="wave-c2-wrap" for="wave-c2">
+            <span>رنگ دوم گرادیانت</span>
+            <input type="color" id="wave-c2" value="#38bdf8" aria-label="رنگ دوم گرادیانت موج">
+          </label>
         </div>
-        <div class="wave-globals-grid">
-          <div class="wslider-mount" data-label="حساسیت میکروفون" data-unit="٪" data-def="56"><input type="range" id="wave-sens" min="0" max="100" step="1" value="56" aria-label="حساسیت میکروفون"></div>
-          <div class="wslider-mount" data-label="شدت نوسان" data-unit="٪" data-def="62"><input type="range" id="wave-int" min="0" max="100" step="1" value="62" aria-label="شدت نوسان"></div>
-          <div class="wslider-mount" data-label="سرعت جریان" data-unit="٪" data-def="52"><input type="range" id="wave-spd" min="0" max="100" step="1" value="52" aria-label="سرعت جریان"></div>
-          <div class="wslider-mount" data-label="نرمی واکنش" data-unit="٪" data-def="54"><input type="range" id="wave-sm" min="0" max="100" step="1" value="54" aria-label="نرمی واکنش"></div>
-          <div class="wslider-mount" data-label="جرقه و ذرات محیطی" data-unit="" data-def="8"><input type="range" id="wave-parts" min="0" max="24" step="1" value="8" aria-label="جرقه و ذرات محیطی"></div>
+      </div>
+
+      <div class="wave-section" aria-label="تنظیمات دقیق حرکت و حساسیت">
+        <div class="pref-head"><h4>شخصی‌سازی دقیق</h4></div>
+        <div class="wave-sliders-grid">
+          <div class="wslider">
+            <div class="wslider-head"><label class="wslider-label" for="wave-glow">نئون و درخشش</label><span class="wslider-bubble" id="wave-glow-val">۴۵٪</span></div>
+            <div class="wslider-track"><input type="range" id="wave-glow" min="0" max="100" step="1" value="45"></div>
+          </div>
+          <div class="wslider">
+            <div class="wslider-head"><label class="wslider-label" for="wave-sens">حساسیت به صدا</label><span class="wslider-bubble" id="wave-sens-val">۵۸٪</span></div>
+            <div class="wslider-track"><input type="range" id="wave-sens" min="0" max="100" step="1" value="58"></div>
+          </div>
+          <div class="wslider">
+            <div class="wslider-head"><label class="wslider-label" for="wave-spd">سرعت حرکت</label><span class="wslider-bubble" id="wave-spd-val">۵۰٪</span></div>
+            <div class="wslider-track"><input type="range" id="wave-spd" min="0" max="100" step="1" value="50"></div>
+          </div>
+          <div class="wslider">
+            <div class="wslider-head"><label class="wslider-label" for="wave-sm">نرمی واکنش</label><span class="wslider-bubble" id="wave-sm-val">۵۵٪</span></div>
+            <div class="wslider-track"><input type="range" id="wave-sm" min="0" max="100" step="1" value="55"></div>
+          </div>
+          <div class="wslider wslider--full">
+            <div class="wslider-head"><label class="wslider-label" id="wave-density-lbl" for="wave-density">ضخامت و تراکم موج</label><span class="wslider-bubble" id="wave-density-val">۵۰٪</span></div>
+            <div class="wslider-track"><input type="range" id="wave-density" min="0" max="100" step="1" value="50"></div>
+          </div>
         </div>
         <div class="wave-toggles-strip">
           <label class="wave-switch-row">
-            <input type="checkbox" id="wave-aurora">
-            <span class="wave-switch-copy"><strong>هاله پس‌زمینه (Aurora)</strong><small>نور ملایم پشت موج حین ضبط</small></span>
+            <input type="checkbox" id="wave-mirror" checked>
+            <span class="wave-switch-copy"><strong>قرینه دوطرفه</strong><small>پخش متقارن بالا و پایین یا چپ و راست</small></span>
           </label>
           <label class="wave-switch-row">
             <input type="checkbox" id="wave-hide">
-            <span class="wave-switch-copy"><strong>پنهان‌سازی نوار موج</strong><small>مناسب صرفه‌جویی باتری</small></span>
+            <span class="wave-switch-copy"><strong>پنهان‌سازی نوار موج</strong><small>مناسب صرفه‌جویی باتری و تمرکز روی متن</small></span>
           </label>
         </div>
-        <div class="wslider-mount" data-label="رنگ هاله پس‌زمینه" data-unit="°" data-def="225"><input type="range" id="wave-aurora-hue" min="0" max="360" step="1" value="225" aria-label="رنگ هاله پس‌زمینه"></div>
       </div>
     </section>
 
@@ -815,18 +904,54 @@
   </section>
 </div>
 
-<!-- Guide & Shortcuts Sheet -->
+<!-- Guide & Quick-Start Sheet (Desktop includes Shortcuts; Mobile focuses on Quick-Start) -->
 <div id="shortcuts-backdrop" hidden>
-  <section id="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title" aria-describedby="shortcuts-enter-note">
+  <section id="shortcuts-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
     <div class="sc-handle" aria-hidden="true"></div>
-    <header class="sc-head"><b id="shortcuts-title">راهنمای هم‌نگار</b><span class="hint-inline">میانبر باز کردن: کلید ؟</span></header>
+    <header class="sc-head">
+      <b id="shortcuts-title">راهنمای هم‌نگار</b>
+      <span class="hint-inline desktop-only">میانبر باز کردن: کلید ؟</span>
+    </header>
     <div class="sc-tabs" role="tablist" aria-label="بخش‌های راهنما">
-      <button type="button" role="tab" id="guide-tab-shortcuts" aria-selected="true" aria-controls="guide-panel-shortcuts" class="settings-tab active">میانبرها</button>
+      <button type="button" role="tab" id="guide-tab-quickstart" aria-selected="true" aria-controls="guide-panel-quickstart" class="settings-tab active">شروع سریع</button>
+      <button type="button" role="tab" id="guide-tab-shortcuts" aria-selected="false" aria-controls="guide-panel-shortcuts" class="settings-tab desktop-only" tabindex="-1">میانبرها</button>
       <button type="button" role="tab" id="guide-tab-tools" aria-selected="false" aria-controls="guide-panel-tools" class="settings-tab" tabindex="-1">ابزارها</button>
       <button type="button" role="tab" id="guide-tab-config" aria-selected="false" aria-controls="guide-panel-config" class="settings-tab" tabindex="-1">تنظیمات</button>
       <button type="button" role="tab" id="guide-tab-quota" aria-selected="false" aria-controls="guide-panel-quota" class="settings-tab" tabindex="-1">سهمیه</button>
     </div>
-    <div class="sc-body" id="guide-panel-shortcuts" role="tabpanel" aria-labelledby="guide-tab-shortcuts" tabindex="0">
+
+    <div class="sc-body" id="guide-panel-quickstart" role="tabpanel" aria-labelledby="guide-tab-quickstart" tabindex="0">
+      <div class="qs-hero-box">
+        <b>راه‌اندازی در ۲ دقیقه با کلید رایگان Google AI Studio</b>
+        <p class="sc-note">کلیدت فقط داخل حافظه مرورگر خودت ذخیره می‌شود و مستقیم به سرویس گوگل وصل می‌شود. یک کلید رایگان برای هم تایپ صوتی فارسی و هم پالیش و ساختاردهی کافیست.</p>
+      </div>
+      <ol class="qs-steps-list">
+        <li>
+          <b>۱. ورود به صفحه کلید Google AI Studio</b>
+          <p class="sc-note">نشانی <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" dir="ltr">aistudio.google.com/apikey</a> را باز کن و با حساب گوگل وارد شو.</p>
+        </li>
+        <li>
+          <b>۲. ساخت پروژه و کلید API</b>
+          <p class="sc-note">دکمه <span dir="ltr">Create API key</span> را بزن؛ اگر پروژه‌ای نداری گزینه ساخت پروژه جدید را انتخاب کن تا کلیدی با شروع <code dir="ltr">AIza...</code> ساخته شود.</p>
+        </li>
+        <li>
+          <b>۳. چسباندن کلید در هم‌نگار</b>
+          <p class="sc-note">کلید را کپی کن، در «تنظیمات ← کلیدها و ارائه‌دهندگان ← Google Gemini» بچسبان و «تست اتصال» را بزن. زنجیره پیش‌فرض صوتی (<span dir="ltr">Flash ← Flash-Lite ← Whisper</span>) خودکار آماده است.</p>
+        </li>
+      </ol>
+      <div class="qs-extra-box">
+        <b>سرعت بیشتر برای ابزارهای متنی (اختیاری)</b>
+        <p class="sc-note">برای پالیش و ساختاردهی فوق‌سریع و سهمیه بیشتر می‌توانی کلید رایگان <strong>Groq</strong> (<a href="https://console.groq.com/keys" target="_blank" rel="noopener" dir="ltr">console.groq.com/keys</a>) یا <strong>OpenRouter</strong> (<a href="https://openrouter.ai/keys" target="_blank" rel="noopener" dir="ltr">openrouter.ai/keys</a> با فیلتر «فقط رایگان») را هم اضافه کنی.</p>
+      </div>
+      <div class="qs-quick-actions">
+        <button type="button" id="guide-go-keys" class="btn-primary btn-sm">رفتن به بخش کلیدها</button>
+        <button type="button" id="guide-go-models" class="btn-ghost btn-sm">تنظیم زنجیره مدل‌ها</button>
+        <button type="button" id="guide-demo-voice" class="btn-ghost btn-sm">دموی تایپ صوتی</button>
+        <button type="button" id="guide-demo-tools" class="btn-ghost btn-sm">دموی ابزارهای متن</button>
+      </div>
+    </div>
+
+    <div class="sc-body desktop-only" id="guide-panel-shortcuts" role="tabpanel" aria-labelledby="guide-tab-shortcuts" tabindex="0" hidden>
       <table class="sc-table" aria-label="فهرست میانبرها">
         <thead><tr><th scope="col">کلید</th><th scope="col">عملکرد</th><th scope="col">محدوده</th></tr></thead>
         <tbody id="shortcuts-rows"></tbody>
@@ -837,7 +962,7 @@
       </details>
       <details class="sc-acc" open>
         <summary class="sc-h">نکته درباره کلید Enter</summary>
-        <p class="sc-note" id="shortcuts-enter-note">کلید Enter همیشه زمینه‌ای است: در شیت بازبینی یعنی اعمال نتیجه، در جست‌وجوی زبان یعنی اجرای ترجمه، و در تغییرنام لایه موج یعنی تأیید.</p>
+        <p class="sc-note" id="shortcuts-enter-note">کلید Enter همیشه زمینه‌ای است: در شیت بازبینی یعنی اعمال نتیجه و در جست‌وجوی زبان یعنی اجرای ترجمه.</p>
       </details>
     </div>
     <div class="sc-body" id="guide-panel-tools" role="tabpanel" aria-labelledby="guide-tab-tools" tabindex="0" hidden></div>

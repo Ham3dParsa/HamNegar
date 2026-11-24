@@ -234,6 +234,37 @@ function hasAnyConfiguredKey() {
   }
 }
 
+function hasReadySttConfig() {
+  try {
+    const s = Storage.getSettings();
+    const chain = Array.isArray(s.sttChain) ? s.sttChain : [];
+    return chain.some((entry) => {
+      const enabled = typeof entry === 'object' ? entry.enabled !== false : true;
+      if (!enabled) return false;
+      return hasKeyFor(entry);
+    });
+  } catch {
+    return hasAnyConfiguredKey();
+  }
+}
+
+function persistKeysQuietly() {
+  try {
+    const patch = {};
+    if (els.keyGroq) patch.groqKey = els.keyGroq.value || '';
+    if (els.keyGemini) patch.geminiKey = els.keyGemini.value || '';
+    if (els.keyOpenrouter) patch.openrouterKey = els.keyOpenrouter.value || '';
+    if (Object.keys(patch).length) {
+      Storage.saveSettings(patch);
+      updateBadge();
+      renderProvidersStatus();
+      renderAllChains();
+      try { renderFlowListSoon(); } catch {}
+      try { onSettingsSync(); } catch {}
+    }
+  } catch {}
+}
+
 function loadSettings() {
   const s = Storage.getSettings();
   if (els.keyGroq) els.keyGroq.value = s.groqKey;
@@ -422,6 +453,7 @@ function openModal(initialTab) {
 }
 
 function closeModal() {
+  persistKeysQuietly();
   els.modal.classList.remove('is-open');
   els.modal.setAttribute('aria-hidden', 'true');
   els.modal.style.display = 'none';
@@ -469,9 +501,13 @@ export function mountSettingsModal(deps) {
   onToolsOpen = deps.onToolsOpen || onToolsOpen;
   syncCustomProviderSelects = deps.syncCustomProviderSelects || syncCustomProviderSelects;
 
-  if (els.keyGroq) els.keyGroq.addEventListener('input', validate);
-  if (els.keyGemini) els.keyGemini.addEventListener('input', validate);
-  if (els.keyOpenrouter) els.keyOpenrouter.addEventListener('input', validate);
+  const onKeyPersist = () => {
+    persistKeysQuietly();
+    validate();
+  };
+  if (els.keyGroq) { els.keyGroq.addEventListener('input', validate); els.keyGroq.addEventListener('change', onKeyPersist); els.keyGroq.addEventListener('blur', onKeyPersist); }
+  if (els.keyGemini) { els.keyGemini.addEventListener('input', validate); els.keyGemini.addEventListener('change', onKeyPersist); els.keyGemini.addEventListener('blur', onKeyPersist); }
+  if (els.keyOpenrouter) { els.keyOpenrouter.addEventListener('input', validate); els.keyOpenrouter.addEventListener('change', onKeyPersist); els.keyOpenrouter.addEventListener('blur', onKeyPersist); }
   if (els.groqBaseUrl) els.groqBaseUrl.addEventListener('input', validate);
   if (els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input', validate);
 
@@ -655,5 +691,5 @@ export function mountSettingsModal(deps) {
     try { onSettingsSync(); } catch {}
   });
 
-  return { engineInfo, updateBadge, validate, renderProvidersStatus, loadSettings, saveSettings, switchTab, openModal, closeModal, modalFocusables, hasAnyConfiguredKey };
+  return { engineInfo, updateBadge, validate, renderProvidersStatus, loadSettings, saveSettings, switchTab, openModal, closeModal, modalFocusables, hasAnyConfiguredKey, hasReadySttConfig };
 }

@@ -197,7 +197,23 @@ function toggleRunIsolation(sep){
   applyFilters();
   Logger.toast(isolatedRun != null ? `فقط اجرای #${isolatedRun} — کلیک دوباره: همه` : 'نمایش همه اجراها');
 }
-els.logBody?.addEventListener('click', (e) => {
+els.logBody?.addEventListener('click', async (e) => {
+  const copyBtn = e.target?.closest?.('.log-row-copy');
+  if (copyBtn && els.logBody.contains(copyBtn)) {
+    e.stopPropagation();
+    const row = copyBtn.closest('.log-line');
+    const txt = Logger.formatLineText(row);
+    if (!txt) return;
+    try {
+      await navigator.clipboard.writeText(txt);
+      copyBtn.classList.add('copied');
+      setTimeout(() => copyBtn.classList.remove('copied'), 1100);
+      Logger.toast('ردیف لاگ کپی شد', 1600);
+    } catch {
+      Logger.toast('کپی ناموفق بود');
+    }
+    return;
+  }
   const sep = e.target?.closest?.('.log-sep');
   if (sep && els.logBody.contains(sep)) toggleRunIsolation(sep);
 });
@@ -221,12 +237,36 @@ if (location.protocol === 'file:') { if(els.fileWarn) els.fileWarn.style.display
 // handles by reference (listener registration order unchanged); app.js keeps only
 // thin calls. getMainWave/syncRecStrip are live (mainWave inits at file end; never snapshots).
 let onboardingDismissed = false;
+let keylessDemoSession = false;
 function syncOnboarding() {
   const card = els.onboardingCard;
-  if (!card) return;
   const hasKey = typeof Settings !== 'undefined' && Settings ? Settings.hasAnyConfiguredKey() : false;
-  const hasText = !!(els.output && els.output.value.trim());
-  card.hidden = hasKey || hasText || onboardingDismissed;
+  const sttReady = typeof Settings !== 'undefined' && Settings ? Settings.hasReadySttConfig() : false;
+  if (sttReady && keylessDemoSession) {
+    keylessDemoSession = false;
+    if (els.statusText?.textContent?.includes('بدون کلید')) {
+      Logger.setStatus('آماده ضبط', 'info');
+    }
+  }
+  if (!card) return;
+  card.hidden = sttReady || onboardingDismissed;
+  if (card.hidden) return;
+  const stepKey = $('onb-step-key');
+  const stepChain = $('onb-step-chain');
+  const stepReady = $('onb-step-ready');
+  const sub = $('onb-status-sub');
+  const btnKeys = $('btn-onboard-keys');
+  stepKey?.classList.toggle('is-done', hasKey);
+  stepChain?.classList.toggle('is-done', hasKey);
+  stepReady?.classList.toggle('is-done', sttReady);
+  if (sub) {
+    sub.textContent = hasKey && !sttReady
+      ? 'کلید ثبت شده اما مدل صوتی فعالی در زنجیره آماده نیست — از «مدل‌ها و زنجیره» یک مدل Google یا Groq روشن کن.'
+      : 'رایگان با کلید Google AI Studio — کلید فقط روی دستگاه خودت می‌ماند';
+  }
+  if (btnKeys) {
+    btnKeys.textContent = hasKey && !sttReady ? 'تنظیم مدل صوتی' : 'ثبت کلید گوگل / ارائه‌دهنده';
+  }
 }
 function syncModeUI() {
   const isQuick = !!els.toggleVad?.checked;
@@ -279,7 +319,7 @@ const Settings = mountSettingsModal({
   syncCustomProviderSelects,
   onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); try { refreshToolsTab(); } catch {} },
 });
-const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey } = Settings;
+const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey, hasReadySttConfig } = Settings;
 $('btn-x-modal')?.addEventListener('click', () => closeModal());
 
 // --- preference chains UI + models flow + inline add panels live in js/modules/chains.js (ticket 30) ---
@@ -303,18 +343,72 @@ mountChains({
 loadSettings();
 // --- per-chain inline add panels live in js/modules/chains.js (ticket 30; wired by mountChains above) ---
 
-// log panel toggle + manual splitter (not resize:vertical on flex)
-$('btn-clear-log').onclick=()=> els.logBody.innerHTML='';
-$('btn-copy-log').onclick=async()=>{
-  const visible = [...els.logBody.children].filter(el=> !el.classList.contains('hidden'));
-  const text = visible.map(e=>e.textContent).join('\n');
+// log panel toggle, developer quick actions & manual splitter
+function visibleLogLines({ includeSeps = false } = {}) {
+  if (!els.logBody) return [];
+  return [...els.logBody.children].filter((el) => {
+    if (el.classList.contains('hidden')) return false;
+    if (!includeSeps && el.classList.contains('log-sep')) return false;
+    return true;
+  });
+}
+$('btn-clear-log')?.addEventListener('click', () => {
+  els.logBody.innerHTML = '';
+  Logger.toast('لاگ پاک شد', 1600);
+});
+$('btn-prune-log')?.addEventListener('click', () => {
+  const rows = [...(els.logBody?.children || [])];
+  const KEEP = 20;
+  if (rows.length <= KEEP) {
+    Logger.toast(`هم‌اکنون ${fa(rows.length)} پیام در لاگ است`, 1800);
+    return;
+  }
+  const removeCount = rows.length - KEEP;
+  for (let i = 0; i < removeCount; i++) rows[i].remove();
+  Logger.toast(`${fa(removeCount)} پیام قدیمی حذف شد (${fa(KEEP)} پیام اخیر نگه داشته شد)`, 2400);
+});
+$('btn-copy-recent-log')?.addEventListener('click', async () => {
+  const rows = visibleLogLines({ includeSeps: false }).slice(-20);
+  const text = rows.map((e) => Logger.formatLineText(e)).filter(Boolean).join('\n');
+  if (!text) { Logger.toast('پیامی برای کپی نیست'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    Logger.toast(`${fa(rows.length)} پیام اخیر لاگ کپی شد`, 2000);
+  } catch {
+    Logger.toast('کپی ناموفق بود');
+  }
+});
+$('btn-copy-log')?.addEventListener('click', async () => {
+  const visible = visibleLogLines({ includeSeps: true });
+  const text = visible.map((e) => Logger.formatLineText(e)).filter(Boolean).join('\n');
   if (!text) { Logger.toast('چیزی برای کپی نیست'); return; }
-  await navigator.clipboard.writeText(text);
-  Logger.toast(visible.length !== els.logBody.children.length ? `کپی ${visible.length} سطر فیلترشده` : 'کپی شد');
-};
+  try {
+    await navigator.clipboard.writeText(text);
+    Logger.toast(visible.length !== els.logBody.children.length ? `کپی ${fa(visible.length)} سطر فیلترشده` : 'کل لاگ کپی شد', 2000);
+  } catch {
+    Logger.toast('کپی ناموفق بود');
+  }
+});
+let logExpanded = false;
+function setLogExpanded(expanded) {
+  logExpanded = !!expanded;
+  if (logExpanded && logCollapsed) applyLogCollapsed(false);
+  els.logPanel?.classList.toggle('is-expanded', logExpanded);
+  els.inspector?.classList.toggle('log-expanded', logExpanded);
+  const btn = $('btn-expand-log');
+  if (btn) {
+    btn.classList.toggle('active', logExpanded);
+    btn.setAttribute('aria-pressed', logExpanded ? 'true' : 'false');
+    const tx = btn.querySelector('.log-tx');
+    if (tx) tx.textContent = logExpanded ? 'عادی' : 'بزرگ';
+    btn.title = logExpanded ? 'برگشت به اندازه عادی لاگ' : 'بزرگ‌نمایی پنل لاگ';
+  }
+}
+$('btn-expand-log')?.addEventListener('click', () => setLogExpanded(!logExpanded));
 let logCollapsed = Storage.getSettings().logCollapsed;
 function applyLogCollapsed(collapsed){
   logCollapsed=collapsed;
+  if (collapsed && logExpanded) setLogExpanded(false);
   els.logPanel.classList.toggle('collapsed', collapsed);
   const label = collapsed ? 'نمایش' : 'بستن';
   const tx = els.btnToggleLog.querySelector('.log-tx');
@@ -474,13 +568,16 @@ els.output.addEventListener('keydown', (e)=>{
     applyLogCollapsed(logCollapsed);
   }
   let dragging=false, startY=0, startH=0;
-  const clamp = v => Math.max(80, Math.min(v, Math.floor(window.innerHeight*0.55)));
+  const clamp = v => Math.max(110, Math.min(v, Math.floor(window.innerHeight * 0.72)));
+  const getY = (e) => (e.touches && e.touches.length ? e.touches[0].clientY : e.clientY);
   const onMove = (e)=>{
     if(!dragging) return;
-    const y = e.touches ? e.touches[0].clientY : e.clientY;
+    const y = getY(e);
     const delta = y - startY;
     const nh = clamp(startH + delta);
+    if (logExpanded) setLogExpanded(false);
     els.logPanel.style.height = nh + 'px';
+    els.logPanel.style.maxHeight = nh + 'px';
     e.preventDefault();
   };
   const onUp = ()=>{
@@ -489,6 +586,9 @@ els.output.addEventListener('keydown', (e)=>{
     splitter.classList.remove('dragging');
     document.body.style.cursor='';
     document.body.style.userSelect='';
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onUp);
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     document.removeEventListener('touchmove', onMove);
@@ -497,17 +597,21 @@ els.output.addEventListener('keydown', (e)=>{
   };
   const onDown = (e)=>{
     dragging=true;
-    startY = e.touches ? e.touches[0].clientY : e.clientY;
+    startY = getY(e);
     startH = els.logPanel.getBoundingClientRect().height;
     splitter.classList.add('dragging');
     document.body.style.cursor='ns-resize';
     document.body.style.userSelect='none';
+    document.addEventListener('pointermove', onMove, {passive:false});
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     document.addEventListener('touchmove', onMove, {passive:false});
     document.addEventListener('touchend', onUp);
     e.preventDefault();
   };
+  splitter.addEventListener('pointerdown', onDown, {passive:false});
   splitter.addEventListener('mousedown', onDown);
   splitter.addEventListener('touchstart', onDown, {passive:false});
   if(window.ResizeObserver){
@@ -833,12 +937,18 @@ async function startRecording(){
   if (isTranscribing) { shakeMic(); Logger.toast('⏳ صبر کن — تبدیل ادامه دارد…', 2000); return; }
   saveCursor();
   const s=Storage.getSettings();
-  const hasBatchKey = hasAnyConfiguredKey();
-  // live preview is keyless — only the batch key gate stays. Keyless
-  // recording is allowed when realtime can actually preview (realtime=1 + SR
-  // supported); otherwise open the Keys setup tab directly.
-  const keylessPreview = !hasBatchKey && s.realtime && Realtime.isSupported();
-  if(!hasBatchKey && !keylessPreview){ Logger.setStatus('برای ضبط دقیق یک کلید رایگان وارد کن','warn'); openModal('keys'); return; }
+  const sttReady = hasReadySttConfig();
+  if (sttReady) keylessDemoSession = false;
+  const wantsRealtime = !!s.realtime || (!sttReady && keylessDemoSession);
+  // Keyless live preview runs ONLY while no STT key+model is ready.
+  // The moment a valid key+model is saved, sttReady becomes true and normal STT runs.
+  const keylessPreview = !sttReady && wantsRealtime && Realtime.isSupported();
+  if(!sttReady && !keylessPreview){
+    const hasSomeKey = hasAnyConfiguredKey();
+    Logger.setStatus(hasSomeKey ? 'یک مدل صوتی فعال در زنجیره لازم است' : 'برای ضبط دقیق یک کلید رایگان Google AI Studio وارد کن', 'warn');
+    openModal(hasSomeKey ? 'pipeline' : 'keys');
+    return;
+  }
   let snap=null;
   recordingStarting = true;
   try{
@@ -852,12 +962,12 @@ async function startRecording(){
     rtPaused=false;
     rtRestarts = 0; rtFatal = false; rtClearRestart(); // ticket/106: fresh restart budget per recording
     recTimerStart();
-    if(s.realtime) els.btnMic.classList.add('realtime-active');
+    if(wantsRealtime) els.btnMic.classList.add('realtime-active');
     syncActionbar();
-    Logger.setStatus('🔴 در حال ضبط...'+(s.realtime?' (زنده)':'')+(snap.keyless?' — پیش‌نمایش زنده بدون کلید؛ ثبت نهایی نیاز به کلید':''),'rec');
+    Logger.setStatus('🔴 در حال ضبط...'+(wantsRealtime?' (زنده)':'')+(snap.keyless?' — پیش‌نمایش زنده بدون کلید؛ ثبت نهایی نیاز به کلید':''),'rec');
     if(snap.keyless){ Logger.toast('پیش‌نمایش زنده بدون کلید؛ ثبت نهایی نیاز به کلید', 3500); Logger.log('warn','keyless realtime preview',{snapId: snap.id}); }
     mainWaveLive();
-    if(s.realtime){
+    if(wantsRealtime){
       if(!Realtime.isSupported()){
         // ticket/106 else-branch: unsupported browser — persistent hint + auto-untoggle
         if (els.toggleRealtime) els.toggleRealtime.checked = false;
@@ -874,7 +984,7 @@ async function startRecording(){
       }
     }
     if(s.vad) startVAD();
-    Logger.log('info','ضبط شروع',{realtime:s.realtime, vad:s.vad, snapId: snap.id});
+    Logger.log('info','ضبط شروع',{realtime:wantsRealtime, vad:s.vad, keyless:keylessPreview, snapId: snap.id});
   }catch(e){
     try { await Audio.stop(); } catch {}
     if(snap && rtSnap?.id===snap.id) rtSnap=null;
@@ -995,7 +1105,7 @@ async function handleTranscription(blob, snap){
   // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
   if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); mainWaveTranscribing(); }
   Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? ((snap.archived||'')+snap.committed+snap.pending).length : 0});
-  if(blob.size<800){
+  if(blob.size < 300){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
@@ -1008,7 +1118,7 @@ async function handleTranscription(blob, snap){
   // keyless preview session — preserve the recorded blob too so entering a key
   // lets the user convert what they just said without re-recording.
   {
-    if(snap?.keyless && !hasAnyConfiguredKey()){
+    if(snap?.keyless && !hasReadySttConfig()){
       await preservePendingVoice({
         blob,
         durationMs,
@@ -1182,9 +1292,10 @@ async function transcribeAudioFile(file) {
     Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 2000);
     return;
   }
-  if (!hasAnyConfiguredKey()) {
-    Logger.toast('برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200);
-    openModal('keys');
+  if (!hasReadySttConfig()) {
+    const hasSomeKey = hasAnyConfiguredKey();
+    Logger.toast(hasSomeKey ? 'یک مدل صوتی Google یا Groq را در زنجیره فعال کن' : 'برای تبدیل فایل صوتی ابتدا یک کلید رایگان Google AI Studio وارد کن', 3400);
+    openModal(hasSomeKey ? 'pipeline' : 'keys');
     return;
   }
   if (file.size > MAX_AUDIO_BYTES) {
@@ -1275,7 +1386,12 @@ async function transcribeAudioFile(file) {
 els.btnUploadAudio?.addEventListener('click', () => {
   setToolsOpen(false);
   if (isRecording || isTranscribing) { Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 1800); return; }
-  if (!hasAnyConfiguredKey()) { Logger.toast('برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200); openModal('keys'); return; }
+  if (!hasReadySttConfig()) {
+    const hasSomeKey = hasAnyConfiguredKey();
+    Logger.toast(hasSomeKey ? 'یک مدل صوتی Google یا Groq را در زنجیره فعال کن' : 'برای تبدیل فایل صوتی ابتدا یک کلید رایگان وارد کن', 3200);
+    openModal(hasSomeKey ? 'pipeline' : 'keys');
+    return;
+  }
   els.audioFileInput?.click();
 });
 els.audioFileInput?.addEventListener('change', (e) => {
@@ -1422,9 +1538,10 @@ async function retryPendingVoice(id) {
     Logger.toast('صبر کن تا ضبط یا تبدیل فعلی تمام شود', 2000);
     return false;
   }
-  if (!hasAnyConfiguredKey()) {
-    Logger.toast('ابتدا یک کلید رایگان وارد کن تا صدایت تبدیل شود', 3200);
-    openModal('keys');
+  if (!hasReadySttConfig()) {
+    const hasSomeKey = hasAnyConfiguredKey();
+    Logger.toast(hasSomeKey ? 'یک مدل صوتی Google یا Groq را در زنجیره فعال کن' : 'ابتدا یک کلید رایگان وارد کن تا صدایت تبدیل شود', 3200);
+    openModal(hasSomeKey ? 'pipeline' : 'keys');
     return false;
   }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -1939,7 +2056,9 @@ function diffApply(){
   const undo = Stagebar.stagePushRaw(p.scope);
   Stagebar.stageApply(p.scope, p.text);
   undo.newEnd = p.scope.start + p.text.length;
-  Stagebar.stageQuotaSplit(p.model, p.scope.text.split(/\s+/).length, p.scope.text.length);
+  if (p.model && p.model !== 'demo') {
+    Stagebar.stageQuotaSplit(p.model, p.scope.text.split(/\s+/).length, p.scope.text.length);
+  }
   Logger.log('info', p.okLog);
   Logger.setStatus(p.okStatus, 'info');
   Logger.toast(p.okToast);
@@ -2062,11 +2181,21 @@ function renderShortcuts(){
     }
   }
 }
+function isMobileTouch() {
+  try {
+    return window.matchMedia('(hover: none) and (pointer: coarse), (max-width: 768px)').matches;
+  } catch {
+    return false;
+  }
+}
 let lastShortcutsFocus = null;
-const GUIDE_TABS = ['shortcuts', 'tools', 'config', 'quota'];
+const GUIDE_TABS = ['quickstart', 'shortcuts', 'tools', 'config', 'quota'];
+function visibleGuideTabs() {
+  return isMobileTouch() ? GUIDE_TABS.filter((t) => t !== 'shortcuts') : GUIDE_TABS;
+}
 function renderGuide(){
   for (const name of GUIDE_TABS){
-    if (name === 'shortcuts') continue; // shortcuts tab output untouched (renders from SHORTCUTS)
+    if (name === 'shortcuts' || name === 'quickstart') continue; // static/specialized markup
     const panel = $('guide-panel-' + name);
     if (!panel) continue;
     panel.innerHTML = '';
@@ -2080,14 +2209,15 @@ function renderGuide(){
   }
 }
 function selectGuideTab(name){
-  if (!GUIDE_TABS.includes(name)) return;
+  const allowed = visibleGuideTabs();
+  const target = allowed.includes(name) ? name : allowed[0];
   for (const n of GUIDE_TABS){
     const tab = $('guide-tab-' + n), panel = $('guide-panel-' + n);
-    const on = n === name;
+    const on = n === target;
     tab?.setAttribute('aria-selected', on ? 'true' : 'false');
     tab?.classList.toggle('active', on);
     if (tab) tab.tabIndex = on ? 0 : -1;
-    // NOTE: author CSS sets display on .sc-body which beats [hidden]; hide inline (no css/app.css change).
+    // NOTE: author CSS sets display on .sc-body which beats [hidden]; hide inline.
     if (panel){ panel.hidden = !on; panel.style.display = on ? '' : 'none'; }
   }
 }
@@ -2096,21 +2226,26 @@ for (const n of GUIDE_TABS){
 }
 $('shortcuts-dialog')?.addEventListener('keydown', (e) => {
   if (e.target?.getAttribute?.('role') !== 'tab') return;
-  const i = GUIDE_TABS.indexOf(GUIDE_TABS.find(n => $('guide-tab-' + n) === e.target));
+  const tabs = visibleGuideTabs();
+  const i = tabs.indexOf(tabs.find(n => $('guide-tab-' + n) === e.target));
   if (i < 0) return;
   let j = null;
-  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') j = (i + (e.key === 'ArrowLeft' ? 1 : -1) + GUIDE_TABS.length) % GUIDE_TABS.length; // RTL: Left = next
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') j = (i + (e.key === 'ArrowLeft' ? 1 : -1) + tabs.length) % tabs.length; // RTL: Left = next
   else if (e.key === 'Home') j = 0;
-  else if (e.key === 'End') j = GUIDE_TABS.length - 1;
+  else if (e.key === 'End') j = tabs.length - 1;
   if (j === null) return;
   e.preventDefault();
-  selectGuideTab(GUIDE_TABS[j]);
-  $('guide-tab-' + GUIDE_TABS[j])?.focus?.();
+  selectGuideTab(tabs[j]);
+  $('guide-tab-' + tabs[j])?.focus?.();
 });
-function openShortcuts(){
+function openShortcuts(initialTab){
   renderShortcuts();
   renderGuide();
-  selectGuideTab('shortcuts');
+  const sttReady = typeof hasReadySttConfig === 'function' ? hasReadySttConfig() : false;
+  const preferred = (typeof initialTab === 'string' && GUIDE_TABS.includes(initialTab))
+    ? initialTab
+    : (isMobileTouch() || !sttReady ? 'quickstart' : 'shortcuts');
+  selectGuideTab(preferred);
   const back = $('shortcuts-backdrop');
   if (!back || !back.hidden) return;
   lastShortcutsFocus = document.activeElement;
@@ -2125,6 +2260,14 @@ function closeShortcuts(){
   else $('btn-shortcuts')?.focus?.();
 }
 function applyShortcutHints(){
+  if (isMobileTouch()) {
+    const btnSc = $('btn-shortcuts');
+    if (btnSc) {
+      btnSc.setAttribute('title', 'راهنما و شروع سریع');
+      btnSc.setAttribute('aria-label', 'راهنما و شروع سریع');
+    }
+    return;
+  }
   const set = (el, ids) => {
     if (!el) return;
     const list = ids.map(shortcutById).filter(Boolean);
@@ -2147,7 +2290,7 @@ function applyShortcutHints(){
   set($('diff-sheet'), ['esc-diff']);
   set($('tr-panel'), ['esc-tr']);
 }
-$('btn-shortcuts')?.addEventListener('click', openShortcuts);
+$('btn-shortcuts')?.addEventListener('click', () => openShortcuts());
 $('shortcuts-close')?.addEventListener('click', closeShortcuts);
 $('shortcuts-backdrop')?.addEventListener('click', (e) => { if (e.target?.id === 'shortcuts-backdrop') closeShortcuts(); });
 $('shortcuts-dialog')?.addEventListener('keydown', (e) => {
@@ -2248,22 +2391,116 @@ if (behaviorToggle && behaviorPop) {
   setBehaviorOpen(false);
 }
 
+// Interactive Zero-Key Mini-Demos (Voice Typing + Text Structuring Tool Preview)
+let voiceDemoRunning = false;
+function runVoiceDemo() {
+  if (voiceDemoRunning || isRecording || isTranscribing) return;
+  closeShortcuts();
+  voiceDemoRunning = true;
+  const strip = $('rec-strip');
+  const sampleChunks = [
+    'سلام، ',
+    'می‌خواستم یادآوری کنم برای جلسه فردا ',
+    'اول گزارش فروش رو چک کنیم، ',
+    'بعد زمان‌بندی انتشار نسخه جدید رو نهایی کنیم ',
+    'و در آخر فهرست کارهای تیم طراحی رو بفرستیم.',
+  ];
+  const baseText = els.output.value.trim() ? els.output.value + '\n' : '';
+  let acc = '';
+  Logger.setStatus('🎙 دموی تایپ صوتی (شبیه‌سازی بدون کلید)…', 'rec');
+  strip?.classList.add('recording');
+  try {
+    if (mainWave && !isWaveHidden()) {
+      mainWave.setFakeEnabled(true);
+      mainWave.setState('recording');
+      mainWave.start();
+    }
+  } catch {}
+
+  let idx = 0;
+  const step = () => {
+    if (idx < sampleChunks.length) {
+      acc += sampleChunks[idx++];
+      els.output.value = baseText + acc;
+      updateCounts();
+      setTimeout(step, 380);
+      return;
+    }
+    strip?.classList.remove('recording');
+    strip?.classList.add('transcribing');
+    try { mainWave?.setState('transcribing'); } catch {}
+    Logger.setStatus('⏳ دموی پالیش خودکار فارسی…', 'warn');
+    setTimeout(() => {
+      const cleaned = 'سلام، می‌خواستم یادآوری کنم برای جلسه فردا اول گزارش فروش رو چک کنیم، بعد زمان‌بندی انتشار نسخه جدید رو نهایی کنیم و در آخر فهرست کارهای تیم طراحی رو بفرستیم.';
+      els.output.value = baseText + cleaned;
+      updateCounts();
+      editorHistory.push(els.output.value);
+      Storage.saveDraft(els.output.value);
+      strip?.classList.remove('transcribing');
+      try {
+        mainWave?.setFakeEnabled(false);
+        mainWaveIdle();
+      } catch {}
+      voiceDemoRunning = false;
+      Logger.setStatus('دموی تایپ صوتی تمام شد — برای استفاده واقعی کلید رایگان بساز', 'info');
+      Logger.toast('این یک پیش‌نمایش بود — حالا «دموی ابزارهای متن» را هم ببین یا کلید گوگل بزن', 4200);
+    }, 650);
+  };
+  step();
+}
+
+function runToolsDemo() {
+  if (isRecording || isTranscribing) return;
+  closeShortcuts();
+  const sampleBefore = 'می خواستم برای جلسه فردا یه لیست کار بنویسم اول گزارش فروش رو چک کنیم بعد زمان بندی انتشار نسخه جدید رو نهایی کنیم و در آخر فهرست کارهای تیم طراحی رو بفرستیم راستی یادمون نره لینک جلسه رو نیم ساعت زودتر توی گروه بذاریم';
+  const sampleAfter = 'لیست کارهای جلسه فردا:\n• بررسی گزارش فروش\n• نهایی‌کردن زمان‌بندی انتشار نسخه جدید\n• ارسال فهرست کارهای تیم طراحی\n\nنکته: یادمون نره لینک جلسه رو نیم ساعت زودتر توی گروه بذاریم.';
+  const current = els.output.value.trim();
+  const scope = current
+    ? { kind: 'all', start: 0, end: els.output.value.length, text: sampleBefore }
+    : { kind: 'all', start: 0, end: 0, text: sampleBefore };
+  openDiffRunning('ساختاردهی متن (دمو)', scope, $('btn-demo-tools'));
+  const seq = diffRunSeq;
+  setTimeout(() => {
+    fillDiffSheet({
+      scope: { kind: 'all', start: 0, end: els.output.value.length, text: sampleBefore },
+      text: sampleAfter,
+      model: 'demo',
+      faLabel: 'ساختاردهی متن (پیش‌نمایش دمو)',
+      logTitle: 'دموی ابزار ساختاردهی',
+      okStatus: 'نتیجه دموی ساختاردهی روی بوم نشست',
+      okToast: 'متن دمو اعمال شد — با کلید گوگل روی متن‌های خودت اجرا می‌شود',
+      okLog: 'demo-tools applied',
+      invoker: $('btn-demo-tools'),
+    }, seq);
+  }, 320);
+}
+
 // Onboarding card & Everyday/Lecture preset mode controls
-$('btn-onboard-keys')?.addEventListener('click', () => openModal('keys'));
+$('btn-onboard-keys')?.addEventListener('click', () => {
+  const hasSomeKey = hasAnyConfiguredKey();
+  const sttReady = hasReadySttConfig();
+  openModal(hasSomeKey && !sttReady ? 'pipeline' : 'keys');
+});
+$('btn-onboard-guide')?.addEventListener('click', () => openShortcuts('quickstart'));
+$('btn-demo-voice')?.addEventListener('click', runVoiceDemo);
+$('btn-demo-tools')?.addEventListener('click', runToolsDemo);
+$('guide-go-keys')?.addEventListener('click', () => { closeShortcuts(); openModal('keys'); });
+$('guide-go-models')?.addEventListener('click', () => { closeShortcuts(); openModal('pipeline'); });
+$('guide-demo-voice')?.addEventListener('click', runVoiceDemo);
+$('guide-demo-tools')?.addEventListener('click', runToolsDemo);
 $('btn-onboard-live')?.addEventListener('click', () => {
   if (!Realtime.isSupported()) {
     Logger.toast('مرورگر فعلی از حالت زنده پشتیبانی نمی‌کند — یک کلید رایگان وارد کن', 3500);
     openModal('keys');
     return;
   }
-  if (els.toggleRealtime) els.toggleRealtime.checked = true;
-  Storage.saveSettings({ realtime: true });
+  // Session-only keyless demo: NEVER permanently overwrite Storage realtime flag
+  keylessDemoSession = true;
   onboardingDismissed = true;
   syncOnboarding();
-  syncQuickToggles();
   els.btnMic?.focus?.();
-  Logger.setStatus('حالت زنده روشن شد — دکمه ضبط را بزن', 'info');
-  Logger.toast('حالت زنده روشن شد — دکمه ضبط را بزن', 2800);
+  Logger.setStatus('تست زنده میکروفون آماده است — دکمه ضبط را بزن (پس از ثبت کلید خودکار دقیق می‌شود)', 'info');
+  Logger.toast('تست زنده آماده است — دکمه ضبط را بزن', 2800);
 });
 $('btn-onboard-dismiss')?.addEventListener('click', () => {
   onboardingDismissed = true;

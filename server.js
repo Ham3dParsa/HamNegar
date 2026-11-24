@@ -74,8 +74,8 @@ geminiRouter.post('/transcribe', async (req, res) => {
 
 geminiRouter.post('/text', async (req, res) => {
   try {
-    const { model, text, system, maxOutputTokens, temperature } = req.body || {};
-    const result = await generateText({ model, text, system, maxOutputTokens, temperature });
+    const { model, text, system, maxOutputTokens, temperature, thinkingMode } = req.body || {};
+    const result = await generateText({ model, text, system, maxOutputTokens, temperature, thinkingMode });
     res.json(result);
   } catch (err) {
     sendApiError(res, err);

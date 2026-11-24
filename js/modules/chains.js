@@ -39,16 +39,17 @@ let onSettingsSync = () => {};
 
 // --- preference chains UI ---
 const STT_LABELS = {
-  'groq': { label: 'Groq Whisper', sub: 'سریع • whisper-large-v3' },
-  'gemini-3.5-transcribe': { label: 'gemini-3.5-transcribe', sub: 'پیشنهادی • رونویسی دقیق ✓' },
-  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'سریع و سبک ✓' },
+  'gemini-4-hydrogen': { label: 'Gemini Flash (4)', sub: 'اولویت پیشنهادی • درک دقیق فارسی ✓' },
+  'gemini-3.1-flash-lite': { label: 'Gemini Flash-Lite (3.1)', sub: 'سریع و پرسهمیه ✓' },
+  'groq': { label: 'Groq Whisper', sub: 'پشتیبان فوق‌سریع • whisper-large-v3' },
+  'gemini-3.5-transcribe': { label: 'Gemini 3.5 Transcribe', sub: 'مدل تخصصی رونویسی صوت' },
 };
 const POLISH_LABELS = {
-  'gemini-4-hydrogen': { label: 'gemini-4-hydrogen', sub: 'Google • پالیش و ترجمه سریع (سرور)' },
-  'gemini-3.1-flash-lite': { label: 'gemini-3.1-flash-lite', sub: 'Google • سبک و سریع (سرور)' },
-  'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'Qwen سبک • رایگان' },
-  'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'Qwen دقیق • رایگان' },
-  'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'GPT-OSS • رایگان' },
+  'gemini-3.1-flash-lite': { label: 'Gemini Flash-Lite (3.1)', sub: 'Google • بسیار سریع و پرسهمیه' },
+  'gemini-4-hydrogen': { label: 'Gemini Flash (4)', sub: 'Google • پالیش و ساختاردهی دقیق' },
+  'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'OpenRouter • رایگان' },
+  'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'OpenRouter • رایگان' },
+  'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'OpenRouter • رایگان' },
   'qwen/qwen3.6-27b': { label: 'qwen/qwen3.6-27b', sub: 'Groq • 1K RPD' },
   'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Groq • 1K RPD' },
   'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: 'Groq • 1K RPD' },
@@ -327,8 +328,9 @@ function renderChain(container, chain, type){
 
     const switchLabel = `روشن یا خاموش کردن مدل ${meta.label}`;
     const subHtml = meta.sub ? `<span class="chain-sub">${esc(meta.sub)}</span>` : '';
-    item.title = 'دستگیره را بکش یا از دکمه‌های بالا و پایین استفاده کن — Ctrl+↑/↓';
-    item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
+    const isTouch = typeof window !== 'undefined' && window.matchMedia?.('(hover: none) and (pointer: coarse), (max-width: 768px)')?.matches;
+    item.title = isTouch ? 'دستگیره را بکش یا از دکمه‌های بالا و پایین استفاده کن' : 'دستگیره را بکش یا از دکمه‌های بالا و پایین استفاده کن — Ctrl+↑/↓';
+    if (!isTouch) item.setAttribute('aria-keyshortcuts', 'Control+ArrowUp Control+ArrowDown');
     item.innerHTML = `
       <div class="chain-row-top">
         <button type="button" class="chain-drag" aria-label="بکش برای تغییر اولویت ${esc(meta.label)}" title="بکش برای جابه‌جایی">${IC_GRIP}</button>
@@ -501,11 +503,15 @@ function showFetchError(providerId, e){
 function capsFor(id, pid){
   const s = String(id || '');
   const low = s.toLowerCase();
-  const isStt = s === 'groq' || /^gemini/i.test(s)
+  const cpid = canonicalize(pid) || String(pid || '').trim();
+  const isStt = s === 'groq' || (cpid === 'google' && /^gemini/i.test(s))
     || Object.prototype.hasOwnProperty.call(STT_LABELS, s)
     || /whisper|stt|transcrib/i.test(low);
-  const free = /free/i.test(low);
-  if (/^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || {}).sub || 'Google AI Studio' };
+  // Accurate free-tier tagging: OpenRouter requires :free suffix; Groq & Google AI Studio offer free tier
+  const free = cpid === 'openrouter'
+    ? (/:free\b/i.test(low) || /\bfree\b/i.test(low))
+    : (cpid === 'google' || cpid === 'groq' || /:free\b/i.test(low));
+  if (cpid === 'google' && /^gemini/i.test(s)) return { caps: ['stt', 't2t'], free: true, fa: (STT_LABELS[s] || POLISH_LABELS[s] || {}).sub || 'Google AI Studio' };
   if (isStt) return { caps: ['stt'], free, fa: (STT_LABELS[s] || {}).sub || '' };
   return { caps: ['t2t'], free, fa: (POLISH_LABELS[s] || {}).sub || '' };
 }
@@ -1004,6 +1010,10 @@ export function flowInit(){
 
 // --- per-chain inline add panels (ticket/76-inline-chain-add): expander + panel under each .chain-foot ---
 const CHAIN_EXPAND_LABEL = { stt: 'افزودن مدل صوتی', polish: 'افزودن ویرایشگر' };
+const panelFilterState = {
+  stt: { prov: 'all', freeOnly: false },
+  polish: { prov: 'all', freeOnly: false },
+};
 export function chainPanelEls(target){
   return target === 'stt'
     ? { btn: els.btnExpandStt, panel: els.sttAddPanel, search: els.sttAddSearch, list: els.sttAddList }
@@ -1018,12 +1028,20 @@ function renderChainPanel(target){
   if(!list) return;
   const qRaw = (search?.value || '').trim();
   const q = qRaw.toLowerCase();
+  const pf = panelFilterState[target] || { prov: 'all', freeOnly: false };
   list.innerHTML = '';
-  // Pre-scoped per chain from the same sources as the models tab: the STT panel
-  // hides t2t-only models outright (no muted rows, no stale-target class); polish shows all.
   const rows = allFlowModels()
     .filter(d => target === 'stt' ? isSttEligible(d.id, d.providerId) : true)
+    .filter(d => {
+      if (pf.prov === 'all') return true;
+      if (pf.prov === 'custom') return !['groq', 'google', 'openrouter'].includes(d.providerId);
+      const want = pf.prov === 'gemini' ? 'google' : pf.prov;
+      return d.providerId === want;
+    })
+    .filter(d => !pf.freeOnly || d.free)
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
+  const countEl = $(target === 'stt' ? 'stt-add-count' : 'polish-add-count');
+  if (countEl) countEl.textContent = `${fa(rows.length)} مدل`;
   if(!rows.length){
     const emptyWrap = document.createElement('div');
     emptyWrap.className = 'hint-inline';
@@ -1031,6 +1049,8 @@ function renderChainPanel(target){
       emptyWrap.textContent = `مدل «${qRaw}» در کاتالوگ پیدا نشد — از کادر پایین همین پنل با انتخاب ارائه‌دهنده اضافه‌اش کن یا «بروزرسانی کاتالوگ زنده» را بزن.`;
       const customInp = $(target === 'stt' ? 'stt-custom-id' : 'polish-custom-id');
       if(customInp && !customInp.value) customInp.value = qRaw;
+    } else if (pf.freeOnly) {
+      emptyWrap.textContent = 'مدل رایگان با این فیلتر پیدا نشد — فیلتر «فقط رایگان» را بردار یا کاتالوگ زنده را بروزرسانی کن.';
     } else {
       emptyWrap.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن یا کاتالوگ زنده را بروزرسانی کن.';
     }
@@ -1278,6 +1298,33 @@ export function mountChains(deps){
   els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));
   els.sttAddSearch?.addEventListener('input', ()=> renderChainPanel('stt'));
   els.polishAddSearch?.addEventListener('input', ()=> renderChainPanel('polish'));
+
+  // Inline chain panel filter chips (provider + Free-Only toggle for OpenRouter/mobile ergonomics)
+  for (const target of ['stt', 'polish']) {
+    const bar = $(`${target}-add-filters`);
+    if (!bar) continue;
+    bar.querySelectorAll('[data-panel-prov]').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const prov = chip.dataset.panelProv || 'all';
+        panelFilterState[target].prov = prov;
+        bar.querySelectorAll('[data-panel-prov]').forEach((x) => {
+          const on = (x.dataset.panelProv || 'all') === prov;
+          x.classList.toggle('active', on);
+          x.setAttribute('aria-pressed', String(on));
+        });
+        // Convenience: when picking OpenRouter on mobile, suggest free-only filter if not explicitly toggled
+        renderChainPanel(target);
+      });
+    });
+    const freeBtn = bar.querySelector('[data-panel-free]');
+    freeBtn?.addEventListener('click', () => {
+      panelFilterState[target].freeOnly = !panelFilterState[target].freeOnly;
+      const on = panelFilterState[target].freeOnly;
+      freeBtn.classList.toggle('active', on);
+      freeBtn.setAttribute('aria-pressed', String(on));
+      renderChainPanel(target);
+    });
+  }
   hydrateCatalogFromStorage();
   syncCustomProviderSelects();
   // --- persist flush hooks (ticket 41): modal-close + pagehide ensure no loss ---

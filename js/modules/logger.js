@@ -98,13 +98,20 @@ export const Logger = {
       try { detail = typeof data === 'string' ? data : JSON.stringify(data, null, 2); } catch { detail = String(data); }
       if (detail.length > 900) detail = detail.slice(0, 900) + ' …';
     }
-    line.innerHTML = `<span class="log-time">${time}</span> [${esc(level).toUpperCase()}] ${esc(msg)}${detail ? `<details style="margin-top:4px"><summary style="cursor:pointer;color:var(--muted)">جزئیات</summary><pre style="white-space:pre-wrap;word-break:break-all;font-size:11px;margin-top:4px">${esc(detail)}</pre></details>` : ''}`;
+    const copyBtnHtml = `<button type="button" class="log-row-copy" title="کپی این ردیف" aria-label="کپی این ردیف"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg></button>`;
+    const headHtml = `<div class="log-row-head"><span class="log-row-main"><span class="log-time">${time}</span> <span class="log-lvl">[${esc(level).toUpperCase()}]</span> <span class="log-msg">${esc(msg)}</span></span>${copyBtnHtml}</div>`;
+    line.innerHTML = `${headHtml}${detail ? `<details class="log-details"><summary>جزئیات</summary><pre class="log-pre">${esc(detail)}</pre></details>` : ''}`;
+    line.dataset.rawText = `${time} [${String(level).toUpperCase()}] ${String(msg ?? '')}${detail ? `\n${detail}` : ''}`;
     if (currentRun) line.dataset.run = String(currentRun);
     logBody.appendChild(line);
     if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
     logBody.scrollTop = logBody.scrollHeight;
     const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
     fn(`[${level}] ${msg}`, data ?? '');
+  },
+  formatLineText(el) {
+    if (!el) return '';
+    return el.dataset?.rawText || el.textContent?.trim() || '';
   },
   // Open a per-run group: prints a clickable separator (app.js isolates the run on click)
   // and tags all following lines with data-run=n. Labels are code constants — never keys.

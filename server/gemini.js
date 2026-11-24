@@ -1,13 +1,14 @@
 import { GoogleGenAI } from '@google/genai';
 
-export const DEFAULT_STT_MODEL = 'gemini-3.5-transcribe';
-export const DEFAULT_TEXT_MODEL = 'gemini-4-hydrogen';
+export const DEFAULT_STT_MODEL = 'gemini-4-hydrogen';
+export const DEFAULT_TEXT_MODEL = 'gemini-3.1-flash-lite';
 export const FAST_LITE_MODEL = 'gemini-3.1-flash-lite';
+export const TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
 
 export const CURATED_MODELS = [
   DEFAULT_STT_MODEL,
   FAST_LITE_MODEL,
-  DEFAULT_TEXT_MODEL,
+  TRANSCRIBE_MODEL,
 ];
 
 const MODEL_NAME_RE = /^[a-z0-9][a-z0-9._-]{1,80}$/i;
@@ -19,13 +20,14 @@ const MAX_SYSTEM_CHARS = 4_000;
 const DEPRECATED_OR_LEGACY_RE = /^(gemini-(1(\.\d+)?|2\.0|2\.5)-|gemini-pro$|gemini-flash-(lite-)?latest$|gemini-3\.5-flash-lite$)/i;
 
 const DEFAULT_TRANSCRIBE_PROMPT =
-  'Transcribe verbatim in original language(s). Only transcription, no summary.';
+  'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the spoken transcript with no commentary, summary, or labels. If there is only silence or background noise with no speech, return an empty string.';
 
 const DEFAULT_POLISH_SYSTEM =
   'You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
 
 let cachedClient = null;
 let cachedKey = '';
+const unsupportedThinkingModels = new Set();
 
 export function isGeminiConfigured() {
   return Boolean((process.env.GEMINI_API_KEY || '').trim());
@@ -75,7 +77,7 @@ export function resolveSttModel(raw) {
 export function resolveTextModel(raw) {
   const clean = normalizeModelInput(raw);
   if (!clean) return DEFAULT_TEXT_MODEL;
-  if (DEPRECATED_OR_LEGACY_RE.test(clean) || clean === DEFAULT_STT_MODEL) {
+  if (DEPRECATED_OR_LEGACY_RE.test(clean) || clean === TRANSCRIBE_MODEL) {
     return DEFAULT_TEXT_MODEL;
   }
   return clean;
@@ -111,6 +113,50 @@ export function safeErrorMessage(err, status) {
   return cleaned.slice(0, 240) || 'خطای داخلی سرویس Gemini';
 }
 
+function buildMinimalThinkingConfig(model, mode = 'minimal') {
+  const id = String(model || '').toLowerCase();
+  if (!id || unsupportedThinkingModels.has(id)) return null;
+  if (/transcribe|tts|image|imagen|veo/i.test(id)) return null;
+  // Minimize latency and token usage on thinking-capable Gemini models
+  if (/^gemini-(3|4)/i.test(id)) {
+    return { thinkingLevel: mode === 'low' ? 'LOW' : 'MINIMAL' };
+  }
+  return { thinkingBudget: mode === 'low' ? 256 : 0 };
+}
+
+function isThinkingParamError(err) {
+  const msg = String(err?.message || '').toLowerCase();
+  return extractHttpStatus(err) === 400 && /thinking|budget|level|unknown name|not supported|invalid argument/i.test(msg);
+}
+
+function extractCleanText(response) {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (Array.isArray(parts) && parts.length) {
+    const visible = parts
+      .filter((p) => p && !p.thought && typeof p.text === 'string')
+      .map((p) => p.text)
+      .join('')
+      .trim();
+    if (visible) return visible;
+  }
+  return String(response?.text || '').trim();
+}
+
+async function generateWithSafeThinking(ai, { model, contents, config, thinkingMode = 'minimal' }) {
+  const thinkingConfig = buildMinimalThinkingConfig(model, thinkingMode);
+  const fullConfig = thinkingConfig ? { ...(config || {}), thinkingConfig } : (config || {});
+  try {
+    return await ai.models.generateContent({ model, contents, config: fullConfig });
+  } catch (err) {
+    if (thinkingConfig && isThinkingParamError(err)) {
+      unsupportedThinkingModels.add(String(model || '').toLowerCase());
+      const { thinkingConfig: _drop, ...safeConfig } = fullConfig;
+      return await ai.models.generateContent({ model, contents, config: safeConfig });
+    }
+    throw err;
+  }
+}
+
 export async function transcribeAudio({ model, mimeType, data }) {
   const ai = getClient();
   const resolvedModel = resolveSttModel(model);
@@ -134,23 +180,53 @@ export async function transcribeAudio({ model, mimeType, data }) {
     throw err;
   }
 
-  const response = await ai.models.generateContent({
-    model: resolvedModel,
-    contents: {
-      parts: [
-        { inlineData: { mimeType: cleanMime, data } },
-        { text: DEFAULT_TRANSCRIBE_PROMPT },
-      ],
-    },
+  const contents = {
+    parts: [
+      { inlineData: { mimeType: cleanMime, data } },
+      { text: DEFAULT_TRANSCRIBE_PROMPT },
+    ],
+  };
+
+  let activeModel = resolvedModel;
+  let response = await generateWithSafeThinking(ai, {
+    model: activeModel,
+    contents,
+    config: { temperature: 0 },
+    thinkingMode: 'minimal',
   });
 
+  let text = extractCleanText(response);
+  // If primary audio model returned empty text, seamlessly try dedicated transcribe model once
+  if (!text && activeModel !== TRANSCRIBE_MODEL) {
+    try {
+      const fbResp = await generateWithSafeThinking(ai, {
+        model: TRANSCRIBE_MODEL,
+        contents,
+        config: { temperature: 0 },
+        thinkingMode: 'minimal',
+      });
+      const fbText = extractCleanText(fbResp);
+      if (fbText) {
+        response = fbResp;
+        text = fbText;
+        activeModel = TRANSCRIBE_MODEL;
+      }
+    } catch {
+      // let caller handle empty text or chain fallback
+    }
+  }
+
+  const finishReason = response?.candidates?.[0]?.finishReason || null;
+  const blockReason = response?.promptFeedback?.blockReason || null;
   return {
-    text: (response.text || '').trim(),
-    model: resolvedModel,
+    text,
+    model: activeModel,
+    finishReason,
+    blockReason,
   };
 }
 
-export async function generateText({ model, text, system, maxOutputTokens, temperature }) {
+export async function generateText({ model, text, system, maxOutputTokens, temperature, thinkingMode = 'minimal' }) {
   const ai = getClient();
   const resolvedModel = resolveTextModel(model);
 
@@ -188,27 +264,30 @@ export async function generateText({ model, text, system, maxOutputTokens, tempe
   let activeModel = resolvedModel;
   let response;
   try {
-    response = await ai.models.generateContent({
+    response = await generateWithSafeThinking(ai, {
       model: activeModel,
       contents: text,
       config,
+      thinkingMode,
     });
-    if (!(response?.text || '').trim() && activeModel !== FAST_LITE_MODEL) {
+    if (!extractCleanText(response) && activeModel !== FAST_LITE_MODEL) {
       activeModel = FAST_LITE_MODEL;
-      response = await ai.models.generateContent({
+      response = await generateWithSafeThinking(ai, {
         model: activeModel,
         contents: text,
         config,
+        thinkingMode,
       });
     }
   } catch (err) {
     const code = extractHttpStatus(err);
     if ((code === 503 || code === 429) && activeModel !== FAST_LITE_MODEL) {
       activeModel = FAST_LITE_MODEL;
-      response = await ai.models.generateContent({
+      response = await generateWithSafeThinking(ai, {
         model: activeModel,
         contents: text,
         config,
+        thinkingMode,
       });
     } else {
       throw err;
@@ -217,7 +296,7 @@ export async function generateText({ model, text, system, maxOutputTokens, tempe
 
   const finishReason = response.candidates?.[0]?.finishReason || null;
   return {
-    text: (response.text || '').trim(),
+    text: extractCleanText(response),
     finishReason,
     model: activeModel,
   };
@@ -246,18 +325,20 @@ export async function testConnection({ model } = {}) {
   const ai = getClient();
   let activeModel = resolveTextModel(model);
   try {
-    await ai.models.generateContent({
+    await generateWithSafeThinking(ai, {
       model: activeModel,
       contents: 'Reply with OK.',
       config: { maxOutputTokens: 16 },
+      thinkingMode: 'minimal',
     });
   } catch (err) {
     if (extractHttpStatus(err) === 503 && activeModel !== FAST_LITE_MODEL) {
       activeModel = FAST_LITE_MODEL;
-      await ai.models.generateContent({
+      await generateWithSafeThinking(ai, {
         model: activeModel,
         contents: 'Reply with OK.',
         config: { maxOutputTokens: 16 },
+        thinkingMode: 'minimal',
       });
     } else {
       throw err;

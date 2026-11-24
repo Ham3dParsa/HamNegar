@@ -9,15 +9,16 @@
 // and fall back to full normalize on mismatch (ticket 24 migration unchanged).
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
-export const STT_DEFAULTS = ['groq','gemini-3.5-transcribe','gemini-3.1-flash-lite'];
+export const STT_DEFAULTS = ['gemini-4-hydrogen','gemini-3.1-flash-lite','groq'];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
 export const BUILTIN_PROVIDER_IDS = ['groq','google','openrouter'];
 export const SCHEMA_VERSION = 1;
-// پالیش: هر ورودی {id,providerId,enabled} — providerId: groq|google|openrouter|custom id
+// پالیش و ابزارهای متنی: مدل‌های سریع و پرسهمیه (Groq، Gemini Flash-Lite، OpenRouter رایگان) در اولویت
 export const POLISH_DEFAULTS = [
   { id:'openai/gpt-oss-120b', providerId:'groq', enabled:true },
   { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
+  { id:'gemini-3.1-flash-lite', providerId:'google', enabled:true },
   { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
   { id:'openai/gpt-oss-20b', providerId:'groq', enabled:true },
   { id:'gemini-4-hydrogen', providerId:'google', enabled:true },
@@ -351,8 +352,8 @@ function assembleSettings(sttChain, polishChain, customProviders){
     googleKey,
     openrouterKey: localStorage.getItem(KEYS.OPENROUTER) || '',
     openrouterBaseURL: localStorage.getItem(KEYS.OPENROUTER_BASE) || OPENROUTER_BASE_DEFAULT,
-    primary: localStorage.getItem(KEYS.PRIMARY) || 'groq',
-    model: localStorage.getItem(KEYS.MODEL) || 'gemini-3.5-transcribe',
+    primary: localStorage.getItem(KEYS.PRIMARY) || 'google',
+    model: localStorage.getItem(KEYS.MODEL) || 'gemini-4-hydrogen',
     sttChain,
     polishChain,
     customProviders,
@@ -439,41 +440,43 @@ function parsePolishChain(raw, defaults){
   return defaults.map(e=>({ ...e }));
 }
 
-// Wave personalization (ticket/50+56): stack model v3 with 8 distinct renderers + legacy migration. Never logs colors/keys.
-export const WAVE_KEY = 'hamnegar.wave.v3';
+// Wave personalization v4: clean single-wave minimal & modern studio (5 distinct styles + presets).
+// Automatically migrates any legacy v3 stacked config on read. Never logs colors/keys.
+export const WAVE_KEY = 'hamnegar.wave.v4';
+const WAVE_LEGACY_V3_KEY = 'hamnegar.wave.v3';
 export const WAVE_IDLE_KEY = 'hamnegar.wave.idle';
 export const WAVE_TYPES = [
+  'sine',
+  'zigzag',
+  'bars',
+  'dots',
   'pixel-2bit',
-  'siri-ribbon',
-  'capsule-eq',
-  'droplet-orb',
-  'laser-scope',
-  'sonic-rings',
-  'starburst-particles',
-  'aurora-curtain',
 ];
 const LEGACY_WAVE_TYPE_MAP = {
-  silk: 'siri-ribbon',
-  droplet: 'droplet-orb',
-  'pulse-orb': 'sonic-rings',
-  'capsule-eq': 'capsule-eq',
-  bars: 'capsule-eq',
-  sine: 'laser-scope',
-  'mirror-sine': 'laser-scope',
-  'flat-glow-line': 'laser-scope',
-  ribbon: 'aurora-curtain',
+  sine: 'sine',
+  'siri-ribbon': 'sine',
+  silk: 'sine',
+  'aurora-curtain': 'sine',
+  'mirror-sine': 'sine',
+  'flat-glow-line': 'sine',
+  ribbon: 'sine',
+  zigzag: 'zigzag',
+  'laser-scope': 'zigzag',
+  bars: 'bars',
+  'capsule-eq': 'bars',
+  dots: 'dots',
+  'droplet-orb': 'dots',
+  droplet: 'dots',
+  'sonic-rings': 'dots',
+  'pulse-orb': 'dots',
+  'starburst-particles': 'dots',
+  'pixel-2bit': 'pixel-2bit',
   steps: 'pixel-2bit',
   dash: 'pixel-2bit',
 };
 export const WAVE_COLOR_MODES = ['solid', 'gradient', 'rainbow'];
-export const WAVE_BANDS = ['low', 'mid', 'high', 'rms'];
-export const WAVE_PROFILES = ['flat', 'center', 'edges', 'bands'];
-export const WAVE_PEAKS = ['low', 'mid', 'high'];
-export const WAVE_BAR_SHAPES = ['rounded', 'square', 'needle'];
-export const WAVE_BAR_DEFAULTS = { shape: 'rounded', count: 24, gap: 2 };
 export const DICT_KEY = 'hamnegar.dict.v1';
 const DICT_MAX = 200;
-const WAVE_MAX = 5;
 
 function waveClampInt(v, lo, hi, fb) {
   const n = Number(v);
@@ -486,125 +489,61 @@ function wavePick(v, allowed, fb) {
 function waveColor(v, fb) {
   return typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v.trim()) ? v.trim().toLowerCase() : fb;
 }
-function waveOv(v) {
-  if (v == null) return null;
-  const n = Number(v);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(100, Math.round(n)));
-}
-function mapLegacyPeaksToDetail(peaks) {
-  if (peaks === 'low') return 2;
-  if (peaks === 'high') return 5;
-  return 3;
-}
-function normalizeWaveEntry(x, idx) {
-  if (!x || typeof x !== 'object') return null;
-  const ov = (x.ov && typeof x.ov === 'object') ? x.ov : {};
-  const name = typeof x.name === 'string' && x.name.trim()
-    ? x.name.trim().slice(0, 24)
-    : `موج ${idx + 1}`;
-  const rawType = typeof x.type === 'string' ? x.type.trim() : '';
-  const mappedType = LEGACY_WAVE_TYPE_MAP[rawType] || rawType;
-  const type = wavePick(mappedType, WAVE_TYPES, 'siri-ribbon');
-  const legacyMirror = rawType === 'mirror-sine' ? true : undefined;
-  return {
-    id: typeof x.id === 'string' && x.id.trim() ? x.id.trim().slice(0, 32) : `w${idx + 1}`,
-    name,
-    type,
-    colorMode: wavePick(x.colorMode, WAVE_COLOR_MODES, 'gradient'),
-    c1: waveColor(x.c1, '#60a5fa'),
-    c2: waveColor(x.c2, '#a78bfa'),
-    opacity: waveClampInt(x.opacity, 0, 100, 96),
-    glow: waveClampInt(x.glow, 0, 100, 68),
-    thick: (() => { const n = Number(x.thick); return Number.isFinite(n) ? Math.max(1, Math.min(6, Math.round(n * 2) / 2)) : 2; })(),
-    detail: waveClampInt(x.detail, 1, 5, mapLegacyPeaksToDetail(x.peaks)),
-    peaks: wavePick(x.peaks, WAVE_PEAKS, 'mid'),
-    band: wavePick(x.band, WAVE_BANDS, 'rms'),
-    profile: wavePick(x.profile, WAVE_PROFILES, 'center'),
-    mirror: typeof x.mirror === 'boolean' ? x.mirror : (legacyMirror ?? (type !== 'aurora-curtain')),
-    grid: typeof x.grid === 'boolean' ? x.grid : (type === 'pixel-2bit'),
-    peakHold: typeof x.peakHold === 'boolean' ? x.peakHold : true,
-    pixelSize: waveClampInt(x.pixelSize, 3, 12, 5),
-    mute: x.mute === true,
-    barShape: wavePick(x.barShape, WAVE_BAR_SHAPES, WAVE_BAR_DEFAULTS.shape),
-    barCount: waveClampInt(x.barCount, 8, 48, WAVE_BAR_DEFAULTS.count),
-    barGap: waveClampInt(x.barGap, 0, 8, WAVE_BAR_DEFAULTS.gap),
-    ov: {
-      speed: waveOv(ov.speed),
-      intensity: waveOv(ov.intensity),
-      attack: waveOv(ov.attack),
-      smooth: waveOv(ov.smooth),
-      sensitivity: waveOv(ov.sensitivity),
-    },
-  };
-}
-function normalizeWaveList(arr) {
-  if (!Array.isArray(arr)) return [];
-  const out = [];
-  const seen = new Set();
-  arr.forEach((raw) => {
-    if (out.length >= WAVE_MAX) return;
-    const e = normalizeWaveEntry(raw, out.length);
-    if (!e) return;
-    let id = e.id;
-    let k = 1;
-    while (seen.has(id)) id = `${e.id}_${++k}`;
-    e.id = id;
-    seen.add(id);
-    out.push(e);
-  });
-  return out;
-}
 export function defaultWaveConfig() {
   return {
-    version: 3,
-    starterId: 'siri-aurora',
-    sensitivity: 56,
-    attack: 60,
+    version: 4,
+    presetId: 'glacial-sine',
+    style: 'sine',
+    colorMode: 'gradient',
+    c1: '#60a5fa',
+    c2: '#a78bfa',
+    glow: 62,
+    sensitivity: 58,
     speed: 52,
-    intensity: 62,
-    smooth: 54,
-    particles: 8,
-    aurora: { on: true, hue: 225 },
-    waves: [
-      {
-        id: 'w1', name: 'موج اصلی', type: 'siri-ribbon', colorMode: 'gradient',
-        c1: '#60a5fa', c2: '#c084fc', opacity: 96, glow: 72, thick: 2,
-        detail: 3, peaks: 'mid', band: 'rms', profile: 'center',
-        mirror: true, grid: false, peakHold: true, pixelSize: 5, mute: false,
-        barShape: 'rounded', barCount: 24, barGap: 2,
-        ov: { speed: null, intensity: null, attack: null, smooth: null, sensitivity: null },
-      },
-      {
-        id: 'w2', name: 'لایه مکمل', type: 'siri-ribbon', colorMode: 'solid',
-        c1: '#5eead4', c2: '#60a5fa', opacity: 48, glow: 52, thick: 1.5,
-        detail: 4, peaks: 'high', band: 'mid', profile: 'center',
-        mirror: true, grid: false, peakHold: true, pixelSize: 5, mute: false,
-        barShape: 'rounded', barCount: 24, barGap: 2,
-        ov: { speed: 66, intensity: null, attack: null, smooth: null, sensitivity: null },
-      },
-    ],
+    smooth: 56,
+    density: 50,
+    mirror: true,
+  };
+}
+function migrateLegacyWaveV3(raw) {
+  const fb = defaultWaveConfig();
+  if (!raw || typeof raw !== 'object') return fb;
+  const first = Array.isArray(raw.waves) && raw.waves.length ? raw.waves[0] : {};
+  const mappedStyle = LEGACY_WAVE_TYPE_MAP[String(first.type || '').trim()] || fb.style;
+  return {
+    version: 4,
+    presetId: 'custom',
+    style: wavePick(mappedStyle, WAVE_TYPES, fb.style),
+    colorMode: wavePick(first.colorMode, WAVE_COLOR_MODES, fb.colorMode),
+    c1: waveColor(first.c1, fb.c1),
+    c2: waveColor(first.c2, fb.c2),
+    glow: waveClampInt(first.glow, 0, 100, fb.glow),
+    sensitivity: waveClampInt(raw.sensitivity, 0, 100, fb.sensitivity),
+    speed: waveClampInt(raw.speed, 0, 100, fb.speed),
+    smooth: waveClampInt(raw.smooth, 0, 100, fb.smooth),
+    density: fb.density,
+    mirror: typeof first.mirror === 'boolean' ? first.mirror : fb.mirror,
   };
 }
 function normalizeWaveConfig(raw) {
   const fb = defaultWaveConfig();
-  const o = (raw && typeof raw === 'object') ? raw : {};
-  const aur = (o.aurora && typeof o.aurora === 'object') ? o.aurora : {};
-  const waves = normalizeWaveList(o.waves);
+  if (!raw || typeof raw !== 'object') return fb;
+  if (Array.isArray(raw.waves) && !raw.style) return migrateLegacyWaveV3(raw);
+  const rawStyle = typeof raw.style === 'string' ? raw.style.trim() : '';
+  const mappedStyle = LEGACY_WAVE_TYPE_MAP[rawStyle] || rawStyle;
   return {
-    version: 3,
-    starterId: typeof o.starterId === 'string' && o.starterId.trim() ? o.starterId.trim().slice(0, 40) : fb.starterId,
-    sensitivity: waveClampInt(o.sensitivity, 0, 100, fb.sensitivity),
-    attack: waveClampInt(o.attack, 0, 100, fb.attack),
-    speed: waveClampInt(o.speed, 0, 100, fb.speed),
-    intensity: waveClampInt(o.intensity, 0, 100, fb.intensity),
-    smooth: waveClampInt(o.smooth, 0, 100, fb.smooth),
-    particles: waveClampInt(o.particles, 0, 24, fb.particles),
-    aurora: {
-      on: typeof aur.on === 'boolean' ? aur.on : fb.aurora.on,
-      hue: waveClampInt(aur.hue, 0, 360, fb.aurora.hue),
-    },
-    waves: waves.length ? waves : fb.waves,
+    version: 4,
+    presetId: typeof raw.presetId === 'string' && raw.presetId.trim() ? raw.presetId.trim().slice(0, 40) : fb.presetId,
+    style: wavePick(mappedStyle, WAVE_TYPES, fb.style),
+    colorMode: wavePick(raw.colorMode, WAVE_COLOR_MODES, fb.colorMode),
+    c1: waveColor(raw.c1, fb.c1),
+    c2: waveColor(raw.c2, fb.c2),
+    glow: waveClampInt(raw.glow, 0, 100, fb.glow),
+    sensitivity: waveClampInt(raw.sensitivity, 0, 100, fb.sensitivity),
+    speed: waveClampInt(raw.speed, 0, 100, fb.speed),
+    smooth: waveClampInt(raw.smooth, 0, 100, fb.smooth),
+    density: waveClampInt(raw.density, 0, 100, fb.density),
+    mirror: typeof raw.mirror === 'boolean' ? raw.mirror : fb.mirror,
   };
 }
 function normalizeDictEntry(x) {
@@ -794,7 +733,7 @@ export const Storage = {
   },
   getWave() {
     try {
-      const raw = localStorage.getItem(WAVE_KEY);
+      const raw = localStorage.getItem(WAVE_KEY) || localStorage.getItem(WAVE_LEGACY_V3_KEY);
       if (!raw) return defaultWaveConfig();
       const parsed = JSON.parse(raw);
       const shape = (parsed && typeof parsed === 'object' && parsed.wave) ? parsed.wave : parsed;

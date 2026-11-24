@@ -119,6 +119,8 @@ async function queryGroq(blob, externalSignal){
   const j=await readJsonSafe(res, displayPair('groq', STT_GROQ_MODEL)); Logger.log('info',`${displayPair('groq', STT_GROQ_MODEL)} ok`,j); return (j.text||'').trim();
 }
 const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const MIN_AUDIO_BYTES = 300;
+const UNSUPPORTED_THINKING_CACHE = new Set();
 
 function getGeminiKey(){
   try { return (Storage.getSettings().geminiKey || '').trim(); } catch { return ''; }
@@ -131,43 +133,101 @@ function assertGoogleActive(){
   if (Storage.isProviderDisabled('google')) throw Object.assign(new Error('ارائه‌دهنده Google Gemini خاموش است'), { status: 401 });
 }
 
+function geminiThinkingConfigFor(model, mode = 'minimal'){
+  const id = String(model || '').toLowerCase();
+  if(!id || UNSUPPORTED_THINKING_CACHE.has('google:' + id)) return null;
+  if(/transcribe|tts|image|imagen|veo|1\.5|2\.0/i.test(id)) return null;
+  if(/^gemini-(3|4)/i.test(id)) return { thinkingLevel: mode === 'low' ? 'LOW' : 'MINIMAL' };
+  if(/^gemini-2\.5/i.test(id)) return { thinkingBudget: mode === 'low' ? 256 : 0 };
+  return null;
+}
+function isThinkingRejection(status, msg){
+  return status === 400 && /thinking|reasoning|budget|level|unknown name|unrecognized|not supported|invalid/i.test(String(msg || ''));
+}
+function extractGeminiCandidateText(j){
+  const parts = j?.candidates?.[0]?.content?.parts || [];
+  const visible = parts.filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
+  if(visible) return visible;
+  return parts.map(p => (typeof p?.text === 'string' ? p.text : '')).join('').trim();
+}
+
+const GEMINI_STT_PROMPT = 'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the spoken transcript with no summary, no labels, and no commentary. If there is only silence with no speech, return an empty string.';
+
 async function queryGeminiDirect(blob, model, externalSignal, k){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
-  if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+  if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
   const b64 = await blobToB64(blob);
-  Logger.log('info',`به ${displayPair('google', model)} (مستقیم)...`,{size:blob.size});
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
-  if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+  Logger.log('info',`به ${displayPair('google', model)} (مستقیم)...`,{size:blob.size, mime:blob.type || 'audio/webm'});
   const mimeType = (blob.type || 'audio/webm').split(';')[0].trim() || 'audio/webm';
   const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
-  let res; try{
-    res=await fetch(url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Accept':'application/json','x-goog-api-key':k},
-      body:JSON.stringify({
-        contents:[{ parts:[
-          { inline_data:{ mime_type:mimeType, data:b64 } },
-          { text:'Transcribe verbatim in original language(s). Only transcription, no summary.' },
-        ] }],
-      }),
-      signal:ctrl.signal,
-    });
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0}); }
-  clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود'; const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text}); throw err; }
+
+  const execRequest = async (useThinking) => {
+    const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
+    if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
+    const genCfg = { temperature: 0 };
+    const tCfg = useThinking ? geminiThinkingConfigFor(model, 'minimal') : null;
+    if (tCfg) genCfg.thinkingConfig = tCfg;
+    try{
+      const res = await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json','x-goog-api-key':k},
+        body:JSON.stringify({
+          contents:[{ parts:[
+            { inline_data:{ mime_type:mimeType, data:b64 } },
+            { text: GEMINI_STT_PROMPT },
+          ] }],
+          generationConfig: genCfg,
+        }),
+        signal:ctrl.signal,
+      });
+      clearTimeout(to);
+      return { res, usedThinking: !!tCfg };
+    }catch(e){
+      clearTimeout(to);
+      if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted});
+      throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0});
+    }
+  };
+
+  let { res, usedThinking } = await execRequest(true);
+  if(!res.ok){
+    const er = await parseErr(res);
+    if(usedThinking && isThinkingRejection(res.status, er.msg)){
+      UNSUPPORTED_THINKING_CACHE.add('google:' + String(model || '').toLowerCase());
+      ({ res } = await execRequest(false));
+      if(!res.ok){
+        const er2 = await parseErr(res);
+        let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود';
+        const err=new Error(`${fmt(res.status)} — ${er2.msg}${hint}`); err.status=res.status;
+        Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er2.text});
+        throw err;
+      }
+    } else {
+      let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود';
+      const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status;
+      Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text});
+      throw err;
+    }
+  }
   const j=await readJsonSafe(res, displayPair('google', model));
-  const text=(j.candidates?.[0]?.content?.parts||[]).map(p=>p.text||'').join('').trim();
-  Logger.log('debug',`${displayPair('google', model)} raw`,{model, len:text.length});
+  const cand = j.candidates?.[0];
+  const text = extractGeminiCandidateText(j);
+  const blockReason = j.promptFeedback?.blockReason || null;
+  const finishReason = cand?.finishReason || null;
+  Logger.log('debug',`${displayPair('google', model)} raw`,{model, len:text.length, finishReason, blockReason});
+  if(!text && (blockReason || (finishReason && finishReason !== 'STOP'))){
+    throw Object.assign(new Error(`پاسخ ${displayPair('google', model)} مسدود یا ناقص شد (${blockReason || finishReason})`), { status: 422 });
+  }
   return text;
 }
 
 async function queryGemini(blob, model, externalSignal){
   assertGoogleActive();
-  if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+  if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
   const personalKey = getGeminiKey();
   if(!shouldUseServerGemini()) return queryGeminiDirect(blob, model, externalSignal, personalKey);
   const b64=await blobToB64(blob);
-  Logger.log('info',`به ${displayPair('google', model)} (سرور)...`,{size:blob.size});
+  Logger.log('info',`به ${displayPair('google', model)} (سرور)...`,{size:blob.size, mime:blob.type || 'audio/webm'});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   let res; try{
@@ -193,7 +253,12 @@ async function queryGemini(blob, model, externalSignal){
   let j;
   try{ j=await readJsonSafe(res, displayPair('google', model)); }
   catch(err){ if(err.isHtmlResponse && personalKey) return queryGeminiDirect(blob, model, externalSignal, personalKey); throw err; }
-  Logger.log('debug',`${displayPair('google', model)} raw`,{model:j.model||model, len:(j.text||'').length}); return (j.text||'').trim();
+  const text = (j.text||'').trim();
+  Logger.log('debug',`${displayPair('google', model)} raw`,{model:j.model||model, len:text.length, finishReason:j.finishReason||null, blockReason:j.blockReason||null});
+  if(!text && (j.blockReason || (j.finishReason && j.finishReason !== 'STOP'))){
+    throw Object.assign(new Error(`پاسخ ${displayPair('google', model)} ناقص بود (${j.blockReason || j.finishReason})`), { status: 422 });
+  }
+  return text;
 }
 
 // Polish adapters — canonical providers groq|google|openrouter (+ custom) + Google fallback
@@ -317,7 +382,7 @@ function resolveChatProvider(providerId){
 // separately (search the layer name in the log box); callers pass layer:'translate' etc.
 async function queryChat(providerId, text, { system, model, layer = 'polish' } = {}){
 // Custom hosts are never in `trusted`, so every custom call passes the user confirm gate.
-// Payload semantics match the legacy Groq path (temperature/max_tokens/qwen guards).
+// Minimizes reasoning/thinking latency & quota safely with automatic 400 fallback if a provider rejects reasoning params.
   if(!model || typeof model !== 'string') throw Object.assign(new Error(layer==='polish' ? 'مدل پالیش مشخص نیست' : 'مدل عملیات متنی مشخص نیست'),{status:400});
   const { key: k, base, trusted, extraHeaders } = resolveChatProvider(providerId);
   if(!k) throw Object.assign(new Error(layer==='polish' ? `کلید ${displayPair(providerId, model)} برای پالیش نیست` : `کلید ${displayPair(providerId, model)} برای ${layer} نیست`),{status:401});
@@ -325,16 +390,59 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
   if(!base) throw Object.assign(new Error('BaseURL ارائه‌دهنده خالی است'),{status:400});
   assertTrustedBase(base, trusted);
   const timeoutMs = layer === 'structure' ? 38000 : 25000;
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
-  const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature: layer === 'structure' ? 0.25 : 0.2, max_tokens:polishOutputBudget(text) };
-  // Qwen thinking models on Groq support reasoning_format/reasoning_effort (OpenRouter & custom endpoints reject reasoning_format)
-  if(providerId === 'groq' && /^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; }
   const chatUrl = /\/chat\/completions$/i.test(base) ? base : `${base}/chat/completions`;
-  let res; try{
-    res=await fetch(chatUrl,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','Authorization':`Bearer ${k}`, ...extraHeaders},body:JSON.stringify(body),signal:ctrl.signal});
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair(providerId, model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair(providerId, model)} ${layer}: `+e.message),{status:0}); }
-  clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base}); throw err; }
+  const cacheKey = `${providerId}:${String(model).toLowerCase()}`;
+  const isComplex = layer === 'structure';
+
+  const makeBody = (withReasoning) => {
+    const body = { model, messages:[{role:'system', content:system || DEFAULT_POLISH_SYSTEM},{role:'user', content:text}], temperature: isComplex ? 0.25 : 0.2, max_tokens:polishOutputBudget(text) };
+    let usedReasoning = false;
+    if(withReasoning && !UNSUPPORTED_THINKING_CACHE.has(cacheKey)){
+      if(providerId === 'groq'){
+        if(/^qwen\//i.test(model)) { body.reasoning_format = 'hidden'; body.reasoning_effort = 'none'; usedReasoning = true; }
+        else if(/^openai\/gpt-oss/i.test(model)) { body.reasoning_effort = 'low'; usedReasoning = true; }
+      } else if(providerId === 'openrouter'){
+        if(/(qwen3|deepseek-r1|thinking|reasoning|gpt-oss|gemini-(?:2\.5|3|4))/i.test(model)){
+          body.reasoning = { effort: isComplex ? 'low' : 'none', exclude: true };
+          usedReasoning = true;
+        }
+      }
+    }
+    return { body, usedReasoning };
+  };
+
+  const runFetch = async (withReasoning) => {
+    const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
+    const { body, usedReasoning } = makeBody(withReasoning);
+    try{
+      const res = await fetch(chatUrl,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json','Authorization':`Bearer ${k}`, ...extraHeaders},body:JSON.stringify(body),signal:ctrl.signal});
+      clearTimeout(to);
+      return { res, usedReasoning };
+    }catch(e){
+      clearTimeout(to);
+      if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair(providerId, model)} ${layer}`),{status:408});
+      throw Object.assign(new Error(`شبکه ${displayPair(providerId, model)} ${layer}: `+e.message),{status:0});
+    }
+  };
+
+  let { res, usedReasoning } = await runFetch(true);
+  if(!res.ok){
+    const er = await parseErr(res);
+    if(usedReasoning && isThinkingRejection(res.status, er.msg)){
+      UNSUPPORTED_THINKING_CACHE.add(cacheKey);
+      ({ res } = await runFetch(false));
+      if(!res.ok){
+        const er2 = await parseErr(res);
+        const err=new Error(`${fmt(res.status)} — ${er2.msg}`); err.status=res.status;
+        Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base});
+        throw err;
+      }
+    } else {
+      const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status;
+      Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base});
+      throw err;
+    }
+  }
   const j=await readJsonSafe(res, `${displayPair(providerId, model)} ${layer}`); Logger.log('debug',`${displayPair(providerId, model)} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''});
   if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${displayPair(providerId, model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
@@ -342,26 +450,56 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
 async function queryPolishViaGeminiDirect(text, model, layer, system, k){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
   const timeoutMs = layer === 'structure' ? 38000 : 25000;
-  const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
   const sys = system || DEFAULT_POLISH_SYSTEM;
   const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
-  let res; try{
-    res=await fetch(url,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Accept':'application/json','x-goog-api-key':k},
-      body:JSON.stringify({
-        system_instruction:{ parts:[{ text: sys }] },
-        contents:[{ parts:[{ text }] }],
-        generationConfig:{ temperature: layer === 'structure' ? 0.25 : 0.2, maxOutputTokens:polishOutputBudget(text) },
-      }),
-      signal:ctrl.signal,
-    });
-  }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
-  clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model}); throw err; }
+  const thinkingMode = layer === 'structure' ? 'low' : 'minimal';
+
+  const runFetch = async (useThinking) => {
+    const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
+    const generationConfig = { temperature: layer === 'structure' ? 0.25 : 0.2, maxOutputTokens:polishOutputBudget(text) };
+    const tCfg = useThinking ? geminiThinkingConfigFor(model, thinkingMode) : null;
+    if (tCfg) generationConfig.thinkingConfig = tCfg;
+    try{
+      const res = await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json','x-goog-api-key':k},
+        body:JSON.stringify({
+          system_instruction:{ parts:[{ text: sys }] },
+          contents:[{ parts:[{ text }] }],
+          generationConfig,
+        }),
+        signal:ctrl.signal,
+      });
+      clearTimeout(to);
+      return { res, usedThinking: !!tCfg };
+    }catch(e){
+      clearTimeout(to);
+      if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408});
+      throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0});
+    }
+  };
+
+  let { res, usedThinking } = await runFetch(true);
+  if(!res.ok){
+    const er = await parseErr(res);
+    if(usedThinking && isThinkingRejection(res.status, er.msg)){
+      UNSUPPORTED_THINKING_CACHE.add('google:' + String(model || '').toLowerCase());
+      ({ res } = await runFetch(false));
+      if(!res.ok){
+        const er2 = await parseErr(res);
+        const err=new Error(`${fmt(res.status)} — ${er2.msg}`); err.status=res.status;
+        Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model});
+        throw err;
+      }
+    } else {
+      const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status;
+      Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model});
+      throw err;
+    }
+  }
   const j=await readJsonSafe(res, `${displayPair('google', model)} ${layer}`);
   const cand = j.candidates?.[0];
-  const out = (cand?.content?.parts||[]).map(p=>p.text||'').join('').trim();
+  const out = extractGeminiCandidateText(j);
   Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
   if(cand?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
   return validatePolishOutput(out, text, model, layer);
@@ -372,11 +510,12 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
   if(!shouldUseServerGemini()) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
   const timeoutMs = layer === 'structure' ? 38000 : 25000;
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
+  const thinkingMode = layer === 'structure' ? 'low' : 'minimal';
   let res; try{
     res=await fetch('./api/gemini/text',{
       method:'POST',
       headers:{'Content-Type':'application/json','Accept':'application/json'},
-      body:JSON.stringify({ model, text, system: system || DEFAULT_POLISH_SYSTEM, maxOutputTokens: polishOutputBudget(text), temperature: layer === 'structure' ? 0.25 : 0.2 }),
+      body:JSON.stringify({ model, text, system: system || DEFAULT_POLISH_SYSTEM, maxOutputTokens: polishOutputBudget(text), temperature: layer === 'structure' ? 0.25 : 0.2, thinkingMode }),
       signal:ctrl.signal,
     });
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
@@ -530,9 +669,9 @@ function hasKeyForPolish(entry){
 }
 export const Transcription = {
   async transcribe(blob, opts={}){
-    if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+    if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = Array.isArray(sttChain) ? sttChain : [{id:'groq',providerId:'groq',enabled:true},{id:'gemini-3.5-transcribe',providerId:'google',enabled:true}];
+    const rawChain = Array.isArray(sttChain) ? sttChain : [{id:'gemini-4-hydrogen',providerId:'google',enabled:true},{id:'gemini-3.1-flash-lite',providerId:'google',enabled:true},{id:'groq',providerId:'groq',enabled:true}];
     if(rawChain.length === 0){
       throw Object.assign(new Error('زنجیره صوت به متن خالی است — از تب «مدل‌ها» یک مدل اضافه کن'),{status:400});
     }
@@ -569,7 +708,15 @@ export const Transcription = {
           Logger.setProgress({ state: 'trying', index: i, total: chain.length, label: `تلاش با ${label}…` });
         }
         const t = isGroq ? await queryGroq(blob, signal) : await queryGemini(blob, id, signal);
-        rawText = t;
+        if (!t || !t.trim()) {
+          const emptyErr = Object.assign(new Error(`پاسخ ${label} خالی بود — تلاش با مدل بعدی`), { status: 204 });
+          lastErr = emptyErr;
+          Logger.log('warn', `STT ${label} پاسخ خالی داد (${i+1}/${chain.length})`, { model: id, size: blob.size });
+          Logger.setProgress({ state: 'failed', index: i, total: chain.length, label: `پاسخ خالی از ${label}` + (i < chain.length - 1 ? ' — تلاش با بعدی…' : '') });
+          if (i < chain.length - 1) continue;
+          break;
+        }
+        rawText = t.trim();
         usedEngine = label;
         usedEngineKey = isGroq ? 'groq' : id;
         if(i>0) Logger.log('info',`فالبک موفق: STT #${i+1}/${chain.length} → ${label}`);
@@ -593,8 +740,8 @@ export const Transcription = {
       }
     }
     if(!rawText){
-      if(lastErr) throw lastErr;
-      throw new Error('متنی برنگشت');
+      if(lastErr && lastErr.status !== 204) throw lastErr;
+      throw Object.assign(new Error('گفتاری در صدا تشخیص داده نشد — کمی واضح‌تر یا نزدیک‌تر به میکروفون صحبت کن'), { status: 204 });
     }
     {
       const words = rawText.trim() ? rawText.trim().split(/\s+/).filter(Boolean).length : 0;
