@@ -95,9 +95,17 @@ describe('stripTimecodes', () => {
     assert.equal(r5.text, 'ساعت\u200C۱۰:۱۵ و ۸:۳۰ صبح و نسبت ۱:۲۰');
     assert.equal(r5.strippedCount, 0);
 
-    const r6 = stripTimecodes('عدد 99:99 نامعتبر است');
-    assert.equal(r6.text, 'عدد 99:99 نامعتبر است');
+    const r6 = stripTimecodes('۸:۳۰ صبح بیدار شدم');
+    assert.equal(r6.text, '۸:۳۰ صبح بیدار شدم');
     assert.equal(r6.strippedCount, 0);
+
+    const r7 = stripTimecodes('جلسه ۰۸:۳۰ صبح است و قرار ۰:۳۰ بامداد');
+    assert.equal(r7.text, 'جلسه ۰۸:۳۰ صبح است و قرار ۰:۳۰ بامداد');
+    assert.equal(r7.strippedCount, 0);
+
+    const r8 = stripTimecodes('عدد 99:99 نامعتبر است');
+    assert.equal(r8.text, 'عدد 99:99 نامعتبر است');
+    assert.equal(r8.strippedCount, 0);
   });
 
   it('preserves indentation on untouched lines and URLs', () => {

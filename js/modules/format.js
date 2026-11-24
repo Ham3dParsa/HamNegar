@@ -65,7 +65,8 @@ export function stripTimecodes(text){
   s = s.replace(new RegExp(`(?:از|بین)[\\s\\u200C]+(?:ساعت(?:[\\s\\u200C]*${SEP})?[\\s\\u200C]+)?${CLOCK}[\\s\\u200C]*(?:تا|الی|و|[-–—])[\\s\\u200C]*${CLOCK}`, 'g'), keep);
   s = s.replace(new RegExp(`${CLOCK}[\\s\\u200C]+(?:تا|الی)[\\s\\u200C]+${CLOCK}`, 'g'), keep);
   s = s.replace(new RegExp(`ساعت(?:[\\s\\u200C]*${SEP})?[\\s\\u200C]*${CLOCK}`, 'g'), keep);
-  s = s.replace(new RegExp(`${CLOCK}[\\s\\u200C]+(?:صبح|ظهر|بعدازظهر|بعد[\\s\\u200C]+از[\\s\\u200C]+ظهر|عصر|غروب|شب|بامداد|نصفه‌شب|AM|PM|am|pm)\\b`, 'g'), keep);
+  const TOD_FA = 'صبح|ظهر|بعدازظهر|بعد[\\s\\u200C]+از[\\s\\u200C]+ظهر|عصر|غروب|شب|بامداد|نصفه‌شب';
+  s = s.replace(new RegExp(`${CLOCK}[\\s\\u200C]+(?:(?:${TOD_FA})(?=${E}|$)|(?:AM|PM|am|pm)\\b)`, 'g'), keep);
   s = s.replace(new RegExp(`(?:نسبت|ضریب)[\\s\\u200C]+${D}{1,2}${SEP}${D}{1,2}`, 'g'), keep);
 
   // 4. Unbracketed HH:MM:SS or MM:SS.ms anywhere
