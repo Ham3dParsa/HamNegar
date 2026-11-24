@@ -108,6 +108,7 @@ function buildFilterUI() {
   const levels = [
     ['all', 'همه'],
     ['info', 'info'],
+    ['success', 'موفق'],
     ['warn', 'warn'],
     ['error', 'error'],
     ['debug', 'debug'],
@@ -424,7 +425,6 @@ applyLogCollapsed(logCollapsed);
 logReady = true;
 els.btnToggleLog.onclick=()=>{
   applyLogCollapsed(!logCollapsed);
-  Logger.log('info', logCollapsed ? 'لاگ بسته شد' : 'لاگ باز شد');
 };
 document.getElementById('log-header')?.addEventListener('click', (e)=>{
   if(e.target.closest('button') || e.target.closest('input')) return;
@@ -552,7 +552,7 @@ els.output.addEventListener('keydown', (e)=>{
   } else if(isY){ e.preventDefault(); const v=editorHistory.redo(); if(v!==null) applyHistoryValue(v); }
 });
 (() => {
-  const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('info','پیش‌نویس بارگذاری شد',{chars:d.length}); }
+  const d=Storage.getDraft(); if(d){ els.output.value=d; updateCounts(); Logger.log('debug','پیش‌نویس بارگذاری شد',{chars:d.length}); }
   editorHistory.push(els.output.value);
   updateHistoryButtons();
   const h=Storage.getHeights(); if(h.out) els.output.style.height=h.out; if(h.log) els.logPanel.style.height=h.log;
@@ -954,8 +954,7 @@ async function startRecording(){
   try{
     snap = { id: ++rtVersion, startMs: 0, durationMs: 0, basePos: selStart, before: els.output.value.slice(0, selStart), after: els.output.value.slice(selEnd), archived:'', committed:'', pending:'', keyless: keylessPreview };
     rtSnap = snap;
-    const vadMs = s.vad ? 250 : undefined;
-    await Audio.start({ vadChunkMs: vadMs, onStop: (blob)=> handleTranscription(blob, snap) });
+    const audioStartMeta = await Audio.start({ onStop: (blob, audioMeta)=> handleTranscription(blob, snap, audioMeta) });
     snap.startMs = performance.now();
     isRecording=true;
     isPaused=false;
@@ -980,11 +979,21 @@ async function startRecording(){
         if(els.livePreview) els.livePreview.classList.add('on'); if(els.liveBadge) els.liveBadge.classList.add('on'); if(els.liveFinal) els.liveFinal.textContent=''; if(els.liveInterim) els.liveInterim.textContent='';
         const onInterim = makeOnInterim(snap);
         rtStartOrSurface(snap, onInterim);
-        Logger.log('info','حالت آنی روشن',{snapId: snap.id, basePos: snap.basePos, beforeLen: snap.before.length, afterLen: snap.after.length});
+        Logger.log('debug','حالت آنی روشن',{snapId: snap.id, basePos: snap.basePos, beforeLen: snap.before.length, afterLen: snap.after.length});
       }
     }
     if(s.vad) startVAD();
-    Logger.log('info','ضبط شروع',{realtime:wantsRealtime, vad:s.vad, keyless:keylessPreview, snapId: snap.id});
+    Logger.log('debug','[صدا] ضبط شروع شد',{
+      realtime: wantsRealtime,
+      vad: s.vad,
+      keyless: keylessPreview,
+      snapId: snap.id,
+      mime: audioStartMeta?.mimeType,
+      kbps: audioStartMeta?.audioBitsPerSecond ? Math.round(audioStartMeta.audioBitsPerSecond / 1000) : null,
+      sampleRate: audioStartMeta?.sampleRate,
+      channels: audioStartMeta?.channelCount,
+      warnings: audioStartMeta?.warnings?.length ? audioStartMeta.warnings : undefined,
+    });
   }catch(e){
     try { await Audio.stop(); } catch {}
     if(snap && rtSnap?.id===snap.id) rtSnap=null;
@@ -1085,10 +1094,10 @@ document.addEventListener('keydown', (e)=>{
   if (isInspectorOpen() && window.innerWidth < 1080){ e.preventDefault(); setInspectorOpen(false); return; }
   if (isRecording || (isTranscribing && transcribingAbort)){ e.preventDefault(); e.stopPropagation(); cancelTranscription(); }
 });
-function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||isPaused||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('info','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
+function startVAD(){ if(vadTimer) { clearTimeout(vadTimer); vadTimer=null; } let quiet=0; const loop=()=>{ const an=Audio.getAnalyser(); if(!isRecording||isPaused||!an) return; const d=new Uint8Array(an.frequencyBinCount); an.getByteFrequencyData(d); const avg=d.reduce((a,b)=>a+b,0)/d.length; if(avg<12) quiet+=250; else quiet=0; if(quiet>1400){ Logger.log('debug','VAD سکوت — ارسال'); stopRecording(); return; } vadTimer=setTimeout(loop,250); }; vadTimer=setTimeout(loop,500); }
 function stopVAD(){ if(vadTimer) clearTimeout(vadTimer); vadTimer=null; }
 
-async function handleTranscription(blob, snap){
+async function handleTranscription(blob, snap, audioMeta){
   const snapId = snap?.id;
   const isStale = snap && snapId !== rtVersion;
   if(isStale){ Logger.log('debug','stale transcription ignored',{ snapId, current: rtVersion }); return; }
@@ -1104,8 +1113,7 @@ async function handleTranscription(blob, snap){
   }
   // busy is set in stopRecording; keep VAD path safe without creating duplicate controller
   if (!isTranscribing) { setMicBusy(true); if (!transcribingAbort) transcribingAbort = new AbortController(); mainWaveTranscribing(); }
-  Logger.log('info','handleTrans',{size:blob.size, snapId: snapId||null, rtActive: !!snap, rtPreviewLen: snap ? ((snap.archived||'')+snap.committed+snap.pending).length : 0});
-  if(blob.size < 300){
+  if(blob.size < 800){
     Logger.setStatus('صدایی ضبط نشد','warn'); Logger.toast('صدایی نیست');
     Logger.dismissProgress(800);
     setMicBusy(false); transcribingAbort = null;
@@ -1158,6 +1166,19 @@ async function handleTranscription(blob, snap){
   try{
     const signal = transcribingAbort?.signal;
     Logger.groupRun('🎙 رونویسی');
+    Logger.log('info', '[صدا] ضبط آماده شد', {
+      mime: audioMeta?.mimeType || blob.type || 'audio/webm',
+      kbps: audioMeta?.audioBitsPerSecond ? Math.round(audioMeta.audioBitsPerSecond / 1000) : null,
+      sampleRate: audioMeta?.sampleRate || null,
+      channels: audioMeta?.channelCount || null,
+      sizeKB: +(blob.size / 1024).toFixed(1),
+      durationMs,
+      chunks: audioMeta?.chunkCount ?? null,
+    });
+    if (audioMeta?.warnings?.length) {
+      Logger.log('warn', '[صدا] هشدار کدک/تحلیلگر', { warnings: audioMeta.warnings });
+    }
+    const tStart = performance.now();
     const { text, engine, polishModel } = await Transcription.transcribe(blob, { durationMs, signal });
     if(snap && snapId !== rtVersion){ Logger.log('debug','stale resolve after transcribe ignored',{ snapId, current: rtVersion }); throw Object.assign(new Error('stale'), { code:'STALE', aborted:true }); }
     if (signal?.aborted) { throw Object.assign(new Error('لغو شد'), { code:'ABORTED', aborted:true }); }
@@ -1188,12 +1209,18 @@ async function handleTranscription(blob, snap){
     Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() });
     Dashboard.renderOverall();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
-    Logger.setStatus(`با ${engine}${polInfo} درج شد`,'info');
+    Logger.setStatus(`با ${engine}${polInfo} درج شد`, 'success');
     Logger.dismissProgress(2600);
     const copied = await tryAutocopy(text);
     if (!Storage.getSettings().autocopy) Logger.toast('درج شد');
     else if (copied) Logger.toast('درج و کپی شد');
-    Logger.log('info','success',{engine, polishModel, len:text.length});
+    Logger.log('success', '[نتیجه] متن ثبت شد', {
+      engine,
+      polishModel,
+      totalMs: Math.round(performance.now() - tStart),
+      chars: text.length,
+      preview: text.trim().slice(0, 140),
+    });
   }catch(err){
     if (err.code === 'STALE') {
       Logger.dismissProgress(0);
@@ -1311,6 +1338,7 @@ async function transcribeAudioFile(file) {
   try {
     const signal = transcribingAbort.signal;
     Logger.groupRun('📎 تبدیل فایل صوتی');
+    const tStart = performance.now();
     const { text, engine, polishModel } = await Transcription.transcribe(file, { durationMs: 0, signal });
     if (signal.aborted) throw Object.assign(new Error('لغو شد'), { code: 'ABORTED', aborted: true });
     if (!text) {
@@ -1335,12 +1363,19 @@ async function transcribeAudioFile(file) {
     Dashboard.renderOverall();
     const s = Storage.getSettings();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
-    Logger.setStatus(`فایل با ${engine}${polInfo} تبدیل شد`, 'info');
+    Logger.setStatus(`فایل با ${engine}${polInfo} تبدیل شد`, 'success');
     const copied = await tryAutocopy(text.trim());
     if (!s.autocopy) Logger.toast('متن فایل درج شد');
     else if (copied) Logger.toast('متن فایل درج و کپی شد');
     Logger.dismissProgress(2600);
-    Logger.log('info', 'file transcribe success', { name: file.name, size: file.size, engine, polishModel, len: text.length });
+    Logger.log('success', '[نتیجه] متن ثبت شد', {
+      name: file.name,
+      engine,
+      polishModel,
+      totalMs: Math.round(performance.now() - tStart),
+      chars: text.length,
+      preview: text.trim().slice(0, 140),
+    });
   } catch (err) {
     if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {
       Logger.log('info', 'file transcribe aborted — preserved', { name: file.name });
@@ -1559,6 +1594,7 @@ async function retryPendingVoice(id) {
   try {
     const signal = transcribingAbort.signal;
     Logger.groupRun('🔄 تلاش مجدد صدا');
+    const tStart = performance.now();
     const { text, engine, polishModel } = await Transcription.transcribe(item.blob, {
       durationMs: item.durationMs || 0,
       signal,
@@ -1588,12 +1624,19 @@ async function retryPendingVoice(id) {
     await VoiceQueue.remove(id);
     const s = Storage.getSettings();
     const polInfo = polishModel ? ` + پالیش ${polishModel}` : (s.polishEnabled ? ' + پالیش محلی' : '');
-    Logger.setStatus(`صدای ذخیره‌شده با ${engine}${polInfo} درج شد`, 'info');
+    Logger.setStatus(`صدای ذخیره‌شده با ${engine}${polInfo} درج شد`, 'success');
     const copied = await tryAutocopy(text.trim());
     if (!s.autocopy) Logger.toast('صدای ذخیره‌شده تبدیل و درج شد');
     else if (copied) Logger.toast('صدای ذخیره‌شده تبدیل و کپی شد');
     Logger.dismissProgress(2600);
-    Logger.log('info', 'pending voice recovered', { id, engine, polishModel, len: text.length });
+    Logger.log('success', '[نتیجه] متن ثبت شد', {
+      id,
+      engine,
+      polishModel,
+      totalMs: Math.round(performance.now() - tStart),
+      chars: text.length,
+      preview: text.trim().slice(0, 140),
+    });
     return true;
   } catch (err) {
     if (err.aborted || err.code === 'ABORTED' || transcribingAbort?.signal.aborted) {

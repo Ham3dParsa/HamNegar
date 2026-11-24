@@ -1,7 +1,53 @@
 // Module: logger
-// Interface: log(level,msg,data) + setStatus(text,type) + toast(msg) + setProgress/dismissProgress + groupRun(label)/clearRun — small surface, hides DOM/progress behind calls.
+// Interface: log(level,msg,data) + setStatus(text,type,opts) + toast(msg) + setProgress/dismissProgress + groupRun(label)/clearRun — small surface, hides DOM/progress behind calls.
 // Depth: hides DOM creation, truncation, timestamps, console mirroring, STT progress dock, per-run grouping behind calls.
 import { fa, esc } from './format.js';
+
+const VALID_LEVELS = new Set(['info', 'success', 'warn', 'error', 'debug']);
+const LVL_BADGE = { info: 'INFO', success: 'OK', warn: 'WARN', error: 'ERR', debug: 'DBG' };
+const MAX_FULL_DETAIL = 12000;
+const MAX_UI_DETAIL = 4000;
+
+function extractMetrics(data) {
+  if (!data || typeof data !== 'object' || Object.prototype.toString.call(data) !== '[object Object]') {
+    return [];
+  }
+  const chips = [];
+  if (data.model != null && data.model !== '') chips.push(String(data.model));
+  if (data.route != null && data.route !== '') chips.push(String(data.route));
+  if (data.status != null && data.status !== '') chips.push(String(data.status));
+  if (data.ms != null && data.ms !== '') {
+    const n = Number(data.ms);
+    chips.push(Number.isFinite(n) ? `${Math.round(n)}ms` : String(data.ms));
+  }
+  if (data.totalMs != null && data.totalMs !== '') {
+    const n = Number(data.totalMs);
+    chips.push(Number.isFinite(n) ? `${Math.round(n)}ms` : String(data.totalMs));
+  }
+  if (data.sizeKB != null && data.sizeKB !== '') {
+    const n = Number(data.sizeKB);
+    chips.push(Number.isFinite(n) ? `${Number.isInteger(n) ? n : Number(n.toFixed(1))}KB` : String(data.sizeKB));
+  }
+  if (data.kbps != null && data.kbps !== '') {
+    const n = Number(data.kbps);
+    chips.push(Number.isFinite(n) ? `${Math.round(n)}kbps` : String(data.kbps));
+  }
+  if (data.sampleRate != null && data.sampleRate !== '') {
+    const n = Number(data.sampleRate);
+    chips.push(Number.isFinite(n) ? (n >= 1000 ? `${Number((n / 1000).toFixed(1))}kHz` : `${n}Hz`) : String(data.sampleRate));
+  }
+  if (data.channels != null && data.channels !== '') chips.push(`${data.channels}ch`);
+  const charCount = data.chars != null ? data.chars : data.len;
+  if (charCount != null && charCount !== '') chips.push(`${charCount} chars`);
+  if (data.strippedCount != null && Number.isFinite(Number(data.strippedCount)) && Number(data.strippedCount) > 0) {
+    chips.push(`⏱-${data.strippedCount}`);
+  }
+  if (data.thoughtLen != null && Number.isFinite(Number(data.thoughtLen)) && Number(data.thoughtLen) > 0) {
+    chips.push(`💭${data.thoughtLen}`);
+  }
+  if (data.finishReason != null && data.finishReason !== '') chips.push(String(data.finishReason));
+  return chips;
+}
 
 let logBody, statusText, statusDot, toastEl;
 let toastTimer = null;
@@ -89,25 +135,53 @@ export const Logger = {
   },
   log(level, msg, data) {
     if (!logBody) return;
+    const lvl = VALID_LEVELS.has(level) ? level : 'info';
     const time = new Date().toLocaleTimeString('fa-IR');
     const line = document.createElement('div');
-    line.className = 'log-line ' + level;
-    line.dataset.level = level;
-    let detail = '';
+    line.className = 'log-line ' + lvl;
+    line.dataset.level = lvl;
+
+    const msgStr = String(msg ?? '');
+    const tagMatch = msgStr.match(/^\[([^\]]{1,24})\]\s*([\s\S]+)$/);
+    const msgHtml = tagMatch
+      ? `<span class="log-tag">${esc(tagMatch[1])}</span><span class="log-msg">${esc(tagMatch[2])}</span>`
+      : `<span class="log-msg">${esc(msgStr)}</span>`;
+
+    const chips = extractMetrics(data);
+    const metricsHtml = chips.length
+      ? `<span class="log-metrics">${chips.map((c) => `<span class="log-metric">${esc(c)}</span>`).join('')}</span>`
+      : '';
+
+    let fullDetail = '';
+    let uiDetail = '';
     if (data !== undefined) {
-      try { detail = typeof data === 'string' ? data : JSON.stringify(data, null, 2); } catch { detail = String(data); }
-      if (detail.length > 900) detail = detail.slice(0, 900) + ' …';
+      let raw = '';
+      try {
+        raw = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+      } catch {
+        raw = String(data);
+      }
+      if (raw === undefined) raw = String(data);
+      fullDetail = raw.length > MAX_FULL_DETAIL ? raw.slice(0, MAX_FULL_DETAIL) + ' …' : raw;
+      uiDetail = fullDetail.length > MAX_UI_DETAIL
+        ? fullDetail.slice(0, MAX_UI_DETAIL) + '\n… (ادامه در کپی)'
+        : fullDetail;
     }
+
     const copyBtnHtml = `<button type="button" class="log-row-copy" title="کپی این ردیف" aria-label="کپی این ردیف"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg></button>`;
-    const headHtml = `<div class="log-row-head"><span class="log-row-main"><span class="log-time">${time}</span> <span class="log-lvl">[${esc(level).toUpperCase()}]</span> <span class="log-msg">${esc(msg)}</span></span>${copyBtnHtml}</div>`;
-    line.innerHTML = `${headHtml}${detail ? `<details class="log-details"><summary>جزئیات</summary><pre class="log-pre">${esc(detail)}</pre></details>` : ''}`;
-    line.dataset.rawText = `${time} [${String(level).toUpperCase()}] ${String(msg ?? '')}${detail ? `\n${detail}` : ''}`;
+    const headHtml = `<div class="log-row-head"><span class="log-row-main"><span class="log-time">${esc(time)}</span><span class="log-lvl">${LVL_BADGE[lvl]}</span>${msgHtml}${metricsHtml}</span>${copyBtnHtml}</div>`;
+    const detailsHtml = uiDetail
+      ? `<details class="log-details"><summary>جزئیات</summary><pre class="log-pre">${esc(uiDetail)}</pre></details>`
+      : '';
+
+    line.innerHTML = `${headHtml}${detailsHtml}`;
+    line.dataset.rawText = `${time} [${lvl.toUpperCase()}] ${msgStr}${fullDetail ? `\n${fullDetail}` : ''}`;
     if (currentRun) line.dataset.run = String(currentRun);
     logBody.appendChild(line);
     if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
     logBody.scrollTop = logBody.scrollHeight;
-    const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-    fn(`[${level}] ${msg}`, data ?? '');
+    const fn = lvl === 'error' ? console.error : lvl === 'warn' ? console.warn : console.log;
+    fn(`[${lvl}] ${msgStr}`, data ?? '');
   },
   formatLineText(el) {
     if (!el) return '';
@@ -129,7 +203,7 @@ export const Logger = {
       sep.setAttribute('role', 'button');
       sep.setAttribute('aria-pressed', 'false');
       sep.setAttribute('aria-label', `ایزوله کردن اجرای ${currentRun}`);
-      sep.innerHTML = `<span class="log-time">${time}</span> <b>${safe} #${currentRun}</b> <span class="run-hint">(کلیک: فقط همین اجرا)</span>`;
+      sep.innerHTML = `<span class="log-time">${esc(time)}</span> <b>${safe} #${currentRun}</b> <span class="run-hint">(کلیک: فقط همین اجرا)</span>`;
       logBody.appendChild(sep);
       if (logBody.children.length > 300) logBody.removeChild(logBody.firstChild);
       logBody.scrollTop = logBody.scrollHeight;
@@ -141,10 +215,23 @@ export const Logger = {
   clearRun() {
     currentRun = 0;
   },
-  setStatus(text, type = 'info') {
+  setStatus(text, type = 'info', opts = null) {
     if (statusText) statusText.textContent = text;
-    if (statusDot) statusDot.className = 'dot' + (type === 'error' ? ' err' : type === 'warn' ? ' warn' : type === 'rec' ? ' rec' : '');
-    this.log(type === 'error' ? 'error' : type === 'warn' ? 'warn' : 'info', text);
+    if (statusDot) {
+      const dotCls = type === 'error' ? ' err'
+        : type === 'warn' ? ' warn'
+        : type === 'rec' ? ' rec'
+        : type === 'success' ? ' ok'
+        : '';
+      statusDot.className = 'dot' + dotCls;
+    }
+    if (opts?.log === true || type === 'error') {
+      const logLvl = type === 'error' ? 'error'
+        : type === 'warn' ? 'warn'
+        : type === 'success' ? 'success'
+        : 'info';
+      this.log(logLvl, text);
+    }
   },
   toast(msg, ms = 2600, opts = null) {
     if (!toastEl) return;

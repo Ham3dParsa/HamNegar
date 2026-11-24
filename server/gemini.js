@@ -20,7 +20,7 @@ const MAX_SYSTEM_CHARS = 4_000;
 const DEPRECATED_OR_LEGACY_RE = /^(gemini-(1(\.\d+)?|2\.0|2\.5)-|gemini-pro$|gemini-flash-(lite-)?latest$|gemini-3\.5-flash-lite$)/i;
 
 const DEFAULT_TRANSCRIBE_PROMPT =
-  'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the spoken transcript with no commentary, summary, or labels. If there is only silence or background noise with no speech, return an empty string.';
+  'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the exact spoken words as plain text. STRICTLY FORBIDDEN: timestamps, timecodes (e.g. 00:00, [0:12]), speaker labels, descriptions of non-speech sounds, summaries, translations, or commentary. If there is only silence or background noise with no intelligible speech, return an empty string.';
 
 const DEFAULT_POLISH_SYSTEM =
   'You are a spelling/grammar proofreader. Fix only spelling, orthography and grammar errors in the SAME language as the input text; never change the language, meaning or tone. If no correction is needed, return the input text verbatim. Return ONLY the corrected text — never commentary, explanation or apology. (If the text is Persian and means UI, «رابطه کاربری» should become «رابط کاربری».)';
@@ -129,7 +129,7 @@ function isThinkingParamError(err) {
   return extractHttpStatus(err) === 400 && /thinking|budget|level|unknown name|not supported|invalid argument/i.test(msg);
 }
 
-function extractCleanText(response) {
+export function extractCleanParts(response) {
   const parts = response?.candidates?.[0]?.content?.parts;
   if (Array.isArray(parts) && parts.length) {
     const visible = parts
@@ -137,9 +137,14 @@ function extractCleanText(response) {
       .map((p) => p.text)
       .join('')
       .trim();
-    if (visible) return visible;
+    const thought = parts
+      .filter((p) => p && p.thought && typeof p.text === 'string')
+      .map((p) => p.text)
+      .join('')
+      .trim();
+    return { text: visible, thoughtLen: thought.length };
   }
-  return String(response?.text || '').trim();
+  return { text: String(response?.text || '').trim(), thoughtLen: 0 };
 }
 
 async function generateWithSafeThinking(ai, { model, contents, config, thinkingMode = 'minimal' }) {
@@ -195,7 +200,9 @@ export async function transcribeAudio({ model, mimeType, data }) {
     thinkingMode: 'minimal',
   });
 
-  let text = extractCleanText(response);
+  let { text, thoughtLen } = extractCleanParts(response);
+  let fallbackFrom = null;
+  let fallbackError = null;
   // If primary audio model returned empty text, seamlessly try dedicated transcribe model once
   if (!text && activeModel !== TRANSCRIBE_MODEL) {
     try {
@@ -205,14 +212,18 @@ export async function transcribeAudio({ model, mimeType, data }) {
         config: { temperature: 0 },
         thinkingMode: 'minimal',
       });
-      const fbText = extractCleanText(fbResp);
-      if (fbText) {
+      const fbParts = extractCleanParts(fbResp);
+      if (fbParts.text) {
+        fallbackFrom = resolvedModel;
         response = fbResp;
-        text = fbText;
+        text = fbParts.text;
+        thoughtLen = fbParts.thoughtLen;
         activeModel = TRANSCRIBE_MODEL;
+      } else {
+        fallbackError = 'empty_response';
       }
-    } catch {
-      // let caller handle empty text or chain fallback
+    } catch (fbErr) {
+      fallbackError = safeErrorMessage(fbErr, extractHttpStatus(fbErr));
     }
   }
 
@@ -223,6 +234,9 @@ export async function transcribeAudio({ model, mimeType, data }) {
     model: activeModel,
     finishReason,
     blockReason,
+    thoughtLen,
+    ...(fallbackFrom ? { fallbackFrom } : {}),
+    ...(fallbackError ? { fallbackError } : {}),
   };
 }
 
@@ -270,7 +284,7 @@ export async function generateText({ model, text, system, maxOutputTokens, tempe
       config,
       thinkingMode,
     });
-    if (!extractCleanText(response) && activeModel !== FAST_LITE_MODEL) {
+    if (!extractCleanParts(response).text && activeModel !== FAST_LITE_MODEL) {
       activeModel = FAST_LITE_MODEL;
       response = await generateWithSafeThinking(ai, {
         model: activeModel,
@@ -296,7 +310,7 @@ export async function generateText({ model, text, system, maxOutputTokens, tempe
 
   const finishReason = response.candidates?.[0]?.finishReason || null;
   return {
-    text: extractCleanText(response),
+    text: extractCleanParts(response).text,
     finishReason,
     model: activeModel,
   };

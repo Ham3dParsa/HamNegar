@@ -6,6 +6,7 @@ import { Transcription, smartModelScore, applyTonePreference } from './transcrip
 import { Quota } from './quota.js';
 import { Dashboard } from './dashboard.js';
 import { $ } from './dom.js';
+import { stripTimecodes } from './format.js';
 
 // --- injected app.js collaborators (assigned once in mountStagebar) ---
 let els = null;
@@ -67,26 +68,6 @@ const TOOL_ICONS = {
   'stage-raw': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5L3 10l5 5"/><path d="M3 10h11a6 6 0 0 1 0 12h-2"/></svg>',
   'custom': '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
 };
-
-// --- phantom-timestamp guard (#144, app-side column) ---
-// __TS_GUARD_START__
-function stripLoneTimecodes(text){
-  const s0 = String(text ?? '');
-  if(!s0 || (s0.indexOf(':') < 0 && s0.indexOf('：') < 0)) return s0;
-  const D = '[0-9۰-۹٠-٩]';
-  const E = '[\\s\\u200C()\\[\\]{}«»"\'“”‘’،,;.!؟?—–\\-…/\\\\|]';
-  const kept = [];
-  let s = s0.replace(new RegExp('ساعت\\s+' + D + '{1,2}[:：]' + D + '{2}', 'g'), (m) => {
-    kept.push(m);
-    return '\u0000' + (kept.length - 1) + '\u0000';
-  });
-  const loneRe = new RegExp('(^|' + E + ')' + D + '{1,2}[:：]' + D + '{2}[،,]?((?=' + E + ')|$)', 'g');
-  s = s.replace(loneRe, '$1');
-  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => kept[+i]);
-  s = s.replace(/[ \t]{2,}/g, ' ').trim();
-  return s;
-}
-// __TS_GUARD_END__
 
 let stageRawStack = [];
 const STAGE_RAW_MAX = 25;
@@ -245,8 +226,8 @@ async function runStage(kind, faLabel, sysPrompt, logTitle, opts = {}){
     const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
     if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
     const out = await Transcription.textChain(scope.text, { system: sysPrompt, layer: opts.layer || 'polish', smart: !!opts.smart, ...(preferOk ? { prefer: explicit } : {}) });
-    const cleanText = stripLoneTimecodes(out.text);
-    if(cleanText !== out.text) Logger.log('info','phantom timecode stripped',{before:out.text.length, after:cleanText.length});
+    const { text: cleanText, strippedCount } = stripTimecodes(out.text);
+    if(cleanText !== out.text) Logger.log('warn','[ابزار] مهر زمان حذف شد',{strippedCount, before:out.text.slice(0,160), after:cleanText.slice(0,160)});
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     fillDiffSheet({ kind: 'polish', scope, text: cleanText, model: out.model, faLabel, logTitle,
       okStatus: '✅ ' + faLabel + ' نشست',
