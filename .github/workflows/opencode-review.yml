@@ -91,7 +91,7 @@ jobs:
           prompt: ${{ env.REVIEW_PROMPT }}
 
       - id: rev3
-        name: Review (3/4 — Kilo Nemotron 3.5 Super VL Free)
+        name: Review (3/4 — Kilo Ling 3.2 Flash Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
         timeout-minutes: 3
@@ -100,11 +100,11 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         with:
-          model: kilo/nvidia/nemotron-3.5-super-vl:free
+          model: kilo/inclusionai/ling-3.2-flash:free
           prompt: ${{ env.REVIEW_PROMPT }}
 
       - id: rev4
-        name: Review (4/4 — Kilo Ling 3.2 Flash Free)
+        name: Review (4/4 — Kilo Nemotron 3.5 Super VL Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
         timeout-minutes: 3
@@ -113,7 +113,7 @@ jobs:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         with:
-          model: kilo/inclusionai/ling-3.2-flash:free
+          model: kilo/nvidia/nemotron-3.5-super-vl:free
           prompt: ${{ env.REVIEW_PROMPT }}
 
       - name: Verify review succeeded
