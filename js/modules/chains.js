@@ -148,17 +148,55 @@ function hideUndoToast(){
   t.classList.remove('show');
   t.innerHTML = '';
 }
+// Pixel-exact visual anchor lock: keeps the element under the user's cursor/thumb
+// stationary in `.settings-panel` even when chains above grow/shrink or list DOM is rebuilt.
+function preserveVisualAnchor(getAnchorEl, mutateFn, opts = {}){
+  const beforeEl = typeof getAnchorEl === 'function' ? getAnchorEl() : getAnchorEl;
+  const scrollHost = beforeEl?.closest?.('.settings-panel') || $('panel-ai');
+  if(!scrollHost || !beforeEl || !beforeEl.isConnected){
+    mutateFn();
+    return;
+  }
+  const beforeOffset = beforeEl.getBoundingClientRect().top - scrollHost.getBoundingClientRect().top;
+  mutateFn();
+  const afterEl = typeof getAnchorEl === 'function' ? getAnchorEl() : beforeEl;
+  if(afterEl && afterEl.isConnected){
+    const afterOffset = afterEl.getBoundingClientRect().top - scrollHost.getBoundingClientRect().top;
+    const delta = afterOffset - beforeOffset;
+    if(Math.abs(delta) > 0.5) scrollHost.scrollTop += delta;
+    if(opts.focusSelector){
+      const target = afterEl.querySelector(opts.focusSelector);
+      if(target && !target.disabled){
+        try { target.focus({ preventScroll: true }); } catch {}
+      }
+    }
+  }
+}
+
+function findModelRow(container, modelKey){
+  if(!container || !modelKey) return null;
+  for(const el of container.children){
+    if(el.dataset?.modelKey === modelKey) return el;
+  }
+  return null;
+}
+
 function undoDelete(){
   if(!lastDeleted) return;
   const { entry, index, type } = lastDeleted;
   lastDeleted = null;
   hideUndoToast();
   const arr = type === 'stt' ? sttChainState : polishChainState;
-  arr.splice(Math.min(index, arr.length), 0, entry);
-  scheduleChainsPersist();
-  renderSingleChain(type);
+  const explorerOpen = !!$('models-explorer-card')?.open;
+  const anchorEl = explorerOpen ? $('models-explorer-card') : (type === 'stt' ? els.sttChain : els.polishChain);
+  preserveVisualAnchor(() => anchorEl, () => {
+    arr.splice(Math.min(index, arr.length), 0, entry);
+    scheduleChainsPersist();
+    renderSingleChain(type);
+    renderFlowList();
+  });
   announce(`«${labelOf(entry, type)}» بازگردانده شد`);
-  focusChainRow(type, Math.min(index, arr.length - 1));
+  if(!explorerOpen) focusChainRow(type, Math.min(index, arr.length - 1));
 }
 function showUndoToast(label, ms = 8000){
   const t = $('toast');
@@ -487,11 +525,51 @@ const fetchStamp = new Map(); // ui/canonical providerId -> cache-line label
 const catalogUpdatedAt = new Map(); // canonical providerId -> epoch ms
 let autoRefreshedThisSession = false;
 let catalogRefreshInFlight = null;
+const FLOW_PAGE_SIZE = 25;
 let flowProv = 'all';
 let flowChips = new Set(); // multi-select: empty = all; 'stt'/'t2t' = capability OR, 'free' = AND modifier
+let flowPage = 1;
+let flowShowAll = false;
 let flowLastPid = null; // unknown until first fetch succeeds/fails — gates m-retry (disabled pre-fetch)
 let flowRenderT = null; // debounce: validate()/search fire per keystroke, list rebuild is ~30 nodes
-export function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ renderFlowList(); }catch{} }, 150); }
+export function renderFlowListSoon(){ clearTimeout(flowRenderT); flowRenderT = setTimeout(()=>{ try{ flowPage = 1; flowShowAll = false; const b = $('models-list'); if(b) b.scrollTop = 0; renderFlowList(); }catch{} }, 150); }
+
+function renderModelsPager(pagerEl, { total, page, pageSize, showAll, onPage, onShowAll }){
+  if (!pagerEl) return;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (showAll || totalPages <= 1) {
+    pagerEl.hidden = true;
+    pagerEl.replaceChildren();
+    return;
+  }
+  const nav = document.createElement('div');
+  nav.className = 'models-pager__nav';
+  const prevBtn = document.createElement('button');
+  prevBtn.type = 'button';
+  prevBtn.className = 'btn-ghost btn-xs';
+  prevBtn.textContent = '‹ قبلی';
+  prevBtn.disabled = page <= 1;
+  prevBtn.addEventListener('click', () => { if (page > 1) onPage(page - 1); });
+  const info = document.createElement('span');
+  info.className = 'models-pager__info';
+  info.textContent = `صفحه ${fa(page)} از ${fa(totalPages)}`;
+  const nextBtn = document.createElement('button');
+  nextBtn.type = 'button';
+  nextBtn.className = 'btn-ghost btn-xs';
+  nextBtn.textContent = 'بعدی ›';
+  nextBtn.disabled = page >= totalPages;
+  nextBtn.addEventListener('click', () => { if (page < totalPages) onPage(page + 1); });
+  nav.append(prevBtn, info, nextBtn);
+
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.className = 'btn-ghost btn-xs';
+  allBtn.textContent = `نمایش همه (${fa(total)})`;
+  allBtn.addEventListener('click', onShowAll);
+
+  pagerEl.replaceChildren(nav, allBtn);
+  pagerEl.hidden = false;
+}
 function flowProviderLabel(pid){
   if (pid === 'groq') return 'Groq';
   if (pid === 'gemini' || pid === 'google') return 'Google AI Studio';
@@ -649,13 +727,14 @@ function allFlowModels(){
   for (const [pid, ids] of modelCache) for (const id of (ids || [])) push(id, canonicalize(pid) || pid);
   return out;
 }
-function chainLoc(id, pid){
+function chainLocIn(id, pid, target){
   const cpid = canonicalize(pid) || pid;
-  const si = sttChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === cpid);
-  if (si >= 0) return { type: 'stt', index: si };
-  const pi = polishChainState.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === cpid);
-  if (pi >= 0) return { type: 'polish', index: pi };
-  return null;
+  const arr = target === 'stt' ? sttChainState : polishChainState;
+  const idx = arr.findIndex(x => entryIdOf(x) === id && providerIdOf(x, '') === cpid);
+  return idx >= 0 ? { type: target, index: idx } : null;
+}
+function chainLoc(id, pid){
+  return chainLocIn(id, pid, 'stt') || chainLocIn(id, pid, 'polish');
 }
 function flowScopeLabel(){
   return flowProv === 'all' ? 'همه ارائه‌دهنده‌ها'
@@ -708,17 +787,35 @@ function renderFlowList(){
       const capsSel = [...flowChips].filter(c => c === 'stt' || c === 't2t');
       if (capsSel.length && !capsSel.some(c => d.caps.includes(c))) return false;
       if (flowChips.has('free') && !d.free) return false;
+      if (flowChips.has('ready')) {
+        const disabled = Storage.isProviderDisabled(d.providerId);
+        let hasKey = false;
+        try { hasKey = hasKeyById(d.providerId); } catch {}
+        if (disabled || !hasKey) return false;
+      }
+      if (flowChips.has('inchain') && !chainLoc(d.id, d.providerId)) return false;
       return true;
     })
     .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
+  const totalPages = Math.max(1, Math.ceil(rows.length / FLOW_PAGE_SIZE));
+  if (flowPage > totalPages) flowPage = totalPages;
+  if (flowPage < 1) flowPage = 1;
+  const startIdx = flowShowAll ? 0 : (flowPage - 1) * FLOW_PAGE_SIZE;
+  const visibleRows = flowShowAll ? rows : rows.slice(startIdx, startIdx + FLOW_PAGE_SIZE);
   const frag = document.createDocumentFragment();
-  for (const d of rows) {
+  for (const d of visibleRows) {
     const disabled = Storage.isProviderDisabled(d.providerId);
     const hasKey = (() => { try { return hasKeyById(d.providerId); } catch { return false; } })();
-    const loc = chainLoc(d.id, d.providerId);
+    const sttLoc = chainLocIn(d.id, d.providerId, 'stt');
+    const polishLoc = chainLocIn(d.id, d.providerId, 'polish');
+    const canStt = d.caps.includes('stt');
+    const canT2t = d.caps.includes('t2t');
+    const isDual = canStt && canT2t;
+    const modelKey = `${d.providerId}:${d.id}`;
     const card = document.createElement('div');
     card.className = 'mrow';
     card.dataset.p = d.providerId;
+    card.dataset.modelKey = modelKey;
     const main = document.createElement('div');
     main.className = 'mmain';
     const title = document.createElement('div');
@@ -747,23 +844,55 @@ function renderFlowList(){
       note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در بخش «کلیدها»';
       main.appendChild(note);
     }
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn-ghost btn-sm ' + (loc ? 'btn-remove' : 'btn-add');
-    btn.textContent = loc ? 'حذف' : 'افزودن';
-    btn.setAttribute('aria-label', (loc ? 'حذف مدل ' : 'افزودن مدل ') + d.id);
-    const targetNow = targetForModel(d.id, d.providerId);
-    btn.title = disabled
-      ? 'این ارائه‌دهنده خاموش است'
-      : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((loc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + (targetNow === 'stt' ? 'صوتی' : 'پالیش')));
-    btn.disabled = (!hasKey || disabled) && !loc;
-    btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId));
-    card.append(main, btn);
+    const actions = document.createElement('div');
+    actions.className = 'mrow-actions';
+    const makeActionBtn = (target, activeLoc, compact) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.target = target;
+      const targetFa = target === 'stt' ? 'صوتی' : 'متنی';
+      btn.className = 'btn-ghost ' + (compact ? 'btn-xs ' : 'btn-sm ') + (activeLoc ? 'btn-remove' : 'btn-add');
+      if (compact) {
+        btn.textContent = activeLoc ? `✓ ${targetFa}` : `＋ ${targetFa}`;
+      } else {
+        btn.textContent = activeLoc ? 'حذف' : 'افزودن';
+      }
+      btn.setAttribute('aria-label', (activeLoc ? `حذف مدل ${d.id} از زنجیره ${targetFa}` : `افزودن مدل ${d.id} به زنجیره ${targetFa}`));
+      btn.title = disabled
+        ? 'این ارائه‌دهنده خاموش است'
+        : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : ((activeLoc ? 'حذف از زنجیره ' : 'افزودن به زنجیره ') + targetFa));
+      btn.disabled = (!hasKey || disabled) && !activeLoc;
+      btn.addEventListener('click', () => toggleFlowModel(d.id, d.providerId, modelKey, target));
+      return btn;
+    };
+    if (isDual) {
+      actions.append(makeActionBtn('stt', sttLoc, true), makeActionBtn('polish', polishLoc, true));
+    } else if (canStt) {
+      actions.append(makeActionBtn('stt', sttLoc, false));
+    } else {
+      actions.append(makeActionBtn('polish', polishLoc, false));
+    }
+    card.append(main, actions);
     frag.appendChild(card);
   }
   box.replaceChildren(frag);
   box.scrollTop = prevBoxScroll;
   if (scrollHost) scrollHost.scrollTop = prevHostScroll;
+  renderModelsPager($('models-pager'), {
+    total: rows.length,
+    page: flowPage,
+    pageSize: FLOW_PAGE_SIZE,
+    showAll: flowShowAll,
+    onPage: (nextPage) => {
+      flowPage = nextPage;
+      box.scrollTop = 0;
+      renderFlowList();
+    },
+    onShowAll: () => {
+      flowShowAll = true;
+      renderFlowList();
+    },
+  });
   const empty = $('m-empty'), err = $('m-err');
   if (empty) {
     empty.hidden = rows.length !== 0;
@@ -779,29 +908,44 @@ function renderFlowList(){
     count.textContent = `${fa(rows.length)} مدل یافت شد · ${fa(total)} مدل در زنجیره فعال`;
   }
 }
-function toggleFlowModel(modelId, providerId){
+function toggleFlowModel(modelId, providerId, anchorKey, explicitTarget){
   const mid = String(modelId || '').trim(), pid = canonicalize(providerId) || String(providerId || '').trim();
   if (!mid || !pid) return;
-  const loc = chainLoc(mid, pid);
+  const box = $('models-list');
+  const key = anchorKey || `${pid}:${mid}`;
+  const target = explicitTarget || targetForModel(mid, pid);
+  const focusSel = `button[data-target="${target}"]`;
+  const loc = chainLocIn(mid, pid, target);
   if (loc) {
     const arr = loc.type === 'stt' ? sttChainState : polishChainState;
-    const [removed] = arr.splice(loc.index, 1);
-    lastDeleted = { entry: removed, index: loc.index, type: loc.type };
-    scheduleChainsPersist();
-    renderSingleChain(loc.type);
-    renderFlowList();
+    preserveVisualAnchor(
+      () => findModelRow(box, key) || $('models-explorer-card'),
+      () => {
+        const [removed] = arr.splice(loc.index, 1);
+        lastDeleted = { entry: removed, index: loc.index, type: loc.type };
+        scheduleChainsPersist();
+        renderSingleChain(loc.type);
+        renderFlowList();
+      },
+      { focusSelector: focusSel }
+    );
     announce(`مدل ${mid} حذف شد — برای بازگردانی «واگرد» را بزن`);
     requestAnimationFrame(() => showUndoToast(mid));
     return;
   }
-  const target = targetForModel(mid, pid);
   if (target === 'stt') {
     if (pid === 'google' && !/^gemini/i.test(mid)) { Logger.toast('این مدل Google فقط متنی است (برای STT از Gemini استفاده کن)'); return; }
     if (!isSttEligible(mid, pid)) { Logger.toast('مدل نامعتبر برای STT'); return; }
   }
   if (!hasKeyById(pid)) { Logger.toast('⚠ این ارائه‌دهنده کلید ندارد'); return; }
-  addModelToChain(mid, pid, target);
-  renderFlowList();
+  preserveVisualAnchor(
+    () => findModelRow(box, key) || $('models-explorer-card'),
+    () => {
+      addModelToChain(mid, pid, target);
+      renderFlowList();
+    },
+    { focusSelector: focusSel }
+  );
 }
 function addModelToChain(modelId, providerId, target){
   const mid = String(modelId||'').trim();
@@ -822,7 +966,7 @@ function addModelToChain(modelId, providerId, target){
   announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
   return true;
 }
-function addCustomModelFromInputs(rawProviderId, rawModelId, target){
+function addCustomModelFromInputs(rawProviderId, rawModelId, target, anchorEl){
   const pid = canonicalize(rawProviderId) || String(rawProviderId || '').trim();
   const mid = String(rawModelId || '').trim();
   if(!pid){ Logger.toast('ارائه‌دهنده را انتخاب کن'); return false; }
@@ -838,10 +982,13 @@ function addCustomModelFromInputs(rawProviderId, rawModelId, target){
       return false;
     }
   }
-  const ok = addModelToChain(mid, pid, target);
+  let ok = false;
+  preserveVisualAnchor(() => anchorEl || $('manual-model-card'), () => {
+    ok = addModelToChain(mid, pid, target);
+    if(!ok) return;
+    renderFlowList();
+  });
   if(!ok) return false;
-  renderFlowList();
-  if(chainPanelOpen(target)) renderChainPanel(target);
   const disabled = Storage.isProviderDisabled(pid);
   const hasKey = hasKeyById(pid);
   if(disabled) Logger.toast(`«${mid}» افزوده شد (توجه: ${flowProviderLabel(pid)} الان خاموش است)`);
@@ -903,8 +1050,6 @@ export async function refreshAllActiveCatalogs({ quiet = false } = {}){
       persistModelCatalog();
       syncCacheLines();
       renderFlowList();
-      if(chainPanelOpen('stt')) renderChainPanel('stt');
-      if(chainPanelOpen('polish')) renderChainPanel('polish');
       const total = results.reduce((acc, r) => acc + (r.status === 'fulfilled' ? r.value : 0), 0);
       if(!quiet){
         if(okCount > 0) Logger.toast(`کاتالوگ زنده: ${fa(total)} مدل از ${fa(okCount)} ارائه‌دهنده`);
@@ -1040,134 +1185,49 @@ export function flowInit(){
   renderFlowList();
 }
 
-// --- per-chain inline add panels (ticket/76-inline-chain-add): expander + panel under each .chain-foot ---
-const CHAIN_EXPAND_LABEL = { stt: 'افزودن مدل صوتی', polish: 'افزودن ویرایشگر' };
-const panelFilterState = {
-  stt: { prov: 'all', freeOnly: false },
-  polish: { prov: 'all', freeOnly: false },
-};
+// --- Unified explorer jump helpers + thin compat adapters ---
+function syncFlowCapChips(){
+  document.querySelectorAll('#m-chips .fchip').forEach(x=>{
+    const on = x.dataset.cap === 'all' ? flowChips.size === 0 : flowChips.has(x.dataset.cap);
+    x.classList.toggle('active', on);
+    x.setAttribute('aria-pressed', String(on));
+  });
+}
+function openUnifiedExplorer(target){
+  const card = $('models-explorer-card');
+  if(!card) return;
+  card.open = true;
+  flowChips.delete('stt');
+  flowChips.delete('t2t');
+  if(target === 'stt') flowChips.add('stt');
+  else if(target === 'polish') flowChips.add('t2t');
+  flowPage = 1;
+  flowShowAll = false;
+  syncFlowCapChips();
+  const box = $('models-list');
+  if(box) box.scrollTop = 0;
+  renderFlowList();
+  card.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => $('m-q')?.focus?.({ preventScroll: true }), 140);
+}
 export function chainPanelEls(target){
-  return target === 'stt'
-    ? { btn: els.btnExpandStt, panel: els.sttAddPanel, search: els.sttAddSearch, list: els.sttAddList }
-    : { btn: els.btnExpandPolish, panel: els.polishAddPanel, search: els.polishAddSearch, list: els.polishAddList };
+  return {
+    btn: target === 'stt' ? els.btnExpandStt : els.btnExpandPolish,
+    panel: $('models-explorer-card'),
+    search: $('m-q'),
+    list: $('models-list'),
+  };
 }
-export function chainPanelOpen(target){
-  const { panel } = chainPanelEls(target);
-  return !!panel && !panel.hidden;
+export function chainPanelOpen(){
+  return !!$('models-explorer-card')?.open;
 }
-function renderChainPanel(target){
-  const { list, search } = chainPanelEls(target);
-  if(!list) return;
-  const scrollHost = list.closest('.settings-panel');
-  const prevHostScroll = scrollHost ? scrollHost.scrollTop : 0;
-  const prevListScroll = list.scrollTop;
-  const qRaw = (search?.value || '').trim();
-  const q = qRaw.toLowerCase();
-  const pf = panelFilterState[target] || { prov: 'all', freeOnly: false };
-  const rows = allFlowModels()
-    .filter(d => target === 'stt' ? isSttEligible(d.id, d.providerId) : true)
-    .filter(d => {
-      if (pf.prov === 'all') return true;
-      if (pf.prov === 'custom') return !['groq', 'google', 'openrouter'].includes(d.providerId);
-      const want = pf.prov === 'gemini' ? 'google' : pf.prov;
-      return d.providerId === want;
-    })
-    .filter(d => !pf.freeOnly || d.free)
-    .filter(d => !q || d.id.toLowerCase().includes(q) || (d.fa || '').includes(q) || String(d.providerId || '').includes(q));
-  const countEl = $(target === 'stt' ? 'stt-add-count' : 'polish-add-count');
-  if (countEl) countEl.textContent = `${fa(rows.length)} مدل`;
-  if(!rows.length){
-    const emptyWrap = document.createElement('div');
-    emptyWrap.className = 'hint-inline';
-    if(qRaw){
-      emptyWrap.textContent = `مدل «${qRaw}» در کاتالوگ پیدا نشد — از کادر پایین همین پنل با انتخاب ارائه‌دهنده اضافه‌اش کن یا «بروزرسانی کاتالوگ زنده» را بزن.`;
-      const customInp = $(target === 'stt' ? 'stt-custom-id' : 'polish-custom-id');
-      if(customInp && !customInp.value) customInp.value = qRaw;
-    } else if (pf.freeOnly) {
-      emptyWrap.textContent = 'مدل رایگان با این فیلتر پیدا نشد — فیلتر «فقط رایگان» را بردار یا کاتالوگ زنده را بروزرسانی کن.';
-    } else {
-      emptyWrap.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن یا کاتالوگ زنده را بروزرسانی کن.';
-    }
-    list.replaceChildren(emptyWrap);
-    list.scrollTop = 0;
-    if (scrollHost) scrollHost.scrollTop = prevHostScroll;
-    return;
-  }
-  const chainFa = target === 'stt' ? 'STT' : 'پالیش';
-  const frag = document.createDocumentFragment();
-  for(const d of rows){
-    const disabled = Storage.isProviderDisabled(d.providerId);
-    let hasKey = false;
-    try{ hasKey = hasKeyById(d.providerId); }catch{ hasKey = false; }
-    const loc = chainLoc(d.id, d.providerId);
-    const inTarget = !!loc && loc.type === target;
-    const card = document.createElement('div');
-    card.className = 'mrow';
-    card.dataset.p = d.providerId;
-    const main = document.createElement('div');
-    main.className = 'mmain';
-    const title = document.createElement('div');
-    title.className = 'mtitle';
-    const b = document.createElement('b');
-    b.textContent = d.id;
-    b.dir = 'ltr';
-    const badges = document.createElement('span');
-    badges.className = 'mbadges';
-    const provTag = document.createElement('span');
-    provTag.className = 'mcap';
-    provTag.textContent = flowProviderLabel(d.providerId);
-    badges.appendChild(provTag);
-    for(const c of d.caps){
-      const s = document.createElement('span');
-      s.className = 'mcap';
-      s.textContent = c === 'stt' ? 'صوتی' : 'متنی';
-      badges.appendChild(s);
-    }
-    if(d.free){ const f = document.createElement('span'); f.className = 'mcap free'; f.textContent = 'رایگان'; badges.appendChild(f); }
-    title.append(b, badges);
-    main.append(title);
-    if (!inTarget && (disabled || !hasKey)) {
-      const note = document.createElement('span');
-      note.className = 'mstatus';
-      note.textContent = disabled ? 'ارائه‌دهنده خاموش است' : 'نیازمند ثبت کلید در بخش «کلیدها»';
-      main.appendChild(note);
-    }
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn-ghost btn-sm';
-    if(inTarget){ btn.textContent = 'در زنجیره'; btn.disabled = true; btn.setAttribute('aria-label', d.id + ' در زنجیره ' + chainFa + ' است'); }
-    else{
-      btn.textContent = 'افزودن';
-      btn.classList.add('btn-add');
-      btn.setAttribute('aria-label', 'افزودن مدل ' + d.id + ' به زنجیره ' + chainFa);
-      btn.title = disabled ? 'این ارائه‌دهنده خاموش است' : (!hasKey ? 'اول کلید این ارائه‌دهنده را وارد کن' : 'افزودن به زنجیره ' + chainFa);
-      btn.disabled = !hasKey || disabled;
-      btn.addEventListener('click', ()=>{
-        addModelToChain(d.id, d.providerId, target);
-        renderFlowList();
-        renderChainPanel(target);
-        chainPanelEls(target).search?.focus?.({ preventScroll: true });
-      });
-    }
-    card.append(main, btn);
-    frag.appendChild(card);
-  }
-  list.replaceChildren(frag);
-  list.scrollTop = prevListScroll;
-  if (scrollHost) scrollHost.scrollTop = prevHostScroll;
+function renderChainPanel(){ renderFlowList(); }
+export function setChainPanel(target, open){
+  const card = $('models-explorer-card');
+  if(!card) return;
+  if(open) openUnifiedExplorer(target);
+  else card.open = false;
 }
-export function setChainPanel(target, open, focusSearch){
-  const { btn, panel, search } = chainPanelEls(target);
-  if(!btn || !panel) return;
-  panel.hidden = !open;
-  btn.setAttribute('aria-expanded', String(open));
-  btn.innerHTML = (open ? IC_CLOSE : IC_PLUS) + `<span>${open ? 'بستن فهرست' : CHAIN_EXPAND_LABEL[target]}</span>`;
-  if(open){
-    renderChainPanel(target);
-    if(focusSearch) search?.focus?.({ preventScroll: true });
-  }
-}
-function toggleChainPanel(target){ setChainPanel(target, !chainPanelOpen(target), true); }
 
 // Thin wiring entry: assigns injected collaborators, then registers listeners in
 // the original relative order (models-flow block, then inline-panel block).
@@ -1188,6 +1248,9 @@ export function mountChains(deps){
   $('m-q')?.addEventListener('input', renderFlowListSoon);
   document.querySelectorAll('#m-prov-chips .fchip').forEach(c => c.addEventListener('click', ()=>{
     flowProv = c.dataset.prov || 'all';
+    flowPage = 1;
+    flowShowAll = false;
+    const b = $('models-list'); if(b) b.scrollTop = 0;
     document.querySelectorAll('#m-prov-chips .fchip').forEach(x=>{
       const on = (x.dataset.prov || 'all') === flowProv;
       x.classList.toggle('active', on);
@@ -1205,6 +1268,9 @@ export function mountChains(deps){
     if(cap === 'all') flowChips.clear();
     else if(flowChips.has(cap)) flowChips.delete(cap);
     else flowChips.add(cap);
+    flowPage = 1;
+    flowShowAll = false;
+    const b = $('models-list'); if(b) b.scrollTop = 0;
     document.querySelectorAll('#m-chips .fchip').forEach(x=>{
       const on = x.dataset.cap === 'all' ? flowChips.size === 0 : flowChips.has(x.dataset.cap);
       x.classList.toggle('active', on);
@@ -1220,10 +1286,20 @@ export function mountChains(deps){
   });
   $('m-nokey-link')?.addEventListener('click', (e)=>{
     e.preventDefault();
+    $('tab-keys')?.click();
     const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
     if(card && 'open' in card) card.open = true;
-    const target = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? $('btn-test-gemini') : els.keyOpenrouter;
+    const target = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? els.keyGemini : els.keyOpenrouter;
     target?.focus?.({ preventScroll: true });
+  });
+  $('m-empty-manual-link')?.addEventListener('click', ()=>{
+    const card = $('manual-model-card');
+    if(card && 'open' in card) card.open = true;
+    const inp = els.easyModelInput || $('easy-model-input');
+    const q = ($('m-q')?.value || '').trim();
+    if(inp && q && !inp.value) inp.value = q;
+    card?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => inp?.focus?.({ preventScroll: true }), 120);
   });
   els.customName?.addEventListener('input', syncCustomModelsBtn);
   $('btn-custom-add')?.addEventListener('click', ()=>{
@@ -1292,39 +1368,17 @@ export function mountChains(deps){
     }catch(e){ flowLastPid = stored.id; showFetchError(stored.id, e); }
   });
 
-  // --- Always-visible custom model add box (Explorer) + per-chain custom model bars ---
+  // --- Independent manual model add card ---
   const submitEasyAdd = () => {
     const prov = $('easy-provider-select')?.value || '';
     const target = $('easy-target-select')?.value || 'polish';
     const inp = els.easyModelInput || $('easy-model-input');
     const mid = (inp?.value || '').trim();
-    if(addCustomModelFromInputs(prov, mid, target) && inp) inp.value = '';
+    if(addCustomModelFromInputs(prov, mid, target, $('manual-model-card')) && inp) inp.value = '';
   };
   $('btn-easy-add')?.addEventListener('click', submitEasyAdd);
   (els.easyModelInput || $('easy-model-input'))?.addEventListener('keydown', (e)=>{
     if(e.key === 'Enter'){ e.preventDefault(); submitEasyAdd(); }
-  });
-
-  const submitSttCustom = () => {
-    const prov = $('stt-custom-prov')?.value || '';
-    const inp = $('stt-custom-id');
-    const mid = (inp?.value || '').trim();
-    if(addCustomModelFromInputs(prov, mid, 'stt') && inp) inp.value = '';
-  };
-  $('btn-stt-custom-add')?.addEventListener('click', submitSttCustom);
-  $('stt-custom-id')?.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); submitSttCustom(); }
-  });
-
-  const submitPolishCustom = () => {
-    const prov = $('polish-custom-prov')?.value || '';
-    const inp = $('polish-custom-id');
-    const mid = (inp?.value || '').trim();
-    if(addCustomModelFromInputs(prov, mid, 'polish') && inp) inp.value = '';
-  };
-  $('btn-polish-custom-add')?.addEventListener('click', submitPolishCustom);
-  $('polish-custom-id')?.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); submitPolishCustom(); }
   });
 
   $('btn-polish-all-on')?.addEventListener('click', ()=>{ polishChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه روشن'); });
@@ -1332,37 +1386,8 @@ export function mountChains(deps){
   $('btn-stt-all-on')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:true}:e); sttChainState.forEach(e=> e.enabled=true); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه STT روشن'); });
   $('btn-stt-all-off')?.addEventListener('click', ()=>{ sttChainState = sttChainState.map(e=> typeof e==='string'?{id:e,providerId:providerIdOf(e,'google'),enabled:false}:e); sttChainState.forEach(e=> e.enabled=false); scheduleChainsPersist(); renderAllChains(); Logger.toast('همه STT خاموش'); });
 
-  els.btnExpandStt?.addEventListener('click', ()=> toggleChainPanel('stt'));
-  els.btnExpandPolish?.addEventListener('click', ()=> toggleChainPanel('polish'));
-  els.sttAddSearch?.addEventListener('input', ()=> renderChainPanel('stt'));
-  els.polishAddSearch?.addEventListener('input', ()=> renderChainPanel('polish'));
-
-  // Inline chain panel filter chips (provider + Free-Only toggle for OpenRouter/mobile ergonomics)
-  for (const target of ['stt', 'polish']) {
-    const bar = $(`${target}-add-filters`);
-    if (!bar) continue;
-    bar.querySelectorAll('[data-panel-prov]').forEach((chip) => {
-      chip.addEventListener('click', () => {
-        const prov = chip.dataset.panelProv || 'all';
-        panelFilterState[target].prov = prov;
-        bar.querySelectorAll('[data-panel-prov]').forEach((x) => {
-          const on = (x.dataset.panelProv || 'all') === prov;
-          x.classList.toggle('active', on);
-          x.setAttribute('aria-pressed', String(on));
-        });
-        // Convenience: when picking OpenRouter on mobile, suggest free-only filter if not explicitly toggled
-        renderChainPanel(target);
-      });
-    });
-    const freeBtn = bar.querySelector('[data-panel-free]');
-    freeBtn?.addEventListener('click', () => {
-      panelFilterState[target].freeOnly = !panelFilterState[target].freeOnly;
-      const on = panelFilterState[target].freeOnly;
-      freeBtn.classList.toggle('active', on);
-      freeBtn.setAttribute('aria-pressed', String(on));
-      renderChainPanel(target);
-    });
-  }
+  els.btnExpandStt?.addEventListener('click', ()=> openUnifiedExplorer('stt'));
+  els.btnExpandPolish?.addEventListener('click', ()=> openUnifiedExplorer('polish'));
   hydrateCatalogFromStorage();
   syncCustomProviderSelects();
   // --- persist flush hooks (ticket 41): modal-close + pagehide ensure no loss ---

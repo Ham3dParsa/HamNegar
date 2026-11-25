@@ -241,7 +241,7 @@ function renderStageModelOptions(){
 function stageApply(scope, next){
   const v = els.output.value;
   els.output.value = v.slice(0, scope.start) + next + v.slice(scope.end);
-  els.output.focus();
+  els.output.focus({ preventScroll: true });
   els.output.setSelectionRange(scope.start + next.length, scope.start + next.length);
   saveCursor(); updateCounts(); Storage.saveDraft(els.output.value);
   editorHistory.push(els.output.value);
@@ -352,7 +352,7 @@ function executeRawUndo(){
   const newEnd = Math.max(start, Math.min(prev.newEnd ?? prev.end, v.length));
   const restored = v.slice(0, start) + prev.text + v.slice(newEnd);
   els.output.value = restored;
-  els.output.focus();
+  els.output.focus({ preventScroll: true });
   try { els.output.setSelectionRange(start + prev.text.length, start + prev.text.length); } catch {}
   saveCursor(); updateCounts(); Storage.saveDraft(restored);
   editorHistory.push(restored);
@@ -377,7 +377,7 @@ function triggerToolAction(tool, btn){
     if (!p) return;
     p.hidden = !p.hidden;
     btn?.setAttribute('aria-pressed', String(!p.hidden));
-    if (!p.hidden) { $('stage-lang-search')?.focus(); renderLangs(); }
+    if (!p.hidden) { $('stage-lang-search')?.focus({ preventScroll: true }); renderLangs(); }
     return;
   }
   if (tool.kind === 'raw') {

@@ -541,31 +541,11 @@
         <p class="pref-sub">اولویت از بالا به پایین است؛ دستگیره کنار ردیف را بکش یا از دکمه‌های مستقیم اولویت ۱ (⤒)، پله‌ای (▲/▼)، انتها (⤓) و حذف (🗑) استفاده کن.</p>
         <div id="stt-chain" class="chain-list" role="list" aria-label="زنجیره STT"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-expanded="false" aria-controls="stt-add-panel">
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-stt" aria-controls="models-explorer-card">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span>افزودن مدل صوتی</span>
+            <span>افزودن از کاوشگر (صوتی)</span>
           </button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی پیش‌فرض</button>
-        </div>
-        <div class="chain-add" id="stt-add-panel" hidden>
-          <div class="chain-add-sticky">
-            <div class="chain-filter-head">
-              <div class="fchips fchips--scroll" id="stt-add-filters" role="group" aria-label="فیلتر مدل‌های صوتی">
-                <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
-                <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
-                <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
-                <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
-              </div>
-              <span class="hint-inline chain-add-count" id="stt-add-count" aria-live="polite"></span>
-            </div>
-            <input type="search" id="stt-add-search" placeholder="جست‌وجو در مدل‌های صوتی (مثلاً flash، lite یا whisper)…" aria-label="جست‌وجو در مدل‌های صوتی">
-          </div>
-          <div id="stt-add-list" role="listbox" aria-label="فهرست مدل‌های صوتی"></div>
-          <div class="custom-model-bar">
-            <select id="stt-custom-prov" aria-label="ارائه‌دهنده مدل صوتی دلخواه"></select>
-            <input type="text" id="stt-custom-id" placeholder="شناسه مدل دلخواه (مثلاً gemini-2.5-flash)" dir="ltr" aria-label="شناسه مدل صوتی دلخواه">
-            <button type="button" class="btn-ghost btn-sm" id="btn-stt-custom-add">افزودن</button>
-          </div>
         </div>
       </section>
 
@@ -580,74 +560,44 @@
         <p class="pref-sub">اولین ویرایشگر روشن و دارای کلید اجرا می‌شود (پیش‌فرض روی مدل‌های سریع و پرسهمیه با حداقل تأخیر تفکر)؛ با ⤒/▲/▼/⤓ و 🗑 جایگاه هر مدل را تنظیم کن.</p>
         <div id="polish-chain" class="chain-list" role="list" aria-label="زنجیره پالیش"></div>
         <div class="chain-foot">
-          <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-expanded="false" aria-controls="polish-add-panel">
+          <button type="button" class="btn-ghost btn-sm" id="btn-expand-polish" aria-controls="models-explorer-card">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-            <span>افزودن ویرایشگر</span>
+            <span>افزودن از کاوشگر (متنی)</span>
           </button>
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پیش‌فرض</button>
-        </div>
-        <div class="chain-add" id="polish-add-panel" hidden>
-          <div class="chain-add-sticky">
-            <div class="chain-filter-head">
-              <div class="fchips fchips--scroll" id="polish-add-filters" role="group" aria-label="فیلتر مدل‌های متنی">
-                <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
-                <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
-                <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
-                <button type="button" class="fchip" data-panel-prov="openrouter" aria-pressed="false">OpenRouter</button>
-                <button type="button" class="fchip" data-panel-prov="custom" aria-pressed="false">سفارشی</button>
-                <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
-              </div>
-              <span class="hint-inline chain-add-count" id="polish-add-count" aria-live="polite"></span>
-            </div>
-            <input type="search" id="polish-add-search" placeholder="جست‌وجو در مدل‌های متنی (مثلاً qwen، flash-lite یا :free)…" aria-label="جست‌وجو در مدل‌های متنی">
-          </div>
-          <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌های متنی"></div>
-          <div class="custom-model-bar">
-            <select id="polish-custom-prov" aria-label="ارائه‌دهنده مدل متنی دلخواه"></select>
-            <input type="text" id="polish-custom-id" placeholder="شناسه دلخواه (مثلاً llama-3.3-70b-versatile)" dir="ltr" aria-label="شناسه مدل متنی دلخواه">
-            <button type="button" class="btn-ghost btn-sm" id="btn-polish-custom-add">افزودن</button>
-          </div>
         </div>
         <div class="hint" id="polish-disabled-hint" hidden>پالیش خودکار خاموش است — متن خام بدون ویرایش درج می‌شود.</div>
       </section>
 
       <details class="provider-card" id="models-explorer-card">
-        <summary class="provider-head"><b>کاوشگر کامل و افزودن مدل دلخواه</b><span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+        <summary class="provider-head">
+          <div class="provider-title-wrap">
+            <b>کاوشگر و افزودن مدل‌ها</b>
+            <span class="provider-rec">تشخیص خودکار صوتی و متنی</span>
+          </div>
+          <span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </summary>
         <div class="provider-body">
           <div class="state-card state-warn" id="m-nokey" hidden>کلید این ارائه‌دهنده ثبت نشده — <a href="#" id="m-nokey-link">رفتن به بخش کلیدها</a></div>
-          <div class="fetch-bar fetch-bar--sticky">
-            <div class="fchips" id="m-prov-chips" role="group" aria-label="فیلتر ارائه‌دهنده">
+          <div class="fetch-bar">
+            <div class="fchips fchips--scroll" id="m-prov-chips" role="group" aria-label="فیلتر ارائه‌دهنده">
               <button type="button" class="fchip active" data-prov="all" aria-pressed="true">همه</button>
-              <button type="button" class="fchip" data-prov="groq" aria-pressed="false">Groq</button>
               <button type="button" class="fchip" data-prov="gemini" aria-pressed="false">Google</button>
+              <button type="button" class="fchip" data-prov="groq" aria-pressed="false">Groq</button>
               <button type="button" class="fchip" data-prov="openrouter" aria-pressed="false">OpenRouter</button>
               <button type="button" class="fchip" data-prov="custom" aria-pressed="false">سفارشی</button>
             </div>
             <input type="search" id="m-q" placeholder="جست‌وجو در همه مدل‌های زنده و پیش‌فرض…">
-            <div class="fchips" id="m-chips" role="group" aria-label="فیلتر قابلیت مدل‌ها">
+            <div class="fchips fchips--scroll" id="m-chips" role="group" aria-label="فیلتر قابلیت و وضعیت مدل‌ها">
               <button type="button" class="fchip active" data-cap="all" aria-pressed="true">همه</button>
               <button type="button" class="fchip" data-cap="stt" aria-pressed="false">صوت به متن</button>
               <button type="button" class="fchip" data-cap="t2t" aria-pressed="false">متنی / پالیش</button>
-              <button type="button" class="fchip" data-cap="free" aria-pressed="false">رایگان</button>
+              <button type="button" class="fchip fchip--free" data-cap="free" aria-pressed="false">رایگان</button>
+              <button type="button" class="fchip" data-cap="ready" aria-pressed="false">کلیددار</button>
+              <button type="button" class="fchip" data-cap="inchain" aria-pressed="false">در زنجیره</button>
             </div>
             <div class="count hint-inline" id="m-count" aria-live="polite"></div>
             <div class="hint" id="easy-models-hint">برای دریافت جدیدترین مدل‌های هر ارائه‌دهنده، دکمه «بروزرسانی کاتالوگ زنده» در بالای همین بخش را بزن.</div>
-          </div>
-
-          <div class="manual-model-box" id="m-manual-wrap">
-            <div class="manual-model-head">
-              <b>افزودن مستقیم مدل دلخواه</b>
-              <span class="hint-inline" id="m-manual-hint">هر شناسه مدل دلخواه را برای هر ارائه‌دهنده وارد کن</span>
-            </div>
-            <div class="manual-model-grid">
-              <select id="easy-provider-select" aria-label="انتخاب ارائه‌دهنده"></select>
-              <select id="easy-target-select" aria-label="انتخاب زنجیره مقصد">
-                <option value="polish">مدل متنی / پالیش</option>
-                <option value="stt">صوت به متن (STT)</option>
-              </select>
-              <input type="text" id="easy-model-input" placeholder="مثلاً deepseek/deepseek-r1:free یا gemini-2.5-pro" dir="ltr" aria-label="شناسه دستی مدل">
-              <button type="button" class="btn-primary btn-sm" id="btn-easy-add">افزودن به زنجیره</button>
-            </div>
           </div>
 
           <details id="models-tips">
@@ -659,8 +609,33 @@
             </ul>
           </details>
           <div id="models-list"></div>
+          <nav class="models-pager" id="models-pager" aria-label="صفحه‌بندی کاوشگر مدل‌ها" hidden></nav>
           <div class="state-card state-err" id="m-err" hidden><span id="m-err-text">دریافت مدل‌ها ناموفق بود.</span> <button type="button" class="btn-ghost btn-xs" id="m-retry" disabled>تلاش مجدد</button></div>
-          <div class="state-card state-empty" id="m-empty" hidden>مدلی با این فیلترها پیدا نشد — از بخش «افزودن مستقیم مدل دلخواه» بالا می‌توانی هر مدلی را اضافه کنی.</div>
+          <div class="state-card state-empty" id="m-empty" hidden>مدلی با این فیلترها پیدا نشد — <button type="button" class="link-inline" id="m-empty-manual-link">افزودن مستقیم مدل دلخواه</button></div>
+        </div>
+      </details>
+
+      <details class="provider-card manual-model-card" id="manual-model-card">
+        <summary class="provider-head">
+          <div class="provider-title-wrap">
+            <b>افزودن مستقیم مدل دلخواه</b>
+            <span class="provider-rec">ورود دستی شناسه مدل برای هر ارائه‌دهنده</span>
+          </div>
+          <span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </summary>
+        <div class="provider-body">
+          <div class="manual-model-box" id="m-manual-wrap">
+            <span class="hint-inline" id="m-manual-hint">اگر مدل موردنظرت در کاتالوگ بالا نیست، ارائه‌دهنده و شناسه دقیقش را اینجا وارد کن.</span>
+            <div class="manual-model-grid">
+              <select id="easy-provider-select" aria-label="انتخاب ارائه‌دهنده"></select>
+              <select id="easy-target-select" aria-label="انتخاب زنجیره مقصد">
+                <option value="polish">مدل متنی / پالیش</option>
+                <option value="stt">صوت به متن (STT)</option>
+              </select>
+              <input type="text" id="easy-model-input" placeholder="deepseek/deepseek-r1:free" dir="ltr" aria-label="شناسه دستی مدل">
+              <button type="button" class="btn-primary btn-sm" id="btn-easy-add">افزودن به زنجیره</button>
+            </div>
+          </div>
         </div>
       </details>
       </section>
