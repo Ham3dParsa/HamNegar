@@ -42,7 +42,7 @@ jobs:
 
         Output contract:
         - Do NOT run `gh api` or `gh pr review` manually, and do NOT stage, modify, or commit any file in the repository.
-        - Write the JSON result OUTSIDE the repository at `${{ runner.temp }}/opencode-review-result.json` with this exact schema:
+        - Write the JSON result OUTSIDE the repository at `$RUNNER_TEMP/opencode-review-result.json` with this exact schema:
           {
             "verdict": "APPROVED" | "REQUEST_CHANGES",
             "summary_fa": "1-2 simple Persian sentences for a non-technical owner (NO code/function names or jargon): explain what this PR changes for users and whether it is safe to merge.",
@@ -64,7 +64,7 @@ jobs:
           }
         - Use `line` (and `start_line` <= `line` for multi-line) matching the RIGHT-side (new file) line numbers in `git diff origin/main...HEAD`.
         - Set `verdict` to `"REQUEST_CHANGES"` if any `critical` or `warning` finding exists, otherwise `"APPROVED"`.
-        - End your final stdout message with: `Review written to ${{ runner.temp }}/opencode-review-result.json.`
+        - End your final stdout message with: `Review written to $RUNNER_TEMP/opencode-review-result.json.`
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,7 +74,7 @@ jobs:
       - name: Record review start time
         id: timer
         run: |
-          rm -f "${{ runner.temp }}/opencode-review-result.json"
+          rm -f "$RUNNER_TEMP/opencode-review-result.json"
           echo "start_ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - id: rev1
