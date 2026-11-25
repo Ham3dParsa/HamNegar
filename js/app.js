@@ -110,11 +110,11 @@ function buildFilterUI() {
   filtersWrap.setAttribute('aria-label', 'فیلتر سطح لاگ');
   const levels = [
     ['all', 'همه'],
-    ['info', 'info'],
+    ['info', 'اطلاع'],
     ['success', 'موفق'],
-    ['warn', 'warn'],
-    ['error', 'error'],
-    ['debug', 'debug'],
+    ['warn', 'هشدار'],
+    ['error', 'خطا'],
+    ['debug', 'فنی'],
   ];
   for (const [lvl, label] of levels) {
     const btn = document.createElement('button');
@@ -173,12 +173,12 @@ function buildFilterUI() {
   function expandSearch() {
     searchWrap.classList.add('open');
     toggle.setAttribute('aria-expanded', 'true');
-    search.focus();
+    search.focus({ preventScroll: true });
   }
   function collapseSearch(refocus) {
     searchWrap.classList.remove('open');
     toggle.setAttribute('aria-expanded', 'false');
-    if (refocus) toggle.focus();
+    if (refocus) toggle.focus({ preventScroll: true });
   }
   header.insertBefore(filtersWrap, searchWrap);
 }
@@ -189,8 +189,9 @@ Logger.log = (level, msg, data) => {
   _origLog(level, msg, data);
   const el = els.logBody.lastElementChild;
   if (el && !passes(level, el.textContent, el)) el.classList.add('hidden');
-  if (level === 'error' && logReady && els.logPanel?.classList.contains('collapsed')) {
-    applyLogCollapsed(false);
+  if (level === 'error' && logReady) {
+    if (els.logPanel?.classList.contains('collapsed')) applyLogCollapsed(false);
+    if (isInspectorOpen()) setInspectorTab('log');
   }
 };
 // ticket/16: separator click/keyboard isolates that run (combines with level filter + search)
@@ -306,7 +307,7 @@ function applyPresetMode(mode) {
   Storage.saveSettings({ vad });
   syncModeUI();
   syncQuickToggles();
-  Logger.toast(vad ? 'حالت روزمره: توقف خودکار در سکوت روشن است' : 'حالت کلاس: ضبط پیوسته بدون قطع در سکوت');
+  Logger.toast(vad ? 'حالت ارسال خودکار: با مکث ۱.۴ ثانیه‌ای خودکار متوقف و تبدیل می‌شود' : 'حالت ضبط پیوسته: فقط با زدن دکمه توقف متوقف می‌شود');
 }
 
 const Wave = mountWaveTab({ els, getMainWave: () => mainWave, syncRecStrip });
@@ -323,7 +324,7 @@ const Settings = mountSettingsModal({
   syncCustomProviderSelects,
   onSettingsSync: () => { syncOnboarding(); syncModeUI(); syncQuickToggles(); try { refreshToolsTab(); } catch {} },
 });
-const { engineInfo, updateBadge, renderProvidersStatus, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey, hasReadySttConfig } = Settings;
+const { engineInfo, updateBadge, renderProvidersStatus, setProviderTestState, loadSettings, saveSettings, openModal, closeModal, hasAnyConfiguredKey, hasReadySttConfig } = Settings;
 $('btn-x-modal')?.addEventListener('click', () => closeModal());
 
 // --- preference chains UI + models flow + inline add panels live in js/modules/chains.js (ticket 30) ---
@@ -430,11 +431,41 @@ els.btnToggleLog.onclick=()=>{
   applyLogCollapsed(!logCollapsed);
 };
 document.getElementById('log-header')?.addEventListener('click', (e)=>{
-  if(e.target.closest('button') || e.target.closest('input')) return;
+  if (e.target.closest('.log-filters, #log-search-wrap, #log-actions, button, input')) return;
   applyLogCollapsed(!logCollapsed);
 });
 
 // progressive disclosure inspector (mobile bottom-sheet drawer, desktop side panel)
+let activeInspectorTab = 'quota';
+function setInspectorTab(tab) {
+  const target = tab === 'log' ? 'log' : 'quota';
+  activeInspectorTab = target;
+  const tabQuota = $('inspector-tab-quota');
+  const tabLog = $('inspector-tab-log');
+  const panelQuota = $('inspector-panel-quota');
+  const panelLog = $('inspector-panel-log');
+  const isQuota = target === 'quota';
+  tabQuota?.classList.toggle('active', isQuota);
+  tabQuota?.setAttribute('aria-selected', isQuota ? 'true' : 'false');
+  if (tabQuota) tabQuota.tabIndex = isQuota ? 0 : -1;
+  if (panelQuota) panelQuota.hidden = !isQuota;
+  tabLog?.classList.toggle('active', !isQuota);
+  tabLog?.setAttribute('aria-selected', !isQuota ? 'true' : 'false');
+  if (tabLog) tabLog.tabIndex = !isQuota ? 0 : -1;
+  if (panelLog) panelLog.hidden = isQuota;
+  if (!isQuota && logCollapsed) applyLogCollapsed(false);
+}
+$('inspector-tab-quota')?.addEventListener('click', () => setInspectorTab('quota'));
+$('inspector-tab-log')?.addEventListener('click', () => setInspectorTab('log'));
+els.inspector?.querySelector('.inspector-tabs')?.addEventListener('keydown', (e) => {
+  if (e.target?.getAttribute?.('role') !== 'tab') return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    e.preventDefault();
+    const next = activeInspectorTab === 'quota' ? 'log' : 'quota';
+    setInspectorTab(next);
+    $(next === 'quota' ? 'inspector-tab-quota' : 'inspector-tab-log')?.focus?.({ preventScroll: true });
+  }
+});
 function isInspectorOpen(){
   return els.inspector?.dataset.open === 'true';
 }
@@ -1807,8 +1838,8 @@ window.addEventListener('offline', () => {
 
 // misc
 function safeSaveSettings(){ try{ saveSettings(); return true; }catch(e){ Logger.log('error','saveSettings failed',{msg:e.message, field:e.field}); Logger.toast(e.message); if(e.field==='groqBaseURL') els.groqBaseUrl.style.borderColor='var(--danger)'; if(e.field==='openrouterBaseURL') els.openrouterBaseUrl.style.borderColor='var(--danger)'; return false; } }
-$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); Logger.setStatus('✅ Groq اوکی','success',{ log: true }); Logger.toast('Groq ok'); }catch(e){ Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
-$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); Logger.setStatus('✅ Google اوکی','success',{ log: true }); Logger.toast('Google ok'); }catch(e){ Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-groq').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Groq...','warn'); try{ await Transcription.testGroq(); setProviderTestState('groq','ok'); Logger.setStatus('✅ Groq اوکی','success',{ log: true }); Logger.toast('Groq ok'); }catch(e){ setProviderTestState('groq','error'); Logger.setStatus('❌ Groq: '+sanitizeMsg(e.message || e),'error'); } };
+$('btn-test-gemini').onclick=async()=>{ if(!safeSaveSettings()) return; Logger.setStatus('تست Google...','warn'); try{ await Transcription.testGemini(); setProviderTestState('google','ok'); Logger.setStatus('✅ Google اوکی','success',{ log: true }); Logger.toast('Google ok'); }catch(e){ setProviderTestState('google','error'); Logger.setStatus('❌ Google: '+sanitizeMsg(e.message || e),'error'); } };
 $('btn-test-polish')?.addEventListener('click', async()=>{
   if(!safeSaveSettings()) return;
   Logger.setStatus('تست پالیش...','warn');
@@ -2166,7 +2197,7 @@ function shortcutById(id){ return SHORTCUTS.find(s => s.id === id); }
 const GUIDE = {
   tools: [
     { id:'g-mic', title:'ضبط، مکث و پایان', body:'دکمه میکروفون در مرکز نوار پایین ضبط را شروع و تمام می‌کند؛ حین ضبط می‌توانی با «مکث/ادامه» ضبط را موقت نگه داری و دوباره ادامه دهی یا با «لغو» آن را کنار بگذاری.', ref:'btn-mic' },
-    { id:'g-mode', title:'حالت روزمره و کلاس', body:'در نوار بالا بین «روزمره» (توقف خودکار پس از سکوت) و «کلاس» (ضبط پیوسته برای سخنرانی و درس بدون قطع در مکث استاد) جابه‌جا شو.', ref:'mode-lecture' },
+    { id:'g-mode', title:'حالت ارسال خودکار و ضبط پیوسته', body:'در نوار بالا بین «ارسال خودکار» (با مکث ۱.۴ ثانیه‌ای خودکار متوقف و تبدیل می‌شود) و «ضبط پیوسته» (فقط با زدن دکمه توقف متوقف می‌شود — مناسب متن طولانی) جابه‌جا شو.', ref:'mode-lecture' },
     { id:'g-tools', title:'منوی ابزارهای متن و صوت', body:'دکمه «ابزارها» در نوار پایین زیر شست قرار دارد و پالایش ساده/پیشرفته/دستوری، ساختاردهی متن، ترجمه سریع یا چندزبانه، برگشت به خام و تبدیل فایل صوتی را در یک پنجره جمع‌وجور باز می‌کند.', ref:'tools-toggle' },
     { id:'g-upload', title:'تبدیل فایل صوتی', body:'از داخل منوی «ابزارها» گزینه «تبدیل فایل صوتی» را بزن تا فایل ضبط‌شده کلاس یا مصاحبه (mp3، m4a، wav و…) مستقیم به متن تبدیل شود.', ref:'btn-upload-audio' },
     { id:'g-clear', title:'پاک کردن بوم با واگرد', body:'دکمه «پاک» در نوار پایین بوم متن را پاک می‌کند و تا چند ثانیه دکمه «واگرد» برای بازگرداندن متن نمایش داده می‌شود.', ref:'btn-clear' },

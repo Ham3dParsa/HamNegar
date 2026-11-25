@@ -31,6 +31,7 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
 - Style: modular seam discipline — one module per file, small interface, no cross-seam logic.
 - Tests: run `node --test js/modules/stats.test.mjs js/modules/stt-guards.test.mjs` and `node --check server.js server/gemini.js`; manual 5-second Persian transcription note recommended when the transcription seam is touched.
 - Docs: Persian UI strings (Vazirmatn, RTL), no English-only user-facing text.
+- Scroll & Focus stability: never call `.focus()` inside scrollable panels without `{ preventScroll: true }` (and never focus `.sr-only` inputs — focus the visible row/control). Always capture `scrollHost.scrollTop` before `replaceChildren()`/`innerHTML` and restore it after; avoid delayed duplicate re-renders (`flushChains`) that reset scroll position.
 
 ## Mandatory traps
 

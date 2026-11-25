@@ -27,8 +27,8 @@
   </div>
 
   <div class="mode-switch" role="group" aria-label="حالت ضبط">
-    <button type="button" id="mode-quick" class="mode-btn active" aria-pressed="true" title="تایپ سریع روزمره با توقف خودکار پس از سکوت">روزمره</button>
-    <button type="button" id="mode-lecture" class="mode-btn" aria-pressed="false" title="ضبط پیوسته کلاس و سخنرانی بدون قطع در سکوت">کلاس</button>
+    <button type="button" id="mode-quick" class="mode-btn active" aria-pressed="true" title="با مکث ۱.۴ ثانیه‌ای خودکار متوقف و تبدیل می‌شود">ارسال خودکار</button>
+    <button type="button" id="mode-lecture" class="mode-btn" aria-pressed="false" title="فقط با زدن دکمه توقف متوقف می‌شود — مناسب متن طولانی">ضبط پیوسته</button>
   </div>
 
   <div class="topbar-actions">
@@ -183,51 +183,60 @@
       </button>
     </div>
 
+    <div class="inspector-tabs" role="tablist" aria-label="بخش‌های پنل اطلاعات">
+      <button type="button" class="inspector-tab active" id="inspector-tab-quota" role="tab" aria-selected="true" aria-controls="inspector-panel-quota">سهمیه و آمار</button>
+      <button type="button" class="inspector-tab" id="inspector-tab-log" role="tab" aria-selected="false" aria-controls="inspector-panel-log" tabindex="-1">گزارش سیستم</button>
+    </div>
+
     <div class="inspector-body" id="inspector-body">
-      <section class="quota-strip" id="quota-strip">
-        <button type="button" class="qs-head" id="quota-toggle" aria-expanded="true" aria-controls="quota-detail">
-          <span id="quota-chev" class="qs-chev" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-          </span>
-          <b>سهمیه و آمار مصرف</b>
-        </button>
-        <div id="quota-detail">
-          <div class="quota-grid" id="quota-grid"></div>
-        </div>
+      <section id="inspector-panel-quota" class="inspector-tabpanel" role="tabpanel" aria-labelledby="inspector-tab-quota">
+        <section class="quota-strip" id="quota-strip">
+          <button type="button" class="qs-head" id="quota-toggle" aria-expanded="true" aria-controls="quota-detail">
+            <span id="quota-chev" class="qs-chev" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+            </span>
+            <b>سهمیه و آمار مصرف</b>
+          </button>
+          <div id="quota-detail">
+            <div class="quota-grid" id="quota-grid"></div>
+          </div>
+        </section>
       </section>
 
-      <div id="log-panel">
-        <div id="log-header">
-          <b>گزارش سیستم</b>
-          <div id="log-actions">
-            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-expand-log" title="بزرگ‌نمایی پنل لاگ" aria-label="بزرگ‌نمایی پنل لاگ" aria-pressed="false">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-              <span class="log-tx">بزرگ</span>
-            </button>
-            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-recent-log" title="کپی ۲۰ پیام اخیر لاگ" aria-label="کپی ۲۰ پیام اخیر لاگ">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
-              <span class="log-tx">۲۰ اخیر</span>
-            </button>
-            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-log" title="کپی همه سطرهای نمایش‌داده‌شده" aria-label="کپی همه لاگ">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
-              <span class="log-tx">کپی همه</span>
-            </button>
-            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-prune-log" title="حذف لاگ‌های قدیمی (نگهداری ۲۰ پیام اخیر)" aria-label="حذف لاگ‌های قدیمی">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
-              <span class="log-tx">قدیمی‌ها</span>
-            </button>
-            <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-clear-log" title="پاک کردن کل لاگ" aria-label="پاک کردن کل لاگ">
-              <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>
-              <span class="log-tx">پاک</span>
-            </button>
-            <button type="button" class="btn-ghost btn-xs" id="btn-toggle-log" title="بستن لاگ" aria-label="بستن لاگ">
-              <svg class="log-chev-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-              <span class="log-tx">بستن</span>
-            </button>
+      <section id="inspector-panel-log" class="inspector-tabpanel inspector-tabpanel--log" role="tabpanel" aria-labelledby="inspector-tab-log" hidden>
+        <div id="log-panel">
+          <div id="log-header">
+            <b>گزارش سیستم</b>
+            <div id="log-actions">
+              <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-expand-log" title="بزرگ‌نمایی پنل لاگ" aria-label="بزرگ‌نمایی پنل لاگ" aria-pressed="false">
+                <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                <span class="log-tx">بزرگ</span>
+              </button>
+              <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-recent-log" title="کپی ۲۰ پیام اخیر لاگ" aria-label="کپی ۲۰ پیام اخیر لاگ">
+                <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+                <span class="log-tx">۲۰ اخیر</span>
+              </button>
+              <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-copy-log" title="کپی همه سطرهای نمایش‌داده‌شده" aria-label="کپی همه لاگ">
+                <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h9"/></svg>
+                <span class="log-tx">کپی همه</span>
+              </button>
+              <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-prune-log" title="حذف لاگ‌های قدیمی و نگهداری ۲۰ پیام اخیر" aria-label="حذف لاگ‌های قدیمی و نگهداری ۲۰ پیام اخیر">
+                <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg>
+                <span class="log-tx">نگهداری ۲۰ اخیر</span>
+              </button>
+              <button type="button" class="btn-ghost btn-xs log-dev-btn" id="btn-clear-log" title="پاک کردن کل لاگ" aria-label="پاک کردن کل لاگ">
+                <svg class="log-ic-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>
+                <span class="log-tx">پاک</span>
+              </button>
+              <button type="button" class="btn-ghost btn-xs" id="btn-toggle-log" title="بستن لاگ" aria-label="بستن لاگ">
+                <svg class="log-chev-svg" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+                <span class="log-tx">بستن</span>
+              </button>
+            </div>
           </div>
+          <div id="log-body"></div>
         </div>
-        <div id="log-body"></div>
-      </div>
+      </section>
     </div>
   </aside>
 </div>
@@ -391,6 +400,7 @@
             <span class="provider-status" id="pill-google">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-gemini">تست اتصال</button>
             <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="google" title="حذف Google Gemini" aria-label="حذف ارائه‌دهنده Google Gemini">حذف</button>
+            <span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
           </summary>
           <div class="provider-body">
             <div id="gemini-server-bar" class="gemini-server-bar" hidden>
@@ -425,6 +435,7 @@
             <span class="provider-status" id="pill-groq">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-groq">تست اتصال</button>
             <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="groq" title="حذف Groq" aria-label="حذف ارائه‌دهنده Groq">حذف</button>
+            <span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
           </summary>
           <div class="provider-body">
             <label for="key-groq">کلید API سرویس Groq</label>
@@ -467,6 +478,7 @@
             <span class="provider-status" id="pill-openrouter">بدون کلید</span>
             <button type="button" class="btn-ghost btn-sm" id="btn-test-polish">تست پالیش</button>
             <button type="button" class="btn-ghost btn-xs prov-remove" data-provider-remove="openrouter" title="حذف OpenRouter" aria-label="حذف ارائه‌دهنده OpenRouter">حذف</button>
+            <span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
           </summary>
           <div class="provider-body">
             <label for="key-openrouter">کلید API سرویس OpenRouter</label>
@@ -489,7 +501,7 @@
         <div id="custom-providers-list"></div>
 
         <details class="provider-card provider-add" id="custom-add-card">
-          <summary class="provider-head"><b>＋ افزودن ارائه‌دهنده سفارشی (سازگار با OpenAI)</b></summary>
+          <summary class="provider-head"><b>＋ افزودن ارائه‌دهنده سفارشی (سازگار با OpenAI)</b><span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
           <div class="provider-body">
             <label for="custom-name">نام ارائه‌دهنده</label>
             <input type="text" id="custom-name" placeholder="مثلاً MyProxy">
@@ -536,16 +548,18 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-stt">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="stt-add-panel" hidden>
-          <div class="chain-filter-head">
-            <div class="fchips fchips--scroll" id="stt-add-filters" role="group" aria-label="فیلتر مدل‌های صوتی">
-              <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
-              <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
-              <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
-              <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+          <div class="chain-add-sticky">
+            <div class="chain-filter-head">
+              <div class="fchips fchips--scroll" id="stt-add-filters" role="group" aria-label="فیلتر مدل‌های صوتی">
+                <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
+                <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
+                <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
+                <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+              </div>
+              <span class="hint-inline chain-add-count" id="stt-add-count" aria-live="polite"></span>
             </div>
-            <span class="hint-inline chain-add-count" id="stt-add-count" aria-live="polite"></span>
+            <input type="search" id="stt-add-search" placeholder="جست‌وجو در مدل‌های صوتی (مثلاً flash، lite یا whisper)…" aria-label="جست‌وجو در مدل‌های صوتی">
           </div>
-          <input type="search" id="stt-add-search" placeholder="جست‌وجو در مدل‌های صوتی (مثلاً flash، lite یا whisper)…" aria-label="جست‌وجو در مدل‌های صوتی">
           <div id="stt-add-list" role="listbox" aria-label="فهرست مدل‌های صوتی"></div>
           <div class="custom-model-bar">
             <select id="stt-custom-prov" aria-label="ارائه‌دهنده مدل صوتی دلخواه"></select>
@@ -573,18 +587,20 @@
           <button type="button" class="btn-ghost btn-sm" id="btn-reset-polish">بازنشانی پیش‌فرض</button>
         </div>
         <div class="chain-add" id="polish-add-panel" hidden>
-          <div class="chain-filter-head">
-            <div class="fchips fchips--scroll" id="polish-add-filters" role="group" aria-label="فیلتر مدل‌های متنی">
-              <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
-              <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
-              <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
-              <button type="button" class="fchip" data-panel-prov="openrouter" aria-pressed="false">OpenRouter</button>
-              <button type="button" class="fchip" data-panel-prov="custom" aria-pressed="false">سفارشی</button>
-              <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+          <div class="chain-add-sticky">
+            <div class="chain-filter-head">
+              <div class="fchips fchips--scroll" id="polish-add-filters" role="group" aria-label="فیلتر مدل‌های متنی">
+                <button type="button" class="fchip active" data-panel-prov="all" aria-pressed="true">همه</button>
+                <button type="button" class="fchip" data-panel-prov="groq" aria-pressed="false">Groq</button>
+                <button type="button" class="fchip" data-panel-prov="gemini" aria-pressed="false">Google</button>
+                <button type="button" class="fchip" data-panel-prov="openrouter" aria-pressed="false">OpenRouter</button>
+                <button type="button" class="fchip" data-panel-prov="custom" aria-pressed="false">سفارشی</button>
+                <button type="button" class="fchip fchip--free" data-panel-free aria-pressed="false">فقط رایگان</button>
+              </div>
+              <span class="hint-inline chain-add-count" id="polish-add-count" aria-live="polite"></span>
             </div>
-            <span class="hint-inline chain-add-count" id="polish-add-count" aria-live="polite"></span>
+            <input type="search" id="polish-add-search" placeholder="جست‌وجو در مدل‌های متنی (مثلاً qwen، flash-lite یا :free)…" aria-label="جست‌وجو در مدل‌های متنی">
           </div>
-          <input type="search" id="polish-add-search" placeholder="جست‌وجو در مدل‌های متنی (مثلاً qwen، flash-lite یا :free)…" aria-label="جست‌وجو در مدل‌های متنی">
           <div id="polish-add-list" role="listbox" aria-label="فهرست مدل‌های متنی"></div>
           <div class="custom-model-bar">
             <select id="polish-custom-prov" aria-label="ارائه‌دهنده مدل متنی دلخواه"></select>
@@ -596,10 +612,10 @@
       </section>
 
       <details class="provider-card" id="models-explorer-card">
-        <summary class="provider-head"><b>کاوشگر کامل و افزودن مدل دلخواه</b></summary>
+        <summary class="provider-head"><b>کاوشگر کامل و افزودن مدل دلخواه</b><span class="provider-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
         <div class="provider-body">
           <div class="state-card state-warn" id="m-nokey" hidden>کلید این ارائه‌دهنده ثبت نشده — <a href="#" id="m-nokey-link">رفتن به بخش کلیدها</a></div>
-          <div class="fetch-bar">
+          <div class="fetch-bar fetch-bar--sticky">
             <div class="fchips" id="m-prov-chips" role="group" aria-label="فیلتر ارائه‌دهنده">
               <button type="button" class="fchip active" data-prov="all" aria-pressed="true">همه</button>
               <button type="button" class="fchip" data-prov="groq" aria-pressed="false">Groq</button>
@@ -656,12 +672,12 @@
         <div class="pref-head"><h4>حالت آماده کار</h4></div>
         <div class="preset-grid">
           <button type="button" class="preset-card" id="preset-quick">
-            <strong>روزمره و سریع</strong>
-            <span>توقف خودکار پس از سکوت (VAD)؛ ایده‌آل برای پیام‌های کوتاه و تایپ یک‌دستی روی موبایل.</span>
+            <strong>ارسال خودکار</strong>
+            <span>با مکث ۱.۴ ثانیه‌ای خودکار متوقف و تبدیل می‌شود؛ ایده‌آل برای پیام‌های کوتاه و تایپ یک‌دستی روی موبایل.</span>
           </button>
           <button type="button" class="preset-card" id="preset-lecture">
-            <strong>کلاس و نگارش طولانی</strong>
-            <span>ضبط پیوسته بدون قطع در مکث‌های استاد یا هنگام فکر کردن؛ توقف فقط با لمس خودت.</span>
+            <strong>ضبط پیوسته</strong>
+            <span>فقط با زدن دکمه توقف متوقف می‌شود — مناسب متن طولانی و کلاس بدون قطع در مکث‌ها.</span>
           </button>
         </div>
       </section>
