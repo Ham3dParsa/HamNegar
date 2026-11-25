@@ -19,8 +19,8 @@ Loop that turns a pushed PR into `MERGEABLE`. Primary reviewer is `opencode-agen
 
 ```powershell
 # --repo تا بیرون از .git هم کار کند؛ // "" تا body خالی Substring نترکد
-gh api repos/Ham3dParsa/HamNegar/pulls/<n>/reviews --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, state, h:(.body|length), user:.user.login}'
-gh api repos/Ham3dParsa/HamNegar/pulls/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
+gh api repos/Ham3dParsa/HamNegar/pulls/<n>/reviews --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="github-actions[bot]" or .user.login=="kilo-code-bot[bot]") | {id, state, h:(.body|length), user:.user.login}'
+gh api repos/Ham3dParsa/HamNegar/pulls/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="github-actions[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 gh api repos/Ham3dParsa/HamNegar/issues/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 ```
 
