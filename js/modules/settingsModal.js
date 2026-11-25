@@ -603,6 +603,7 @@ export function mountSettingsModal(deps) {
   if (els.togglePolish) {
     els.togglePolish.addEventListener('change', () => {
       persistChains();
+      try { renderAllChains(); } catch {}
       Logger.log('info', `پالیش ${els.togglePolish.checked ? 'روشن' : 'خاموش'}`);
       try { onSettingsSync(); } catch {}
     });
