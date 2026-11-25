@@ -40,10 +40,9 @@ jobs:
         Speed & Scope:
         - First inspect `git diff origin/main...HEAD` and read `./REVIEW.md` from base (`git show origin/main:REVIEW.md`) — focus only on changed files and their direct callers (1..11 traps in `REVIEW.md`). Keep your review fast and concise.
 
-        Submission mode (IMPORTANT):
-        - Record start time at the start (`T0=$(date +%s)`) so you can report exact elapsed seconds in the footnote.
-        - Submit your findings as a REAL GitHub Pull Request Review on PR #$PR_NUMBER using `gh api repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/reviews` (with `event`: `"APPROVE"` if zero critical/warning, or `"REQUEST_CHANGES"` if any critical/warning; and inline `comments` with `path`, `line`, `side: "RIGHT"`, and GitHub ````suggestion```` code blocks wherever a direct fix on a changed line is clear so the author can commit suggestions with one click).
-        - If inline review API fails on a line outside the diff, fall back to `gh pr review $PR_NUMBER --request-changes` / `--approve` or the summary comment.
+        Submission mode:
+        - Let the OpenCode GitHub runner post your final output directly (do NOT run `gh api` or `gh pr review` manually).
+        - Where a direct single-hunk code fix is clear, include a ```suggestion``` block under that finding.
 
         Output format (concise, scannable, human + agent readable):
         ### ✅ APPROVED  *(or)*  ### ⚠️ REQUEST_CHANGES
@@ -58,7 +57,7 @@ jobs:
         **🛡️ Traps checked:** list `REVIEW.md` traps verified (or "none relevant")
 
         ---
-        > 🤖 **Reviewer:** `$MODEL_ID` (`$STEP_LABEL`) · ⏱️ **Duration:** `<elapsed>s` · 🪙 **Tokens:** `<token count if exposed, else N/A (not exposed by runner)>`
+        > 🤖 **Reviewer:** `$MODEL_ID` (`$STEP_LABEL`) · ⏱️ **Duration:** `<approx elapsed or N/A>` · 🪙 **Tokens:** `<count if exposed, else N/A>`
     steps:
       - uses: actions/checkout@v6
         with:
