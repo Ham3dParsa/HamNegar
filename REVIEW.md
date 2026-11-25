@@ -63,6 +63,9 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
     always pass `{ preventScroll: true }` to `.focus()` in scrollable panels, never focus `.sr-only`.
 11. **CI workflows** — job `timeout-minutes` must exceed the sum of step timeouts; pin
     third-party actions to full commit SHAs and guard against `[bot]` actor loops.
+    Never reference `${{ runner.* }}` in `jobs.<id>.env` (causes `0s` workflow parse
+    failure — use `$RUNNER_TEMP` in shell/script); write transient LLM artifacts outside
+    the repo (`$RUNNER_TEMP`) with `mtime` freshness checks, and fail closed on missing/invalid review output.
 
 ## Verify (run, don't guess)
 

@@ -30,10 +30,11 @@ gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$
 
 - **Done when:** Current `headRefOid`, check statuses (`review`, `Review Gate`), formal review `state`, and all unresolved `reviewThreads` are accounted for.
 - If checks are still `pending` / `in_progress`, wait 90s (max 30m total) and re-run Step 1. As soon as any `CHANGES_REQUESTED`, `action_required`, or `failure` appears, move immediately to Step 2 — waiting never turns `CHANGES_REQUESTED` into `APPROVED`.
+- If `opencode-review` fails in `0s` on `push` (`workflow file issue`), inspect the workflow YAML/expressions immediately (e.g. `${{ runner.* }}` used in `jobs.<id>.env` instead of `$RUNNER_TEMP`) — `pull_request` will not trigger until fixed.
 
 ### 2. Triage, Fix or Escalate, and Resolve Threads
 For every finding in `pulls/<n>/reviews` and `reviewThreads`:
-- **Valid inline `suggestion` (no behavioral risk):** Apply directly to the PR branch and push.
+- **Valid inline `suggestion` (no behavioral risk):** Batch multiple suggestions into a single commit (**Add suggestion to batch → Commit suggestions** in GitHub UI, or one combined local fix commit) so `opencode-review` (`cancel-in-progress: true`) runs once instead of burning free-tier API quota per suggestion. Applying suggestions **must** re-trigger review so `review` and `Review Gate` flip to `APPROVED` (`[bot]` commits stay skipped by the anti-loop guard).
 - **Needs custom rewrite or justified waiver:** Executing worker subagent implements the rewrite or documents the waiver.
 - **Significant behavioral, UX, product, or contract change:** Worker subagent **must escalate to the main agent**; the main agent resolves it per `AGENTS.md`/`REVIEW.md` or escalates to the **project owner**. Never silently ship a breaking behavioral change.
 - **Resolve threads (never delete):** After fixing or explicitly waiving a finding, resolve its thread via GraphQL:
