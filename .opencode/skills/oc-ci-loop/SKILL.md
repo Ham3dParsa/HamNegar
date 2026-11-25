@@ -47,7 +47,7 @@ gh pr checks <n> --repo Ham3dParsa/HamNegar
 # یا از داخل پوشه HamNegar بدون --repo: gh pr checks <n>
 ```
 
-Require `review` (opencode-review) `pass` and `Kilo Code Review` `pass` only if Kilo is enabled; otherwise require only `review`. Match with `(?m)^\s*review(?!\w)\s+pass`.
+Require `review` (opencode-review) and `Review Gate` `pass` (plus `Kilo Code Review` `pass` only if Kilo is enabled). Match with `(?m)^\s*review(?!\w)\s+pass` and `(?m)^\s*Review Gate\s+pass`.
 
 On `fail`, `gh run view <run> --log-failed`, fix.
 
@@ -61,13 +61,24 @@ If `CONFLICTING`: `git fetch origin; git rebase origin/main` → `GIT_EDITOR=tru
 powershell -File scripts/oc_ci_loop.ps1 -PR <n>
 ```
 
-## Triage
+## Triage & Resolution
 
-- `opencode` `🔴 [critical]` / `🟡 [warning]` (or `[critical]`/`[warning]`, or `kilo CRITICAL/WARNING` if present) → blocking, must fix
-- `opencode` `🔵 [info]` (or `[info]`, or `kilo SUGGESTION`) → fix if ≤5 lines or clearly better (or apply inline `suggestion` block), else defer with follow-up ticket
-- Footnote (`> 🤖 Reviewer: ... · ⏱️ Duration: ... · 🪙 Tokens: ...`) identifies which fallback model produced the review
-- Never silently ignore
+- `opencode` `🔴 [critical]` / `🟡 [warning]` (or `[critical]`/`[warning]`, or `kilo CRITICAL/WARNING` if present) → blocking, must fix.
+- `opencode` `🔵 [info]` (or `[info]`, or `kilo SUGGESTION`) → fix if ≤5 lines or clearly better, else defer with follow-up ticket.
+- **Applying suggestions vs. rewriting/waiving:**
+  - Valid, justified inline ```` ```suggestion ```` blocks → apply directly to the PR branch and push.
+  - Findings requiring a custom rewrite or explicit ignore/waiver → implemented or documented by the executing worker subagent per `oc-ci-loop`.
+  - **Escalation for significant behavioral changes:** If a finding could introduce a significant behavioral, UX, product, or contract change, the worker subagent **must escalate it to the main agent**; the main agent either resolves it per `AGENTS.md`/`REVIEW.md` or escalates to the **project owner**.
+- **Resolve threads (never delete):** After a finding is fixed/applied or explicitly waived, mark its review thread resolved via GitHub GraphQL (`resolveReviewThread`) so it collapses cleanly without deleting review history:
+  ```bash
+  # List unresolved thread IDs on PR <n>
+  gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){reviewThreads(first:50){nodes{id isResolved path line}}}}}' -F o=Ham3dParsa -F r=HamNegar -F n=<n>
+  # Resolve a specific thread ID
+  gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}' -F id=<threadId>
+  ```
+- Footnote (`> 🤖 **Reviewer:** ... · ⏱️ **Duration:** ...`) identifies which fallback model produced the review and exact wall-clock duration.
+- Never silently ignore.
 
 ## Completion
 
-Cycle ends only at **✅ APPROVED / suggestion: merge** — every `[critical]/[warning]` fixed or explicitly waived, every `[info]` triaged, `gh pr checks` all `pass`, `mergeable == MERGEABLE`, and reviewer PR review `state == "APPROVED"` or summary contains `APPROVED` (with zero `REQUEST_CHANGES`). Do not stop at `⚠️ REQUEST_CHANGES` or at `pass` alone.
+Cycle ends only at **✅ APPROVED / suggestion: merge** — every `[critical]/[warning]` fixed or explicitly waived, every `[info]` triaged, all blocking review threads resolved, `gh pr checks` (`review` + `Review Gate`) `pass`, `mergeable == MERGEABLE`, and reviewer PR review `state == "APPROVED"` or summary contains `APPROVED` (with zero `REQUEST_CHANGES`). Do not stop at `⚠️ REQUEST_CHANGES` or at `pass` alone.
