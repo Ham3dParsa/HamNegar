@@ -788,6 +788,7 @@ function toggleFlowModel(modelId, providerId){
     const [removed] = arr.splice(loc.index, 1);
     lastDeleted = { entry: removed, index: loc.index, type: loc.type };
     scheduleChainsPersist();
+    renderSingleChain(loc.type);
     renderFlowList();
     announce(`مدل ${mid} حذف شد — برای بازگردانی «واگرد» را بزن`);
     requestAnimationFrame(() => showUndoToast(mid));
