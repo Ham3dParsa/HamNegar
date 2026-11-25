@@ -39,21 +39,32 @@ let onSettingsSync = () => {};
 
 // --- preference chains UI ---
 const STT_LABELS = {
-  'gemini-4-hydrogen': { label: 'Gemini Flash (4)', sub: 'اولویت پیشنهادی • درک دقیق فارسی ✓' },
+  'gemini-3.5-flash-lite': { label: 'Gemini Flash-Lite (3.5)', sub: 'اولویت پیشنهادی • فوق‌سریع و پرسهمیه ✓' },
   'gemini-3.1-flash-lite': { label: 'Gemini Flash-Lite (3.1)', sub: 'سریع و پرسهمیه ✓' },
+  'gemini-3.6-flash': { label: 'Gemini Flash (3.6)', sub: 'توازن سرعت و دقت فارسی ✓' },
+  'gemini-3.8-flash': { label: 'Gemini Flash (3.8)', sub: 'دقت بالا در رونویسی ✓' },
+  'gemini-4-hydrogen': { label: 'Gemini Flash (4)', sub: 'درک دقیق فارسی ✓' },
   'groq': { label: 'Groq Whisper', sub: 'پشتیبان فوق‌سریع • whisper-large-v3' },
   'gemini-3.5-transcribe': { label: 'Gemini 3.5 Transcribe', sub: 'مدل تخصصی رونویسی صوت' },
 };
 const POLISH_LABELS = {
+  'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: 'Groq • فوق‌سریع • 1K RPD' },
+  'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Groq • دقیق • 1K RPD' },
+  'google/gemma-4-26b-a4b-it:free': { label: 'gemma-4-26b-a4b-it', sub: 'OpenRouter • رایگان و سریع' },
+  'google/gemma-4-31b-it:free': { label: 'gemma-4-31b-it', sub: 'OpenRouter • رایگان و دقیق' },
+  'gemini-3.5-flash-lite': { label: 'Gemini Flash-Lite (3.5)', sub: 'Google • فوق‌سریع و پرسهمیه' },
   'gemini-3.1-flash-lite': { label: 'Gemini Flash-Lite (3.1)', sub: 'Google • بسیار سریع و پرسهمیه' },
+  'gemini-3.6-flash': { label: 'Gemini Flash (3.6)', sub: 'Google • سریع و دقیق' },
+  'gemini-3.8-flash': { label: 'Gemini Flash (3.8)', sub: 'Google • پالیش و ساختاردهی دقیق' },
+  'inclusionai/ling-3.2-flash:free': { label: 'ling-3.2-flash', sub: 'OpenRouter • رایگان و سریع' },
+  'nvidia/nemotron-3.5-super-vl:free': { label: 'nemotron-3.5-super-vl', sub: 'OpenRouter • رایگان و قدرتمند' },
+  'nvidia/nemotron-3.5-lightning:free': { label: 'nemotron-3.5-lightning', sub: 'OpenRouter • رایگان و سریع' },
+  'openai/gpt-oss-120b': { label: 'openai/gpt-oss-120b', sub: 'Groq • قدرتمند • 1K RPD' },
   'gemini-4-hydrogen': { label: 'Gemini Flash (4)', sub: 'Google • پالیش و ساختاردهی دقیق' },
   'qwen/qwen3-30b-a3b:free': { label: 'qwen/qwen3-30b', sub: 'OpenRouter • رایگان' },
   'qwen/qwen3-32b:free': { label: 'qwen/qwen3-32b', sub: 'OpenRouter • رایگان' },
   'openai/gpt-oss-20b:free': { label: 'openai/gpt-oss-20b', sub: 'OpenRouter • رایگان' },
   'qwen/qwen3.6-27b': { label: 'qwen/qwen3.6-27b', sub: 'Groq • 1K RPD' },
-  'qwen/qwen3.8-27b': { label: 'qwen/qwen3.8-27b', sub: 'Groq • 1K RPD' },
-  'openai/gpt-oss-20b': { label: 'openai/gpt-oss-20b', sub: 'Groq • 1K RPD' },
-  'openai/gpt-oss-120b': { label: 'openai/gpt-oss-120b', sub: 'Groq • 1K RPD' },
   'openai/gpt-oss-safeguard-20b': { label: 'openai/gpt-oss-safeguard-20b', sub: 'Groq • 1K RPD' },
   'allam-2-7b': { label: 'allam-2-7b', sub: 'Groq • 7K RPD' },
 };

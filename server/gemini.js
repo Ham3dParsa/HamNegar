@@ -1,13 +1,16 @@
 import { GoogleGenAI } from '@google/genai';
 
 export const DEFAULT_STT_MODEL = 'gemini-4-hydrogen';
-export const DEFAULT_TEXT_MODEL = 'gemini-3.1-flash-lite';
-export const FAST_LITE_MODEL = 'gemini-3.1-flash-lite';
+export const DEFAULT_TEXT_MODEL = 'gemini-3.5-flash-lite';
+export const FAST_LITE_MODEL = 'gemini-3.5-flash-lite';
 export const TRANSCRIBE_MODEL = 'gemini-3.5-transcribe';
 
 export const CURATED_MODELS = [
-  DEFAULT_STT_MODEL,
   FAST_LITE_MODEL,
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
+  DEFAULT_STT_MODEL,
   TRANSCRIBE_MODEL,
 ];
 
@@ -17,7 +20,7 @@ const MAX_AUDIO_B64_CHARS = 42 * 1024 * 1024; // ~31 MB binary audio
 const MAX_TEXT_CHARS = 100_000;
 const MAX_SYSTEM_CHARS = 4_000;
 
-const DEPRECATED_OR_LEGACY_RE = /^(gemini-(1(\.\d+)?|2\.0|2\.5)-|gemini-pro$|gemini-flash-(lite-)?latest$|gemini-3\.5-flash-lite$)/i;
+const DEPRECATED_OR_LEGACY_RE = /^(gemini-(1(\.\d+)?|2\.0|2\.5)-|gemini-pro$|gemini-flash-(lite-)?latest$)/i;
 
 const DEFAULT_TRANSCRIBE_PROMPT =
   'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the exact spoken words as plain text. STRICTLY FORBIDDEN: timestamps, timecodes (e.g. 00:00, [0:12]), speaker labels, descriptions of non-speech sounds, summaries, translations, or commentary. If there is only silence or background noise with no intelligible speech, return an empty string.';

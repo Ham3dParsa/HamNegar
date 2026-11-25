@@ -9,19 +9,29 @@
 // and fall back to full normalize on mismatch (ticket 24 migration unchanged).
 // Custom providers live under a separate key as [{id,name,baseURL,key}]; built-ins stay fixed fields.
 // Never logs keys.
-export const STT_DEFAULTS = ['gemini-4-hydrogen','gemini-3.1-flash-lite','groq'];
+export const STT_DEFAULTS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.6-flash',
+  'gemini-3.8-flash',
+  'gemini-4-hydrogen',
+  'groq',
+];
 export const GROQ_BASE_DEFAULT = 'https://api.groq.com/openai/v1';
 export const OPENROUTER_BASE_DEFAULT = 'https://openrouter.ai/api/v1';
 export const BUILTIN_PROVIDER_IDS = ['groq','google','openrouter'];
 export const SCHEMA_VERSION = 1;
-// پالیش و ابزارهای متنی: مدل‌های سریع و پرسهمیه (Groq، Gemini Flash-Lite، OpenRouter رایگان) در اولویت
+// پالیش و ابزارهای متنی: مدل‌های سریع و پرسهمیه (Groq، OpenRouter رایگان، Gemini Flash-Lite) در اولویت
 export const POLISH_DEFAULTS = [
-  { id:'openai/gpt-oss-120b', providerId:'groq', enabled:true },
-  { id:'qwen/qwen3.8-27b', providerId:'groq', enabled:true },
-  { id:'gemini-3.1-flash-lite', providerId:'google', enabled:true },
-  { id:'qwen/qwen3.6-27b', providerId:'groq', enabled:true },
-  { id:'openai/gpt-oss-20b', providerId:'groq', enabled:true },
-  { id:'gemini-4-hydrogen', providerId:'google', enabled:true },
+  { id: 'openai/gpt-oss-20b', providerId: 'groq', enabled: true },
+  { id: 'qwen/qwen3.8-27b', providerId: 'groq', enabled: true },
+  { id: 'google/gemma-4-26b-a4b-it:free', providerId: 'openrouter', enabled: true },
+  { id: 'gemini-3.5-flash-lite', providerId: 'google', enabled: true },
+  { id: 'gemini-3.1-flash-lite', providerId: 'google', enabled: true },
+  { id: 'inclusionai/ling-3.2-flash:free', providerId: 'openrouter', enabled: true },
+  { id: 'nvidia/nemotron-3.5-super-vl:free', providerId: 'openrouter', enabled: true },
+  { id: 'nvidia/nemotron-3.5-lightning:free', providerId: 'openrouter', enabled: true },
+  { id: 'openai/gpt-oss-120b', providerId: 'groq', enabled: true },
 ];
 const POLISH_DEFAULTS_LEGACY = ['openai/gpt-oss-120b','qwen/qwen3.8-27b','qwen/qwen3.6-27b','openai/gpt-oss-20b'];
 
@@ -229,7 +239,26 @@ const KEYS = {
   LOG_COLLAPSED: 'LOG_COLLAPSED',
   REPORT_COLLAPSED: 'REPORT_COLLAPSED',
   MODEL_CATALOG: 'MODEL_CATALOG_V1',
+  TRANSLATE_MODEL: 'TRANSLATE_MODEL_V1',
 };
+
+function normalizeTranslateModel(raw){
+  if(raw == null || raw === '') return null;
+  let obj = raw;
+  if(typeof obj === 'string'){
+    try{ obj = JSON.parse(obj); }catch{ return null; }
+  }
+  if(!obj || typeof obj !== 'object' || typeof obj.id !== 'string' || !obj.id.trim()) return null;
+  const id = obj.id.trim();
+  const rawPid = typeof obj.providerId === 'string' && obj.providerId.trim()
+    ? obj.providerId.trim()
+    : (typeof obj.provider === 'string' && obj.provider.trim() ? obj.provider.trim() : '');
+  const mig = migrateProviderId(rawPid);
+  if(mig === null) return null;
+  const providerId = mig || (id.includes(':free') ? 'openrouter' : (/^gemini/i.test(id) ? 'google' : 'groq'));
+  const cleanId = providerId === 'openrouter' ? id : id.replace(':free', '');
+  return { id: cleanId, providerId };
+}
 
 // ---- Ticket 39 (ref/storage): settings cache + normalize-on-write ----
 // In-memory settings cache with a dirty flag. saveSettings is the only writer
@@ -274,6 +303,7 @@ function cloneSettings(s){
     customProviders: s.customProviders.map(e => ({ ...e })),
     disabledProviders: [...(s.disabledProviders || [])],
     removedProviders: [...(s.removedProviders || [])],
+    translateModel: s.translateModel ? { ...s.translateModel } : null,
   };
 }
 
@@ -366,6 +396,7 @@ function assembleSettings(sttChain, polishChain, customProviders){
     autocopy: localStorage.getItem(KEYS.AUTOCOPY) === '1',
     logCollapsed: logColRaw === null ? true : logColRaw === '1',
     reportCollapsed: repColRaw === null ? true : repColRaw === '1',
+    translateModel: normalizeTranslateModel(localStorage.getItem(KEYS.TRANSLATE_MODEL)),
   };
 }
 function readSettingsFromStore(){
@@ -612,6 +643,11 @@ export const Storage = {
     if ('autocopy' in patch) localStorage.setItem(KEYS.AUTOCOPY, patch.autocopy ? '1' : '0');
     if ('logCollapsed' in patch) localStorage.setItem(KEYS.LOG_COLLAPSED, patch.logCollapsed ? '1' : '0');
     if ('reportCollapsed' in patch) localStorage.setItem(KEYS.REPORT_COLLAPSED, patch.reportCollapsed ? '1' : '0');
+    if ('translateModel' in patch) {
+      const norm = normalizeTranslateModel(patch.translateModel);
+      if (norm) localStorage.setItem(KEYS.TRANSLATE_MODEL, JSON.stringify(norm));
+      else localStorage.removeItem(KEYS.TRANSLATE_MODEL);
+    }
     // Ticket 39 write-through: chains/customs above were normalized on write.
     // Refresh the cache from the store, so the next getSettings is a zero-read
     // hit (single re-read on the rare write path; also stamps/heals any legacy

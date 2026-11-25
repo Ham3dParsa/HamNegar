@@ -2,7 +2,7 @@
 // Interface: transcribe(blob) -> {text, engine}, polish(text)->{text, model}, textChain(text,{system,layer})->{text,model,providerId} (full polish-chain fallback for stages/translate), translate(text,lang,entry?)->{text,model,providerId} (layer='translate'), queryChat(providerId,text,{system,model,layer}) with layer naming the op in logs, testGroq(), testGemini(), listModels(providerId)
 // Depth: chains: STT chain + Polish chain (OpenAI-compatible groq/openrouter/custom + Google) with fallback, quota, header handling
 // Seam: at Transcription interface. Adapters internal, not exposed.
-import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
+import { Storage, STT_DEFAULTS, POLISH_DEFAULTS, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.js';
 import { canonicalize, hasKey as hasProviderKey, displayPair } from './provider.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
@@ -622,8 +622,9 @@ export function smartModelScore(id){
   if(/(gpt-5|claude-(?:3\.7|4|opus|sonnet)|gemini-(?:2\.5|3(?:\.\d+)?)-pro|gemini-4-hydrogen|o[134](?:-|$))/i.test(m)) score = 95;
   else if(/(120b|405b|235b|deepseek-r1|deepseek-v3|kimi-k2)/i.test(m)) score = 88;
   else if(/(70b|72b|gemini-(?:2\.5|3(?:\.\d+)?)-flash(?!-lite)|qwen3\.8|qwen3\.6|claude-haiku|gpt-4o(?!-mini))/i.test(m)) score = 78;
-  else if(/(27b|30b|32b|maverick|gemini-flash-latest|gpt-4\.1(?!-mini|-nano))/i.test(m)) score = 68;
-  else if(/(20b|14b|17b|scout|gpt-4o-mini)/i.test(m)) score = 55;
+  else if(/(27b|30b|31b|32b|gemma-4-31b|gemma-4-26b|nemotron-3\.5-super|maverick|gemini-flash-latest|gpt-4\.1(?!-mini|-nano))/i.test(m)) score = 68;
+  else if(/(20b|14b|17b|scout|gpt-4o-mini|nemotron-3\.5-lightning|ling-3\.2-flash)/i.test(m)) score = 55;
+  else if(/gemini-3\.5-flash-lite/i.test(m)) score = 35;
   else if(/(lite|mini|nano|flash-lite|8b|7b|4b|3b|1b|allam)/i.test(m)) score = 30;
   if(/safeguard/i.test(m)) score -= 8;
   return score;
@@ -660,7 +661,7 @@ async function queryPolish(text, entry, layer = 'polish'){
 async function textChain(text, { system, layer = 'polish', prefer, smart = false } = {}){
   if(!text || !text.trim()) throw Object.assign(new Error(layer==='translate' ? 'متنی برای ترجمه نیست' : 'متنی برای پردازش نیست'),{status:400});
   const { polishChain } = Storage.getSettings();
-  const rawChain = Array.isArray(polishChain) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
+  const rawChain = Array.isArray(polishChain) ? polishChain : POLISH_DEFAULTS.map(e => ({ ...e }));
   let chain = rawChain.filter(e => e && e.enabled !== false).filter(e => hasKeyForPolish(e));
   if(smart && chain.length > 1){
     chain = [...chain].sort((a, b) => smartModelScore(polishTargetOf(b).model) - smartModelScore(polishTargetOf(a).model));
@@ -748,7 +749,7 @@ export const Transcription = {
   async transcribe(blob, opts={}){
     if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
     const { sttChain, polishChain, polishEnabled } = Storage.getSettings();
-    const rawChain = Array.isArray(sttChain) ? sttChain : [{id:'gemini-4-hydrogen',providerId:'google',enabled:true},{id:'gemini-3.1-flash-lite',providerId:'google',enabled:true},{id:'groq',providerId:'groq',enabled:true}];
+    const rawChain = Array.isArray(sttChain) ? sttChain : STT_DEFAULTS.map(id => ({ id, providerId: id === 'groq' ? 'groq' : 'google', enabled: true }));
     if(rawChain.length === 0){
       throw Object.assign(new Error('زنجیره صوت به متن خالی است — از تب «مدل‌ها» یک مدل اضافه کن'),{status:400});
     }
@@ -883,7 +884,7 @@ export const Transcription = {
     const ruleFixed = rulePolish(text);
     const { polishChain, polishEnabled } = Storage.getSettings();
     if(!polishEnabled) return ruleFixed;
-    const rawChain = Array.isArray(polishChain) ? polishChain : [{id:'qwen/qwen3.6-27b',providerId:'groq',enabled:true}];
+    const rawChain = Array.isArray(polishChain) ? polishChain : POLISH_DEFAULTS.map(e => ({ ...e }));
     const enabledChain = rawChain.filter(e=>e && e.enabled!==false);
     const chain = enabledChain.filter(e => hasKeyForPolish(e));
     if(chain.length===0) return ruleFixed;

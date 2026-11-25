@@ -292,6 +292,12 @@
   <div id="tools-grid" class="tools-grid" role="toolbar" aria-label="مراحل پالایش و ترجمه"></div>
 
   <div class="combo" id="tr-panel" hidden>
+    <label class="tools-model-field translate-model-field" for="translate-model">
+      <span>مدل ترجمه:</span>
+      <select class="model" id="translate-model">
+        <option value="">خودکار (همان زنجیره پالایش)</option>
+      </select>
+    </label>
     <input id="stage-lang-search" placeholder="جست‌وجوی زبان… (مثلاً انگلیسی، عربی، آلمانی)" role="combobox" aria-expanded="true" aria-controls="stage-lang-opts" autocomplete="off" aria-label="جست‌وجوی زبان">
     <div class="list" id="stage-lang-opts" role="listbox"></div>
   </div>

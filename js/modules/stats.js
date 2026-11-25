@@ -6,9 +6,12 @@ import { Storage } from './storage.js';
 
 export const LIMITS = {
   groq: { label: 'Groq Whisper', rpd: 2000, rpm: 20, tpm: '—' },
-  'gemini-3.5-transcribe': { label: 'Gemini 3.5 Transcribe', rpd: 1500, rpm: 30, tpm: '1M' },
+  'gemini-3.5-flash-lite': { label: 'Gemini 3.5 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
   'gemini-3.1-flash-lite': { label: 'Gemini 3.1 Flash-Lite', rpd: 1500, rpm: 30, tpm: '1M' },
+  'gemini-3.6-flash': { label: 'Gemini 3.6 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
+  'gemini-3.8-flash': { label: 'Gemini 3.8 Flash', rpd: 1500, rpm: 15, tpm: '1M' },
   'gemini-4-hydrogen': { label: 'Gemini 4 Hydrogen', rpd: 1500, rpm: 30, tpm: '1M' },
+  'gemini-3.5-transcribe': { label: 'Gemini 3.5 Transcribe', rpd: 1500, rpm: 30, tpm: '1M' },
   'gemini-flash-latest': { label: 'Gemini Flash Latest', rpd: 1500, rpm: 15, tpm: '1M' },
   'gemini-flash-lite-latest': { label: 'Gemini Flash-Lite Latest', rpd: 1500, rpm: 30, tpm: '1M' },
 };
