@@ -19,6 +19,7 @@ Loop that turns a pushed PR into `MERGEABLE`. Primary reviewer is `opencode-agen
 
 ```powershell
 # --repo تا بیرون از .git هم کار کند؛ // "" تا body خالی Substring نترکد
+gh api repos/Ham3dParsa/HamNegar/pulls/<n>/reviews --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, state, h:(.body|length), user:.user.login}'
 gh api repos/Ham3dParsa/HamNegar/pulls/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 gh api repos/Ham3dParsa/HamNegar/issues/<n>/comments --jq '.[] | select(.user.login=="opencode-agent[bot]" or .user.login=="kilo-code-bot[bot]") | {id, h:(.body|length), user:.user.login}'
 ```
@@ -26,6 +27,7 @@ gh api repos/Ham3dParsa/HamNegar/issues/<n>/comments --jq '.[] | select(.user.lo
 Save `id->h` to `$env:TEMP/opencode/reviewer_seen_<n>.json`. Only fetch full body for new/changed `h`:
 
 ```powershell
+gh api repos/Ham3dParsa/HamNegar/pulls/<n>/reviews/<id> --jq '.body // ""'
 gh api repos/Ham3dParsa/HamNegar/pulls/comments/<id> --jq '.body // ""'
 gh api repos/Ham3dParsa/HamNegar/issues/comments/<id> --jq '.body // ""'
 # snippet امن حتی اگر body خالی باشد:
@@ -34,7 +36,7 @@ gh api repos/Ham3dParsa/HamNegar/issues/comments/<id> --jq '.body // ""'
 
 If `gh api` fails, skip seen-update.
 
-**Sleep is only while waiting for new comments.** After a new delta arrives, do **not** sleep waiting for green — immediately triage it (see Triage below). If it contains any `[critical]/[warning]` must-fix, fix the code in the PR branch and `git push` right away to trigger a re-review, then go back to polling. Reaching green requires this fix-and-push; waiting alone never turns `REQUEST_CHANGES` into `APPROVED`.
+**Sleep is only while waiting for new comments/reviews.** After a new delta arrives, do **not** sleep waiting for green — immediately triage it (see Triage below). If it contains any `🔴 [critical]`/`🟡 [warning]` must-fix (or `state == "CHANGES_REQUESTED"`), fix the code in the PR branch (or apply valid `suggestion` blocks) and `git push` right away to trigger a re-review, then go back to polling. Reaching green requires this fix-and-push; waiting alone never turns `⚠️ REQUEST_CHANGES` into `✅ APPROVED`.
 
 Sleep 90s between polls, timeout 30m total. Push fix commits to trigger re-review.
 
@@ -61,10 +63,11 @@ powershell -File scripts/oc_ci_loop.ps1 -PR <n>
 
 ## Triage
 
-- `opencode [critical]/[warning]` (+ `kilo CRITICAL/WARNING` if present) → blocking, must fix
-- `opencode [info]` (+ `kilo SUGGESTION`) → fix if ≤5 lines or clearly better, else defer with follow-up ticket
+- `opencode` `🔴 [critical]` / `🟡 [warning]` (or `[critical]`/`[warning]`, or `kilo CRITICAL/WARNING` if present) → blocking, must fix
+- `opencode` `🔵 [info]` (or `[info]`, or `kilo SUGGESTION`) → fix if ≤5 lines or clearly better (or apply inline `suggestion` block), else defer with follow-up ticket
+- Footnote (`> 🤖 Reviewer: ... · ⏱️ Duration: ... · 🪙 Tokens: ...`) identifies which fallback model produced the review
 - Never silently ignore
 
 ## Completion
 
-Cycle ends only at **suggestion: merge / Approved** — every `[critical]/[warning]` fixed or explicitly waived, every `[info]` triaged, `gh pr checks` all `pass`, `mergeable == MERGEABLE` and reviewer summary is `APPROVED` (or `suggestion: merge`). Do not stop at `REQUEST_CHANGES` or at `pass` alone.
+Cycle ends only at **✅ APPROVED / suggestion: merge** — every `[critical]/[warning]` fixed or explicitly waived, every `[info]` triaged, `gh pr checks` all `pass`, `mergeable == MERGEABLE`, and reviewer PR review `state == "APPROVED"` or summary contains `APPROVED` (with zero `REQUEST_CHANGES`). Do not stop at `⚠️ REQUEST_CHANGES` or at `pass` alone.

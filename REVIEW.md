@@ -29,8 +29,7 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
   (401/403 skip keyless, 404 next model, 429 next engine), chain normalization
   (trim/dedup/allowlist), `finish_reason === 'length'` handling.
 - Style: modular seam discipline — one module per file, small interface, no cross-seam logic.
-- Tests: manual 5-second Persian transcription note required when the transcription
-  seam is touched; no automated test CI exists, so the reviewer is the only gate.
+- Tests: run `node --test js/modules/stats.test.mjs js/modules/stt-guards.test.mjs` and `node --check server.js server/gemini.js`; manual 5-second Persian transcription note recommended when the transcription seam is touched.
 - Docs: Persian UI strings (Vazirmatn, RTL), no English-only user-facing text.
 
 ## Mandatory traps
@@ -52,9 +51,17 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
    rejected entry (`hasKeyFor`/`hasKeyForPolish` pre-flight + `continue` with warn log)
    and try the next chain entry. Same for polish/text chains.
 7. **Secrets** — never commit `.env` (only `.env.example` with empty placeholders).
-   Never log key material (`pairLabel` is display-only). `git diff --check` must be clean.
+   Never log key material (`scrubSecrets`/`stripUrlSecret` on error bodies and custom URLs;
+   `pairLabel` is display-only). `git diff --check` must be clean.
 8. **No Live Transcribe** — do not add `BidiGenerateContent`/Live WebSocket. Realtime
    preview is Web Speech API only; finalization is Groq/Gemini REST.
+9. **No `thought` or timecode leak** — `extractGeminiCandidate`/`extractCleanParts` must
+   never fall back to `part.thought === true` when visible text is empty; STT and tool
+   outputs must strip phantom timecodes via `stripTimecodes` while preserving real spoken times.
+10. **Scroll & focus stability** — capture `scrollHost.scrollTop` before `replaceChildren()`,
+    always pass `{ preventScroll: true }` to `.focus()` in scrollable panels, never focus `.sr-only`.
+11. **CI workflows** — job `timeout-minutes` must exceed the sum of step timeouts; pin
+    third-party actions to full commit SHAs and guard against `[bot]` actor loops.
 
 ## Verify (run, don't guess)
 
@@ -62,10 +69,11 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
 - `grep -rn "?key=" js/ --include="*.js"` → must be empty
 - every `fetch(` in `transcription.js` reachable only after a `blob.size < 800` guard
 - `grep -rn "BidiGenerateContent" js/ --include="*.js"` → must be empty
+- `node --test js/modules/stats.test.mjs js/modules/stt-guards.test.mjs` → all pass
 
 ## Don't duplicate / skip
 
-No lint/test CI exists in this repo (only `opencode-review` + `opencode` workflows),
+No external lint CI runs by default,
 so do NOT assume CI catches anything — flag style, types, and logic yourself.
 Skip and never comment on:
 

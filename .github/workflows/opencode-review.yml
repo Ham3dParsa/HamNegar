@@ -29,46 +29,110 @@ jobs:
       !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      HAS_KILO: ${{ secrets.KILO_API_KEY != '' && '1' || '0' }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REVIEW_PROMPT: |
+        You are the HamNegar PR reviewer (تایپ صوتی). Be STRICT: flag all potential issues, prioritize quality and security.
+        PR Gate Threshold is "Warnings and above" — mark every finding as 🔴 [critical], 🟡 [warning], or 🔵 [info]. Fail the check if any [critical] or [warning] exists.
+
+        Speed & Scope:
+        - First inspect `git diff origin/main...HEAD` and read `./REVIEW.md` from base (`git show origin/main:REVIEW.md`) — focus only on changed files and their direct callers (1..11 traps in `REVIEW.md`). Keep your review fast and concise.
+
+        Submission mode:
+        - Let the OpenCode GitHub runner post your final output directly (do NOT run `gh api` or `gh pr review` manually).
+        - Update the existing opencode-agent summary comment in place; never post a duplicate summary.
+        - Where a direct single-hunk code fix is clear, include a ```suggestion``` block under that finding.
+
+        Output format (concise, scannable, human + agent readable):
+        ### ✅ APPROVED  *(or)*  ### ⚠️ REQUEST_CHANGES
+        > Summary: N 🔴 critical, M 🟡 warning, K 🔵 info
+
+        **🚨 Must fix before merge:**
+        - [ ] `file_path:line_number` 🔴 `[critical]` / 🟡 `[warning]` description — positive fix
+
+        **💡 Optional / defer:**
+        - [ ] `file_path:line_number` 🔵 `[info]` description — defer reason
+
+        **🛡️ Traps checked:** list `REVIEW.md` traps verified (or "none relevant")
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - id: rev1
+        name: Review (1/4 — Zen DeepSeek v4.1 Flash Free)
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
-          # Rule 2: Muse Spark 1.2 free via Zen (free, 82.9% Terminal, 1M/131K)
-          model: opencode/muse-spark-1.2-contributor-free
-          # Rule 3: Strict + all focus + gate Warnings+ + REVIEW.md + fast
+          model: opencode/deepseek-v4.1-flash-free
           prompt: |
-            You are the HamNegar PR reviewer (تایپ صوتی). Be STRICT: flag all potential issues, prioritize quality and security.
-            PR Gate Threshold is "Warnings and above" — mark every finding as [critical], [warning] or [info]. Fail the check if any [critical] or [warning] exists.
+            ${{ env.REVIEW_PROMPT }}
 
-            Focus Areas (all enabled):
-            - Security (XSS via innerHTML, key exposure, CORS file://)
-            - Performance (audio blob size, token waste, blocking fetch)
-            - Bug detection (realtime race rtBefore/rtAfter, fallback 401/404/429, \u200blocalStorage seam breaks)
-            - Code style (modular seam discipline — one module per file)
-            - Test coverage (require manual test notes for transcription)
-            - Documentation (persian UI strings)
+            End your comment with this exact footnote:
+            ---
+            > 🤖 **Reviewer:** `opencode/deepseek-v4.1-flash-free` (`1/4`) · ⏱️ **Duration:** `<approx elapsed or N/A>` · 🪙 **Tokens:** `<count if exposed, else N/A>`
 
-            First read ./REVIEW.md from the base branch (git show origin/main:REVIEW.md); if present, treat it as the source of truth for repo-specific traps:
-            - Gemini Auth: must use x-goog-api-key header for AQ. keys, never ?key= query
-            - file:// warning: app must warn and require http://localhost
-            - Audio guard: blob.size <800 must throw TOO_SHORT before fetch
-            - Storage seam: never touch localStorage directly, use Storage module
-            - Realtime race: rtBefore/rtAfter must be closure snapshot, not globals
-            - Secrets: never commit .env, only .env.example with UPPERCASE placeholders
-            - No Live Transcribe: do not add BidiGenerateContent WebSocket — use Web Speech only
+      - id: rev2
+        name: Review (2/4 — Zen HY 4 Flash Free)
+        if: steps.rev1.outcome != 'success'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: opencode/hy4-flash-free
+          prompt: |
+            ${{ env.REVIEW_PROMPT }}
 
-            Output format (human + agent readable, keep concise for speed):
-            Status: REQUEST_CHANGES | APPROVED — N [warning/critical] must be fixed before merge, M [info] optional
-            Must fix before merge:
-            - [ ] file_path:line_number [severity] description — positive fix
-            Optional / defer:
-            - [ ] file_path:line_number [info] description — defer reason
-            Traps checked: list REVIEW.md traps verified (or "none relevant")
-            Update the summary comment in place. Set status to APPROVED only if zero [critical]/[warning].
+            End your comment with this exact footnote:
+            ---
+            > 🤖 **Reviewer:** `opencode/hy4-flash-free` (`2/4`) · ⏱️ **Duration:** `<approx elapsed or N/A>` · 🪙 **Tokens:** `<count if exposed, else N/A>`
+
+      - id: rev3
+        name: Review (3/4 — Kilo Ling 3.2 Flash Free)
+        if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && env.HAS_KILO == '1'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
+        with:
+          model: kilo/inclusionai/ling-3.2-flash:free
+          prompt: |
+            ${{ env.REVIEW_PROMPT }}
+
+            End your comment with this exact footnote:
+            ---
+            > 🤖 **Reviewer:** `kilo/inclusionai/ling-3.2-flash:free` (`3/4`) · ⏱️ **Duration:** `<approx elapsed or N/A>` · 🪙 **Tokens:** `<count if exposed, else N/A>`
+
+      - id: rev4
+        name: Review (4/4 — Kilo Nemotron 3.5 Super VL Free)
+        if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && env.HAS_KILO == '1'
+        continue-on-error: true
+        timeout-minutes: 5
+        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
+        with:
+          model: kilo/nvidia/nemotron-3.5-super-vl:free
+          prompt: |
+            ${{ env.REVIEW_PROMPT }}
+
+            End your comment with this exact footnote:
+            ---
+            > 🤖 **Reviewer:** `kilo/nvidia/nemotron-3.5-super-vl:free` (`4/4`) · ⏱️ **Duration:** `<approx elapsed or N/A>` · 🪙 **Tokens:** `<count if exposed, else N/A>`
+
+      - name: Verify review succeeded
+        if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && steps.rev4.outcome != 'success'
+        run: |
+          echo "All review fallback models failed or were skipped."
+          exit 1

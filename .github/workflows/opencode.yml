@@ -19,6 +19,7 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR' ||
         github.event.comment.author_association == 'MEMBER')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       id-token: write
       contents: write
@@ -32,13 +33,13 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenCode
-        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a # latest
+        uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671 # pinned 2026-11
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
         with:
-          model: ${{ vars.OPENCODE_MODEL || 'opencode/muse-spark-1.2-contributor-free' }}
+          model: ${{ vars.OPENCODE_MODEL || 'opencode/deepseek-v4.1-flash-free' }}
           prompt: |-
             SAFETY RULES (non-negotiable):
             - NEVER commit or push directly to the "main" branch. Always create a new branch and open a pull request.
