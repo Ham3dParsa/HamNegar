@@ -5,7 +5,7 @@ import { Transcription, smartModelScore, applyTonePreference } from './transcrip
 import { BUILTIN_PROMPTS } from './stagebar.js';
 import { providerIdOf, entryIdOf } from './chains.js';
 import { Logger } from './logger.js';
-import { fa } from './format.js';
+import { fa, stripTimecodes } from './format.js';
 import { $ } from './dom.js';
 
 const SANDBOX_SAMPLES = {
@@ -525,7 +525,8 @@ async function runPromptSandbox() {
       ...(prefer ? { prefer } : {}),
     });
     const sec = ((performance.now() - t0) / 1000).toFixed(1);
-    if (outEl) outEl.textContent = res.text;
+    const { text: cleanOut } = stripTimecodes(res.text);
+    if (outEl) outEl.textContent = cleanOut;
     if (metaEl) metaEl.textContent = `ابزار: ${spec.label} · مدل: ${res.model} (${res.providerId}) · زمان: ${fa(sec)} ثانیه`;
   } catch (e) {
     if (outEl) {

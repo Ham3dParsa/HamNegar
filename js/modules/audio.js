@@ -43,8 +43,18 @@ export const Audio = {
         err.name = 'NotSupportedError';
         throw err;
       }
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: { ideal: 1 },
+          sampleRate: { ideal: 48000 },
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       micStream = stream;
+      const track = stream.getAudioTracks?.()[0];
+      const trackSettings = track?.getSettings?.() || {};
       const sessionChunks = [];
       audioChunks = sessionChunks;
       onStopCb = onStop;
@@ -52,20 +62,43 @@ export const Audio = {
       const mimeType = typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function'
         ? (candidates.find(t => MediaRecorder.isTypeSupported(t)) || '')
         : '';
-      mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      const warnings = [];
+      const mrOpts = { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 64000 };
+      let usedBitrate = true;
+      try {
+        mr = new MediaRecorder(stream, mrOpts);
+      } catch (mrErr) {
+        usedBitrate = false;
+        warnings.push(`audioBitsPerSecond fallback: ${mrErr?.message || String(mrErr || 'unsupported')}`);
+        mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      }
+      let chunkCount = 0;
+      const buildMeta = (blob) => ({
+        mimeType: mr.mimeType || mimeType || 'audio/webm',
+        audioBitsPerSecond: mr.audioBitsPerSecond || (usedBitrate ? 64000 : null),
+        sampleRate: trackSettings.sampleRate || null,
+        channelCount: trackSettings.channelCount || null,
+        chunkCount,
+        bytes: blob.size,
+        warnings,
+      });
       mediaRecorder = mr;
       mr._sessionChunks = sessionChunks;
       mr._resolvedMime = mimeType;
+      mr._buildMeta = buildMeta;
       mr._finished = false;
       mr.ondataavailable = e => {
-        if (e.data && e.data.size > 0) sessionChunks.push(e.data);
+        if (e.data && e.data.size > 0) {
+          chunkCount++;
+          sessionChunks.push(e.data);
+        }
       };
       mr.onstop = () => {
         if (mr._finished) return;
         mr._finished = true;
         const blob = new Blob(sessionChunks, { type: mr.mimeType || mimeType || 'audio/webm' });
         sessionChunks.length = 0;
-        if (onStop) onStop(blob);
+        if (onStop) onStop(blob, buildMeta(blob));
       };
       if (vadChunkMs && Number.isFinite(vadChunkMs) && vadChunkMs > 0) {
         mr.start(vadChunkMs);
@@ -83,8 +116,18 @@ export const Audio = {
         audioCtx = ctx;
         audioSource = src;
         ctx = null; src = null;
-      } catch {}
-      return { mimeType: mr.mimeType || mimeType };
+      } catch (ctxErr) {
+        warnings.push(`AudioContext failed: ${ctxErr?.message || String(ctxErr || 'unknown')}`);
+        if (src) { try { src.disconnect(); } catch {} src = null; }
+        if (ctx) { try { ctx.close?.(); } catch {} ctx = null; }
+      }
+      return {
+        mimeType: mr.mimeType || mimeType,
+        audioBitsPerSecond: mr.audioBitsPerSecond || (usedBitrate ? 64000 : null),
+        sampleRate: trackSettings.sampleRate || null,
+        channelCount: trackSettings.channelCount || null,
+        warnings,
+      };
     } catch (e) {
       // T3 rollback: close any partial resources so no orphan mic stays open
       if (mr && mr !== mediaRecorder) { try { if (mr.state !== 'inactive') mr.stop(); } catch {} }
@@ -108,7 +151,6 @@ export const Audio = {
   },
   pause() {
     if (!mediaRecorder || mediaRecorder.state !== 'recording' || typeof mediaRecorder.pause !== 'function') return false;
-    try { if (typeof mediaRecorder.requestData === 'function') mediaRecorder.requestData(); } catch {}
     try {
       mediaRecorder.pause();
       return mediaRecorder.state === 'paused';
@@ -148,8 +190,9 @@ export const Audio = {
             mr._finished = true;
             const blob = new Blob(sessionChunks, { type: mr.mimeType || fallbackMime || 'audio/webm' });
             sessionChunks.length = 0;
+            const meta = typeof mr._buildMeta === 'function' ? mr._buildMeta(blob) : undefined;
             if (cb) {
-              try { cb(blob); } catch {}
+              try { cb(blob, meta); } catch {}
             }
           }
           resolve();
@@ -157,11 +200,6 @@ export const Audio = {
         const guardTimer = setTimeout(finish, 1800);
         try {
           mr.onstop = finish;
-        } catch {}
-        try {
-          if (mr.state === 'recording' && typeof mr.requestData === 'function') {
-            mr.requestData();
-          }
         } catch {}
         try {
           mr.stop();

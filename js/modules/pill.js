@@ -145,8 +145,7 @@ async function startRecording() {
     return;
   }
   try {
-    const s = Storage.getSettings();
-    await Audio.start({ vadChunkMs: s.vad ? 250 : undefined, onStop: handleAudioStop });
+    await Audio.start({ onStop: handleAudioStop });
     timerStart();
     setState('recording', '🔴 در حال ضبط…');
     waveLive();

@@ -6,6 +6,7 @@ import { Storage, GROQ_BASE_DEFAULT, OPENROUTER_BASE_DEFAULT } from './storage.j
 import { canonicalize, hasKey as hasProviderKey, displayPair } from './provider.js';
 import { Quota } from './quota.js';
 import { Logger } from './logger.js';
+import { stripTimecodes, scrubSecrets, stripUrlSecret } from './format.js';
 
 function fmt(code){ const m={400:'درخواست نامعتبر (400)',401:'کلید نامعتبر (401)',403:'دسترسی ممنوع (403)',404:'مدل پیدا نشد (404)',413:'ورودی طولانی (413)',429:'سهمیه یا ظرفیت پر شد (429)',500:'خطای سرور (500)',502:'خطای دروازه سرویس (502)',503:'مدل موقتاً شلوغ یا در دسترس نیست (503)',504:'تایم‌اوت سرور سرویس (504)'}; return m[code]||`HTTP ${code}` }
 function assertTrustedBase(base, allowed){
@@ -19,7 +20,7 @@ function assertTrustedBase(base, allowed){
     } else {
       throw Object.assign(new Error('BaseURL نامعتبر — تأیید لازم است'),{status:400});
     }
-    Logger.log('warn','untrusted BaseURL', { base, host:h });
+    Logger.log('warn','untrusted BaseURL', { base: stripUrlSecret(base), host:h });
   }
 }
 function isHtmlPayload(body, ct = ''){
@@ -28,23 +29,24 @@ function isHtmlPayload(body, ct = ''){
 async function parseErr(res){
   let b='';
   try{
-    b=await res.text();
+    b=scrubSecrets(await res.text());
     if(isHtmlPayload(b, res.headers?.get?.('content-type') || '')){
       return { text: b, msg: 'پاسخ HTML به‌جای JSON از سرویس برگشت (نشست، فیلترشکن یا آدرس سرویس را بررسی کن)', isHtml: true };
     }
     try{
       const j=JSON.parse(b);
       const bodyStatus = Number(j.error?.status);
+      const rawMsg = j.error?.message||j.error||j.message||b.slice(0,600);
       return {
         text:b,
-        msg:j.error?.message||j.error||j.message||b.slice(0,600),
+        msg:scrubSecrets(typeof rawMsg === 'string' ? rawMsg : JSON.stringify(rawMsg)),
         status: Number.isInteger(bodyStatus) && bodyStatus >= 400 ? bodyStatus : res.status,
       };
     }catch{
       return {text:b, msg:b.slice(0,600), status: res.status};
     }
   }catch{
-    return {text:'', msg:res.statusText};
+    return {text:'', msg:scrubSecrets(res.statusText || '')};
   }
 }
 async function readJsonSafe(res, label = 'API'){
@@ -54,7 +56,7 @@ async function readJsonSafe(res, label = 'API'){
     return JSON.parse(txt);
   }catch{
     const isHtml = isHtmlPayload(txt, ct);
-    Logger.log('error', `${label} invalid json`, { status: res.status, ct, isHtml, preview: txt.slice(0, 120) });
+    Logger.log('error', `${label} invalid json`, { status: res.status, ct, isHtml, preview: scrubSecrets(txt.slice(0, 120)) });
     const msg = isHtml
       ? 'پاسخ غیرمنتظره HTML به‌جای JSON — اتصال، نشست یا آدرس سرویس را بررسی کن'
       : 'پاسخ سرویس JSON معتبر نیست';
@@ -101,26 +103,46 @@ export function applyPersonalDictionary(text, entries){
   return { text: out, count };
 }
 
+const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const MIN_AUDIO_BYTES = 800;
+const UNSUPPORTED_THINKING_CACHE = new Set();
+
+export function audioFilenameForBlob(blob){
+  const m = String(blob?.type || '').toLowerCase();
+  if(/mp4|m4a/.test(m)) return 'speech.m4a';
+  if(/ogg/.test(m)) return 'speech.ogg';
+  if(/mpeg|mp3/.test(m)) return 'speech.mp3';
+  if(/wav/.test(m)) return 'speech.wav';
+  if(/flac/.test(m)) return 'speech.flac';
+  if(/aac/.test(m)) return 'speech.aac';
+  if(/webm/.test(m)) return 'speech.webm';
+  const extMatch = String(blob?.name || '').trim().match(/\.(flac|aac|mp3|m4a|ogg|wav|webm)$/i);
+  if(extMatch) return `speech.${extMatch[1].toLowerCase()}`;
+  return 'speech.webm';
+}
+
 async function queryGroq(blob, externalSignal){
   if(Storage.isProviderRemoved('groq') || Storage.isProviderDisabled('groq')) throw Object.assign(new Error('ارائه‌دهنده Groq خاموش یا حذف شده است'),{status:401});
   const { groqKey: k, groqBaseURL } = Storage.getSettings();
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} نیست`),{status:401});
   if(!k.startsWith('gsk_')) throw Object.assign(new Error(`کلید ${displayPair('groq', STT_GROQ_MODEL)} باید gsk_ باشد`),{status:401});
-  if(blob.size<800) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
-  const fd=new FormData(); fd.append('file',blob,'speech.webm'); fd.append('model','whisper-large-v3'); fd.append('response_format','json');
-  Logger.log('info',`به ${displayPair('groq', STT_GROQ_MODEL)}...`,{size:blob.size});
+  if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
+  const filename = audioFilenameForBlob(blob);
+  const fd=new FormData(); fd.append('file',blob,filename); fd.append('model','whisper-large-v3'); fd.append('response_format','json');
+  const t0 = performance.now();
+  Logger.log('info',`[STT] ارسال به ${displayPair('groq', STT_GROQ_MODEL)}`,{model:STT_GROQ_MODEL, sizeKB:+(blob.size / 1024).toFixed(1), mime:blob.type || 'audio/webm', filename});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),35000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   const base = (groqBaseURL || 'https://api.groq.com/openai/v1').replace(/\/+$/,'');
   assertTrustedBase(base, ['api.groq.com']);
-  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{'Accept':'application/json',Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('groq', STT_GROQ_MODEL)}: `+e.message),{status:0}); }
+  let res; try{ res=await fetch(`${base}/audio/transcriptions`,{method:'POST',headers:{'Accept':'application/json',Authorization:`Bearer ${k}`},body:fd,signal:ctrl.signal}); }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('groq', STT_GROQ_MODEL)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('groq', STT_GROQ_MODEL)}: `+scrubSecrets(e.message)),{status:0}); }
   clearTimeout(to);
-  if(!res.ok){ const er=await parseErr(res); Logger.log('error',`${displayPair('groq', STT_GROQ_MODEL)} fail`,{status:res.status, body:er.text}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
-  const j=await readJsonSafe(res, displayPair('groq', STT_GROQ_MODEL)); Logger.log('info',`${displayPair('groq', STT_GROQ_MODEL)} ok`,j); return (j.text||'').trim();
+  if(!res.ok){ const ms=Math.round(performance.now()-t0); const er=await parseErr(res); Logger.log('error',`${displayPair('groq', STT_GROQ_MODEL)} fail`,{status:res.status, ms, errorMsg:er.msg, body:er.text?.slice(0,400)}); const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status; throw err; }
+  const ms=Math.round(performance.now()-t0);
+  const j=await readJsonSafe(res, displayPair('groq', STT_GROQ_MODEL));
+  Logger.log('debug',`[STT] پاسخ خام ${displayPair('groq', STT_GROQ_MODEL)}`,{model:STT_GROQ_MODEL, ms, rawText:j.text || ''});
+  return (j.text||'').trim();
 }
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const MIN_AUDIO_BYTES = 300;
-const UNSUPPORTED_THINKING_CACHE = new Set();
 
 function getGeminiKey(){
   try { return (Storage.getSettings().geminiKey || '').trim(); } catch { return ''; }
@@ -144,21 +166,22 @@ function geminiThinkingConfigFor(model, mode = 'minimal'){
 function isThinkingRejection(status, msg){
   return status === 400 && /thinking|reasoning|budget|level|unknown name|unrecognized|not supported|invalid/i.test(String(msg || ''));
 }
-function extractGeminiCandidateText(j){
+export function extractGeminiCandidate(j){
   const parts = j?.candidates?.[0]?.content?.parts || [];
   const visible = parts.filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
-  if(visible) return visible;
-  return parts.map(p => (typeof p?.text === 'string' ? p.text : '')).join('').trim();
+  const thought = parts.filter(p => p && p.thought && typeof p.text === 'string').map(p => p.text).join('').trim();
+  return { text: visible, thoughtLen: thought.length, thoughtPreview: thought.slice(0, 200) };
 }
 
-const GEMINI_STT_PROMPT = 'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the spoken transcript with no summary, no labels, and no commentary. If there is only silence with no speech, return an empty string.';
+const GEMINI_STT_PROMPT = 'Transcribe the speech in this audio verbatim in its original language (Persian/Farsi, English, or mixed). Return ONLY the exact spoken words as plain text. STRICTLY FORBIDDEN: timestamps, timecodes (e.g. 00:00, [0:12]), speaker labels, descriptions of non-speech sounds, summaries, translations, or commentary. If there is only silence or background noise with no intelligible speech, return an empty string.';
 
 async function queryGeminiDirect(blob, model, externalSignal, k){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
   if(blob.size < MIN_AUDIO_BYTES) throw Object.assign(new Error('صدا خیلی کوتاهه'),{status:400});
   const b64 = await blobToB64(blob);
-  Logger.log('info',`به ${displayPair('google', model)} (مستقیم)...`,{size:blob.size, mime:blob.type || 'audio/webm'});
   const mimeType = (blob.type || 'audio/webm').split(';')[0].trim() || 'audio/webm';
+  const t0 = performance.now();
+  Logger.log('info',`[STT] ارسال به ${displayPair('google', model)}`,{model, route:'direct', thinking:!!geminiThinkingConfigFor(model, 'minimal'), sizeKB:+(blob.size / 1024).toFixed(1), mime:mimeType});
   const url = `${GOOGLE_API_BASE}/models/${encodeURIComponent(model)}:generateContent`;
 
   const execRequest = async (useThinking) => {
@@ -193,28 +216,35 @@ async function queryGeminiDirect(blob, model, externalSignal, k){
   if(!res.ok){
     const er = await parseErr(res);
     if(usedThinking && isThinkingRejection(res.status, er.msg)){
+      Logger.log('warn','[STT] بازتلاش بدون thinking',{model, status:res.status, reason:er.msg});
       UNSUPPORTED_THINKING_CACHE.add('google:' + String(model || '').toLowerCase());
       ({ res } = await execRequest(false));
       if(!res.ok){
+        const ms=Math.round(performance.now()-t0);
         const er2 = await parseErr(res);
         let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود';
         const err=new Error(`${fmt(res.status)} — ${er2.msg}${hint}`); err.status=res.status;
-        Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er2.text});
+        Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, ms, errorMsg:er2.msg, body:er2.text?.slice(0,400) || er.text?.slice(0,400)});
         throw err;
       }
     } else {
+      const ms=Math.round(performance.now()-t0);
       let hint=''; if(res.status===404) hint=' — مدل بعدی امتحان می‌شود';
       const err=new Error(`${fmt(res.status)} — ${er.msg}${hint}`); err.status=res.status;
-      Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, body:er.text});
+      Logger.log('error',`${displayPair('google', model)} fail`,{status:res.status, model, ms, errorMsg:er.msg, body:er.text?.slice(0,400)});
       throw err;
     }
   }
+  const ms=Math.round(performance.now()-t0);
   const j=await readJsonSafe(res, displayPair('google', model));
   const cand = j.candidates?.[0];
-  const text = extractGeminiCandidateText(j);
+  const { text, thoughtLen, thoughtPreview } = extractGeminiCandidate(j);
   const blockReason = j.promptFeedback?.blockReason || null;
   const finishReason = cand?.finishReason || null;
-  Logger.log('debug',`${displayPair('google', model)} raw`,{model, len:text.length, finishReason, blockReason});
+  Logger.log('debug',`[STT] پاسخ خام ${displayPair('google', model)}`,{model, route:'direct', ms, finishReason, blockReason, thoughtLen, thoughtPreview:thoughtLen ? thoughtPreview : undefined, rawText:text});
+  if(!text && thoughtLen > 0){
+    Logger.log('warn','[STT] مدل فقط thought تولید کرد و خروجی نداد',{model, thoughtLen, thoughtPreview});
+  }
   if(!text && (blockReason || (finishReason && finishReason !== 'STOP'))){
     throw Object.assign(new Error(`پاسخ ${displayPair('google', model)} مسدود یا ناقص شد (${blockReason || finishReason})`), { status: 422 });
   }
@@ -227,7 +257,8 @@ async function queryGemini(blob, model, externalSignal){
   const personalKey = getGeminiKey();
   if(!shouldUseServerGemini()) return queryGeminiDirect(blob, model, externalSignal, personalKey);
   const b64=await blobToB64(blob);
-  Logger.log('info',`به ${displayPair('google', model)} (سرور)...`,{size:blob.size, mime:blob.type || 'audio/webm'});
+  const t0 = performance.now();
+  Logger.log('info',`[STT] ارسال به ${displayPair('google', model)}`,{model, route:'server', sizeKB:+(blob.size / 1024).toFixed(1), mime:blob.type || 'audio/webm'});
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),45000);
   if (externalSignal) externalSignal.addEventListener('abort', () => ctrl.abort(), { once: true });
   let res; try{
@@ -240,21 +271,36 @@ async function queryGemini(blob, model, externalSignal){
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(externalSignal?.aborted ? 'لغو شد' : `تایم‌اوت ${displayPair('google', model)}`),{status:408, aborted: !!externalSignal?.aborted}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)}: `+e.message),{status:0}); }
   clearTimeout(to);
   const ct = res.headers?.get?.('content-type') || '';
-  if((res.status===404 || res.status===503 || ct.includes('text/html')) && personalKey) return queryGeminiDirect(blob, model, externalSignal, personalKey);
+  const isHtml = ct.includes('text/html');
+  if((res.status===404 || res.status===503 || isHtml) && personalKey){
+    Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{model, status:res.status, reason:isHtml ? 'html' : 'http'});
+    return queryGeminiDirect(blob, model, externalSignal, personalKey);
+  }
   if(!res.ok){
+    const ms=Math.round(performance.now()-t0);
     const er=await parseErr(res);
     const effStatus = er.status || res.status;
-    if((effStatus===404 || effStatus===503) && personalKey) return queryGeminiDirect(blob, model, externalSignal, personalKey);
+    if((effStatus===404 || effStatus===503) && personalKey){
+      Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{model, status:effStatus, reason:er.isHtml ? 'html' : 'http'});
+      return queryGeminiDirect(blob, model, externalSignal, personalKey);
+    }
     let hint=''; if(effStatus===404) hint=' — مدل بعدی امتحان می‌شود';
     const err=new Error(`${fmt(effStatus)} — ${er.msg}${hint}`); err.status=effStatus;
-    Logger.log('error',`${displayPair('google', model)} fail`,{status:effStatus, model, body:er.text});
+    Logger.log('error',`${displayPair('google', model)} fail`,{status:effStatus, model, ms, errorMsg:er.msg, body:er.text?.slice(0,400)});
     throw err;
   }
   let j;
   try{ j=await readJsonSafe(res, displayPair('google', model)); }
-  catch(err){ if(err.isHtmlResponse && personalKey) return queryGeminiDirect(blob, model, externalSignal, personalKey); throw err; }
+  catch(err){
+    if(err.isHtmlResponse && personalKey){
+      Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{model, status:err.status || res.status, reason:'html'});
+      return queryGeminiDirect(blob, model, externalSignal, personalKey);
+    }
+    throw err;
+  }
+  const ms=Math.round(performance.now()-t0);
   const text = (j.text||'').trim();
-  Logger.log('debug',`${displayPair('google', model)} raw`,{model:j.model||model, len:text.length, finishReason:j.finishReason||null, blockReason:j.blockReason||null});
+  Logger.log('debug',`[STT] پاسخ خام ${displayPair('google', model)}`,{model:j.model||model, requestedModel:model, fallbackFrom:j.fallbackFrom || undefined, fallbackError:j.fallbackError || undefined, ms, finishReason:j.finishReason||null, blockReason:j.blockReason||null, thoughtLen:j.thoughtLen||0, rawText:text});
   if(!text && (j.blockReason || (j.finishReason && j.finishReason !== 'STOP'))){
     throw Object.assign(new Error(`پاسخ ${displayPair('google', model)} ناقص بود (${j.blockReason || j.finishReason})`), { status: 422 });
   }
@@ -425,27 +471,34 @@ async function queryChat(providerId, text, { system, model, layer = 'polish' } =
     }
   };
 
+  const t0 = performance.now();
   let { res, usedReasoning } = await runFetch(true);
   if(!res.ok){
     const er = await parseErr(res);
     if(usedReasoning && isThinkingRejection(res.status, er.msg)){
+      Logger.log('warn',`[${layer}] بازتلاش بدون thinking`,{model, reason:er.msg});
       UNSUPPORTED_THINKING_CACHE.add(cacheKey);
       ({ res } = await runFetch(false));
       if(!res.ok){
+        const ms=Math.round(performance.now()-t0);
         const er2 = await parseErr(res);
         const err=new Error(`${fmt(res.status)} — ${er2.msg}`); err.status=res.status;
-        Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base});
+        Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base: stripUrlSecret(base), errorMsg:er2.msg, body:er2.text?.slice(0,400) || er.text?.slice(0,400)});
         throw err;
       }
     } else {
+      const ms=Math.round(performance.now()-t0);
       const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status;
-      Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, base});
+      Logger.log('error',`${displayPair(providerId, model)} ${layer} fail`,{status:res.status, model, ms, base: stripUrlSecret(base), errorMsg:er.msg, body:er.text?.slice(0,400)});
       throw err;
     }
   }
-  const j=await readJsonSafe(res, `${displayPair(providerId, model)} ${layer}`); Logger.log('debug',`${displayPair(providerId, model)} ${layer} raw`,{model, inLen:text.length, out:j.choices?.[0]?.message?.content?.trim()?.slice(0,200) || ''});
+  const ms=Math.round(performance.now()-t0);
+  const j=await readJsonSafe(res, `${displayPair(providerId, model)} ${layer}`);
   if(j.choices?.[0]?.finish_reason === 'length'){ Logger.log('warn',`${displayPair(providerId, model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
-  return validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
+  const outText = validatePolishOutput(j.choices?.[0]?.message?.content?.trim()||'', text, model, layer);
+  Logger.log('debug',`[${layer}] ورودی و خروجی`,{model, ms, inText:text, outText});
+  return outText;
 }
 async function queryPolishViaGeminiDirect(text, model, layer, system, k){
   if(!k) throw Object.assign(new Error(`کلید ${displayPair('google', model)} نیست`),{status:401});
@@ -479,36 +532,44 @@ async function queryPolishViaGeminiDirect(text, model, layer, system, k){
     }
   };
 
+  const t0 = performance.now();
   let { res, usedThinking } = await runFetch(true);
   if(!res.ok){
     const er = await parseErr(res);
     if(usedThinking && isThinkingRejection(res.status, er.msg)){
+      Logger.log('warn',`[${layer}] بازتلاش بدون thinking`,{model, reason:er.msg});
       UNSUPPORTED_THINKING_CACHE.add('google:' + String(model || '').toLowerCase());
       ({ res } = await runFetch(false));
       if(!res.ok){
+        const ms=Math.round(performance.now()-t0);
         const er2 = await parseErr(res);
         const err=new Error(`${fmt(res.status)} — ${er2.msg}`); err.status=res.status;
-        Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model});
+        Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model, ms, errorMsg:er2.msg, body:er2.text?.slice(0,400) || er.text?.slice(0,400)});
         throw err;
       }
     } else {
+      const ms=Math.round(performance.now()-t0);
       const err=new Error(`${fmt(res.status)} — ${er.msg}`); err.status=res.status;
-      Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model});
+      Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:res.status, model, ms, errorMsg:er.msg, body:er.text?.slice(0,400)});
       throw err;
     }
   }
+  const ms=Math.round(performance.now()-t0);
   const j=await readJsonSafe(res, `${displayPair('google', model)} ${layer}`);
   const cand = j.candidates?.[0];
-  const out = extractGeminiCandidateText(j);
-  Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model, inLen:text.length, out:out.slice(0,200)});
+  const { text: out, thoughtLen, thoughtPreview } = extractGeminiCandidate(j);
+  if(!out && thoughtLen > 0) Logger.log('warn',`[${layer}] مدل فقط thought تولید کرد و خروجی نداد`,{model, thoughtLen, thoughtPreview});
   if(cand?.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
-  return validatePolishOutput(out, text, model, layer);
+  const outText = validatePolishOutput(out, text, model, layer);
+  Logger.log('debug',`[${layer}] ورودی و خروجی`,{model, ms, inText:text, outText});
+  return outText;
 }
 async function queryPolishViaGemini(text, model, layer = 'polish', system = null){
   assertGoogleActive();
   const personalKey = getGeminiKey();
   if(!shouldUseServerGemini()) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
   const timeoutMs = layer === 'structure' ? 38000 : 25000;
+  const t0 = performance.now();
   const ctrl=new AbortController(), to=setTimeout(()=>ctrl.abort(),timeoutMs);
   const thinkingMode = layer === 'structure' ? 'low' : 'minimal';
   let res; try{
@@ -521,22 +582,38 @@ async function queryPolishViaGemini(text, model, layer = 'polish', system = null
   }catch(e){ clearTimeout(to); if(e.name==='AbortError') throw Object.assign(new Error(`تایم‌اوت ${displayPair('google', model)} ${layer}`),{status:408}); throw Object.assign(new Error(`شبکه ${displayPair('google', model)} ${layer}: `+e.message),{status:0}); }
   clearTimeout(to);
   const ct = res.headers?.get?.('content-type') || '';
-  if((res.status===404 || res.status===503 || ct.includes('text/html')) && personalKey) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
+  const isHtml = ct.includes('text/html');
+  if((res.status===404 || res.status===503 || isHtml) && personalKey){
+    Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{layer, model, status:res.status, reason:isHtml ? 'html' : 'http'});
+    return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
+  }
   if(!res.ok){
+    const ms=Math.round(performance.now()-t0);
     const er=await parseErr(res);
     const effStatus = er.status || res.status;
-    if((effStatus===404 || effStatus===503) && personalKey) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
+    if((effStatus===404 || effStatus===503) && personalKey){
+      Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{layer, model, status:effStatus, reason:er.isHtml ? 'html' : 'http'});
+      return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
+    }
     const err=new Error(`${fmt(effStatus)} — ${er.msg}`); err.status=effStatus;
-    Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:effStatus, model});
+    Logger.log('error',`${displayPair('google', model)} ${layer} fail`,{status:effStatus, model, ms, errorMsg:er.msg, body:er.text?.slice(0,400)});
     throw err;
   }
   let j;
   try{ j=await readJsonSafe(res, `${displayPair('google', model)} ${layer}`); }
-  catch(err){ if(err.isHtmlResponse && personalKey) return queryPolishViaGeminiDirect(text, model, layer, system, personalKey); throw err; }
+  catch(err){
+    if(err.isHtmlResponse && personalKey){
+      Logger.log('warn','[شبکه] سوییچ از سرور به کلید مستقیم',{layer, model, status:err.status || res.status, reason:'html'});
+      return queryPolishViaGeminiDirect(text, model, layer, system, personalKey);
+    }
+    throw err;
+  }
+  const ms=Math.round(performance.now()-t0);
   const out=(j.text||'').trim();
-  Logger.log('debug',`${displayPair('google', model)} ${layer} raw`,{model:j.model||model, inLen:text.length, out:out.slice(0,200)});
   if(j.finishReason === 'MAX_TOKENS'){ Logger.log('warn',`${displayPair('google', model)} ${layer} length cut`,{model, inLen:text.length}); throw longInputError(layer); }
-  return validatePolishOutput(out, text, model, layer);
+  const outText = validatePolishOutput(out, text, model, layer);
+  Logger.log('debug',`[${layer}] ورودی و خروجی`,{model:j.model||model, ms, inText:text, outText});
+  return outText;
 }
 // Rank text models by reasoning/structuring capability so `smart: true` picks high-intelligence tiers first.
 export function smartModelScore(id){
@@ -708,7 +785,12 @@ export const Transcription = {
           Logger.setProgress({ state: 'trying', index: i, total: chain.length, label: `تلاش با ${label}…` });
         }
         const t = isGroq ? await queryGroq(blob, signal) : await queryGemini(blob, id, signal);
-        if (!t || !t.trim()) {
+        const tsCleaned = stripTimecodes(t);
+        if(tsCleaned.strippedCount > 0){
+          Logger.log('warn','[STT] مهر زمان از خروجی حذف شد',{model:id, strippedCount:tsCleaned.strippedCount, before:String(t || '').slice(0,200), after:tsCleaned.text.slice(0,200)});
+        }
+        const clean = tsCleaned.text;
+        if (!clean || !clean.trim()) {
           const emptyErr = Object.assign(new Error(`پاسخ ${label} خالی بود — تلاش با مدل بعدی`), { status: 204 });
           lastErr = emptyErr;
           Logger.log('warn', `STT ${label} پاسخ خالی داد (${i+1}/${chain.length})`, { model: id, size: blob.size });
@@ -716,7 +798,7 @@ export const Transcription = {
           if (i < chain.length - 1) continue;
           break;
         }
-        rawText = t.trim();
+        rawText = clean.trim();
         usedEngine = label;
         usedEngineKey = isGroq ? 'groq' : id;
         if(i>0) Logger.log('info',`فالبک موفق: STT #${i+1}/${chain.length} → ${label}`);
@@ -778,7 +860,7 @@ export const Transcription = {
               break;
             }
           }catch(e){
-            Logger.log('warn',`پالیش ${displayPair(ppid, pm)} خطا`,{msg:e.message, status:e.status});
+            Logger.log('warn',`پالیش ${displayPair(ppid, pm)} خطا`,{model:pm, status:e.status, errorMsg:e.message});
             if(e.status===429) await new Promise(r=>setTimeout(r,500));
             if(i===usablePolish.length-1) break;
           }
@@ -786,6 +868,8 @@ export const Transcription = {
         if(polished){
           const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
           finalText = applyPersonalDictionary(rulePolish(polished), dict).text;
+          Logger.log('debug','[پالایش] ورودی و خروجی',{model:polishModelUsed, inText:rawText, outText:finalText});
+          Logger.log('success','[پالایش] انجام شد',{model:polishModelUsed});
         } else {
           finalText = ruleFixed;
           if(usablePolish.length>0) Logger.log('info','پالیش مدل‌ها ناموفق — قانون محلی اعمال شد',{before:rawText.slice(0,60), after:finalText.slice(0,60)});
@@ -804,7 +888,15 @@ export const Transcription = {
     const chain = enabledChain.filter(e => hasKeyForPolish(e));
     if(chain.length===0) return ruleFixed;
     for(const entry of chain){
-      try{ const out=await queryPolish(text,entry); if(out){ const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : []; return applyPersonalDictionary(rulePolish(out), dict).text; } }catch{}
+      try{
+        const out=await queryPolish(text,entry);
+        if(out){
+          const dict = typeof Storage.getDict === 'function' ? Storage.getDict() : [];
+          return applyPersonalDictionary(rulePolish(out), dict).text;
+        }
+      }catch(e){
+        Logger.log('warn','[پالایش] خطا در پالایش دستی',{model:entry?.id, status:e?.status, msg:e?.message});
+      }
     }
     return ruleFixed;
   },
