@@ -1,0 +1,52 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "summary": "The workflow now posts formal PR reviews with deterministic duration and inline suggestions, but the publish step fails open when the structured JSON is missing, deletes the fallback comment before the review is confirmed, and its dedupe key drops line numbers so committable suggestions vanish after follow-up pushes.",
+  "traps_checked": "Trap 11 (CI workflows: action pinning, job timeout > sum of step timeouts, [bot] actor-loop guard) and Trap 7 (git diff --check clean) checked; Traps 1-6, 8-10 not relevant — no app, transcription, storage, realtime or UI code changed.",
+  "findings": [
+    {
+      "path": ".github/workflows/opencode-review.yml",
+      "start_line": 131,
+      "line": 131,
+      "severity": "warning",
+      "title": "Unpinned third-party action has write token",
+      "body": "`actions/github-script@v7` is referenced by a mutable tag while this job holds `pull-requests: write`, `issues: write` and `contents: write`. Trap 11 requires third-party actions be pinned to a full commit SHA (the `anomalyco/opencode` steps above already are), so a compromised/retagged v7 would run arbitrary code with the repo token. Pin to the full commit SHA of the intended v7 release, e.g. resolve it with `gh api repos/actions/github-script/git/ref/tags/v7` and use `actions/github-script@<sha> # v7.x.y`.",
+      "suggestion": ""
+    },
+    {
+      "path": ".github/workflows/opencode-review.yml",
+      "start_line": 174,
+      "line": 184,
+      "severity": "warning",
+      "title": "Missing/invalid review JSON fails open (gate stays green)",
+      "body": "When the model does not emit a parseable `.opencode-review-result.json` (or emits a non-array `findings`), this branch only warns and `return`s without calling `core.setFailed`. The `Verify review succeeded` step already passed because a model exited 0, so the required check turns green even though no blocking verdict was ever published — a review gate that silently approves. Fail closed: after patching the fallback comment, call `core.setFailed(...)` (and validate `findings` is an array and `verdict` is one of the two allowed values) so the check cannot pass without a structured result.",
+      "suggestion": "            if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.findings)) {\n              const latest = botIssueComments[botIssueComments.length - 1];\n              if (latest) {\n                const cleaned = latest.body.replace(/\\n*---\\n> 🤖 \\*\\*Reviewer:\\*\\*[\\s\\S]*$/m, '');\n                await github.rest.issues.updateComment({\n                  owner, repo, comment_id: latest.id, body: cleaned + footnote,\n                });\n              }\n              core.setFailed('Structured review JSON missing or invalid; cannot enforce the review gate.');\n              return;\n            }"
+    },
+    {
+      "path": ".github/workflows/opencode-review.yml",
+      "start_line": 186,
+      "line": 190,
+      "severity": "warning",
+      "title": "Fallback issue comments deleted before the review is posted",
+      "body": "The `opencode-agent[bot]` issue comments (the only human-visible summary in the fallback path) are deleted here, but `submitReview` runs later. If `createReview` throws a non-422 error (e.g. transient 5xx/rate limit), the catch rethrows, the job fails, and the review output is gone entirely — nothing is posted and the summary comment was already removed. Move this deletion block to after `submitReview(...)` resolves successfully so cleanup only happens once the formal review is confirmed.",
+      "suggestion": ""
+    },
+    {
+      "path": ".github/workflows/opencode-review.yml",
+      "start_line": 251,
+      "line": 255,
+      "severity": "warning",
+      "title": "Dedupe fingerprint omits line range, killing suggestions after pushes",
+      "body": "The fingerprint hashes only `filePath|sev|title`, so after a `synchronize` push (lines shift) the same finding matched via `seenFingerprints` at line 269 suppresses a new inline comment, while the old one is now outdated. The body still renders it as `*(inline)*`, but no committable suggestion is attached to the current diff — defeating the core feature. Include the resolved `startLine`/`endLine` in the hash (or only count existing comments whose `commit_id === commit_id`) so a moved finding re-posts on its new line.",
+      "suggestion": "              const fp = crypto\n                .createHash('sha256')\n                .update(`${filePath}|${sev}|${startLine}-${endLine}|${title}`)\n                .digest('hex')\n                .slice(0, 12);"
+    },
+    {
+      "path": ".github/workflows/opencode-review.yml",
+      "start_line": 187,
+      "line": 187,
+      "severity": "info",
+      "title": "Cleanup depends on exact marker text",
+      "body": "Deletion of the runner's issue comment depends on its body containing `.opencode-review-result.json` or `🤖 **Reviewer:**`. The prompt asks the model to end stdout with `Review written to .opencode-review-result.json.`, but an LLM may omit it, leaving a duplicate summary comment next to the formal review. Consider always deleting the latest `opencode-agent[bot]` comment on the current run (or matching a stable runner marker) rather than relying on model-produced text.",
+      "suggestion": ""
+    }
+  ]
+}
