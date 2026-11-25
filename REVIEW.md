@@ -110,7 +110,7 @@ Must fix before merge:
 - [ ] file_path:line_number [severity] description — positive fix
 Optional / defer:
 - [ ] file_path:line_number [info] description — defer reason
-Traps checked: 1..8 pass/fail (or "none relevant" for docs-only)
+Traps checked: 1..11 pass/fail (or "none relevant" for docs-only)
 ```
 
 Post inline comments on exact diff lines; suggestions are suggestions, the human decides.
