@@ -22,6 +22,7 @@ const IC_BOTTOM = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" s
 const IC_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/></svg>';
 const IC_PLUS = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const IC_CLOSE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+const IC_CHEV = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 
 // --- injected app.js collaborators (assigned once in mountChains) ---
 // els is the shared element map built in app.js (single way to reach named
@@ -75,7 +76,7 @@ let polishChainState = [];
 let chainPersistTimer = null;
 let chainPending = false;
 function scheduleChainsPersist(){ chainPending = true; if(chainPersistTimer) clearTimeout(chainPersistTimer); chainPersistTimer = setTimeout(()=> flushChains(), 300); }
-function flushChains(){ if(chainPersistTimer){ clearTimeout(chainPersistTimer); chainPersistTimer = null; } if(!chainPending) return; chainPending = false; Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish?.checked ?? true }); try{ updateBadge(); }catch{} try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{} try{ Dashboard.renderOverall(); }catch{} try{ renderAllChains(); }catch{} }
+function flushChains(){ if(chainPersistTimer){ clearTimeout(chainPersistTimer); chainPersistTimer = null; } if(!chainPending) return; chainPending = false; Storage.saveSettings({ sttChain: sttChainState, polishChain: polishChainState, polishEnabled: els.togglePolish?.checked ?? true }); try{ updateBadge(); }catch{} try{ Quota.render(els.quotaGrid, { period: Dashboard.getPeriod() }); }catch{} try{ Dashboard.renderOverall(); }catch{} }
 
 // Live accessors for app.js-owned call sites (loadSettings/saveSettings/reset:
 // they reassign, so callers must read/write through these, never a snapshot).
@@ -128,15 +129,15 @@ function focusChainRow(type, idx, innerSelector){
   const container = type === 'stt' ? els.sttChain : els.polishChain;
   const rows = container?.querySelectorAll('.chain-item');
   if(!rows || !rows.length){
-    (type === 'stt' ? $('btn-reset-stt') : $('btn-reset-polish'))?.focus?.({ preventScroll: true });
+    try { (type === 'stt' ? $('btn-reset-stt') : $('btn-reset-polish'))?.focus?.({ preventScroll: true }); } catch {}
     return;
   }
   const row = rows[Math.max(0, Math.min(idx, rows.length - 1))];
   let inner = innerSelector ? row.querySelector(innerSelector) : null;
-  if (inner && inner.disabled) {
-    inner = row.querySelector('.chain-step-btn:not([disabled])') || row;
+  if (inner && (inner.disabled || inner.classList?.contains('sr-only'))) {
+    inner = inner.classList?.contains('sr-only') ? row : (row.querySelector('.chain-step-btn:not([disabled])') || row);
   }
-  try { (inner || row).focus?.({ preventScroll: true }); } catch { (inner || row).focus?.(); }
+  try { (inner || row).focus?.({ preventScroll: true }); } catch {}
 }
 let lastDeleted = null; // {entry, index, type}
 let undoTimer = null;
@@ -155,7 +156,7 @@ function undoDelete(){
   const arr = type === 'stt' ? sttChainState : polishChainState;
   arr.splice(Math.min(index, arr.length), 0, entry);
   scheduleChainsPersist();
-  renderAllChains();
+  renderSingleChain(type);
   announce(`«${labelOf(entry, type)}» بازگردانده شد`);
   focusChainRow(type, Math.min(index, arr.length - 1));
 }
@@ -276,7 +277,7 @@ function attachPointerDrag(handle, item, container, fromIdx, type){
         if(moved !== undefined){
           arr.splice(targetIdx, 0, moved);
           scheduleChainsPersist();
-          renderAllChains();
+          renderSingleChain(type);
           announce(`«${labelOf(moved, type)}» به جایگاه ${targetIdx + 1} از ${arr.length} منتقل شد`);
           focusChainRow(type, targetIdx, '.chain-drag');
         }
@@ -303,7 +304,6 @@ function renderChain(container, chain, type){
   if(!container) return;
   const scrollHost = container.closest('.settings-panel') || container;
   const prevScroll = scrollHost.scrollTop;
-  container.innerHTML='';
   const polishOff = type==='polish' && !els.togglePolish?.checked;
   const frag = document.createDocumentFragment();
   chain.forEach((entry, idx)=>{
@@ -375,7 +375,7 @@ function renderChain(container, chain, type){
       if(typeof arr[idx]==='string') arr[idx]={id:arr[idx], providerId: providerIdOf(arr[idx], type==='stt'?'google':'groq'), enabled:e.target.checked};
       else { arr[idx].providerId = providerIdOf(arr[idx], type==='stt'?'google':'groq'); arr[idx].enabled = e.target.checked; }
       scheduleChainsPersist();
-      renderAllChains();
+      renderSingleChain(type);
       announce(`مدل ${meta.label} ${e.target.checked?'روشن':'خاموش'} شد`);
       focusChainRow(type, idx, '[data-toggle]');
     });
@@ -385,9 +385,9 @@ function renderChain(container, chain, type){
       const [removed] = arr.splice(idx,1);
       lastDeleted = { entry: removed, index: idx, type };
       scheduleChainsPersist();
-      renderAllChains();
+      renderSingleChain(type);
       announce(`مدل ${meta.label} حذف شد — برای بازگردانی «واگرد» را بزن`);
-      showUndoToast(meta.label);
+      requestAnimationFrame(() => showUndoToast(meta.label));
       focusChainRow(type, idx);
     });
     // direct controls: ⤒ top, ▲ up, ▼ down, ⤓ bottom
@@ -416,7 +416,7 @@ function renderChain(container, chain, type){
     });
     frag.appendChild(item);
   });
-  container.appendChild(frag);
+  container.replaceChildren(frag);
   scrollHost.scrollTop = prevScroll;
 }
 
@@ -427,7 +427,7 @@ function moveChain(type, idx, dir, focusSel){
   [arr[idx], arr[n]] = [arr[n], arr[idx]];
   try { navigator.vibrate?.(6); } catch {}
   scheduleChainsPersist();
-  renderAllChains();
+  renderSingleChain(type);
   announce(`«${labelOf(arr[n], type)}» به جایگاه ${n+1} از ${arr.length} منتقل شد`);
   focusChainRow(type, n, focusSel);
 }
@@ -439,7 +439,7 @@ function moveChainToTop(type, idx){
   arr.unshift(moved);
   try { navigator.vibrate?.(8); } catch {}
   scheduleChainsPersist();
-  renderAllChains();
+  renderSingleChain(type);
   announce(`«${labelOf(moved, type)}» به اولویت ۱ منتقل شد`);
   focusChainRow(type, 0, '[data-step-down]');
 }
@@ -451,14 +451,12 @@ function moveChainToBottom(type, idx){
   arr.push(moved);
   try { navigator.vibrate?.(8); } catch {}
   scheduleChainsPersist();
-  renderAllChains();
+  renderSingleChain(type);
   announce(`«${labelOf(moved, type)}» به انتهای زنجیره منتقل شد`);
   focusChainRow(type, arr.length - 1, '[data-step-up]');
 }
 
-export function renderAllChains(){
-  renderChain(els.sttChain, sttChainState, 'stt');
-  renderChain(els.polishChain, polishChainState, 'polish');
+function notifyChainsRendered(){
   const hint = document.getElementById('polish-disabled-hint');
   if(hint) hint.style.display = els.togglePolish?.checked ? 'none' : 'block';
   try { syncCustomProviderSelects(); } catch {}
@@ -466,6 +464,18 @@ export function renderAllChains(){
   // `renderAllChains = ...Stagebar.renderStageModelOptions` reassignment, which
   // ES-module read-only imports make impossible — the refresh rides as a hook.
   try { onChainsRendered?.(); } catch {}
+}
+
+function renderSingleChain(type){
+  if (type === 'stt') renderChain(els.sttChain, sttChainState, 'stt');
+  else renderChain(els.polishChain, polishChainState, 'polish');
+  notifyChainsRendered();
+}
+
+export function renderAllChains(){
+  renderChain(els.sttChain, sttChainState, 'stt');
+  renderChain(els.polishChain, polishChainState, 'polish');
+  notifyChainsRendered();
 }
 
 export function persistChains(){ scheduleChainsPersist(); }
@@ -686,10 +696,12 @@ function syncCacheLines(){
 function renderFlowList(){
   const box = $('models-list');
   if (!box) return;
+  const scrollHost = box.closest('.settings-panel');
+  const prevHostScroll = scrollHost ? scrollHost.scrollTop : 0;
+  const prevBoxScroll = box.scrollTop;
   renderKeyVisibility();
   syncCacheLines();
   const q = ($('m-q')?.value || '').trim().toLowerCase();
-  box.innerHTML = '';
   const rows = allFlowModels()
     .filter(d => flowProv === 'all' ? true : flowProv === 'custom' ? !['groq', 'gemini', 'openrouter'].includes(d.providerId) : d.providerId === flowProv || (flowProv === 'gemini' && d.providerId === 'google'))
     .filter(d => {
@@ -749,7 +761,9 @@ function renderFlowList(){
     card.append(main, btn);
     frag.appendChild(card);
   }
-  box.appendChild(frag);
+  box.replaceChildren(frag);
+  box.scrollTop = prevBoxScroll;
+  if (scrollHost) scrollHost.scrollTop = prevHostScroll;
   const empty = $('m-empty'), err = $('m-err');
   if (empty) {
     empty.hidden = rows.length !== 0;
@@ -776,7 +790,7 @@ function toggleFlowModel(modelId, providerId){
     scheduleChainsPersist();
     renderFlowList();
     announce(`مدل ${mid} حذف شد — برای بازگردانی «واگرد» را بزن`);
-    showUndoToast(mid);
+    requestAnimationFrame(() => showUndoToast(mid));
     return;
   }
   const target = targetForModel(mid, pid);
@@ -802,7 +816,7 @@ function addModelToChain(modelId, providerId, target){
   }
   registerModelInCatalog(pid, mid);
   scheduleChainsPersist();
-  renderAllChains();
+  renderSingleChain(target);
   const list = target === 'stt' ? sttChainState : polishChainState;
   announce(`مدل ${mid} در جایگاه ${list.length} از ${list.length} به زنجیره ${target==='stt'?'STT':'پالیش'} اضافه شد`);
   return true;
@@ -918,7 +932,8 @@ function slugifyCustomId(name){
 export function renderCustomProviders(){
   const box = els.customList;
   if(!box) return;
-  box.innerHTML='';
+  const scrollHost = box.closest('.settings-panel');
+  const prevHostScroll = scrollHost ? scrollHost.scrollTop : 0;
   const s = Storage.getSettings();
   const frag = document.createDocumentFragment();
   for(const c of (s.customProviders || [])){
@@ -992,7 +1007,11 @@ export function renderCustomProviders(){
         },
       });
     });
-    head.append(dot, name, pill, spacer, base, swLbl, rm);
+    const chev = document.createElement('span');
+    chev.className = 'provider-chev';
+    chev.setAttribute('aria-hidden', 'true');
+    chev.innerHTML = IC_CHEV;
+    head.append(dot, name, pill, spacer, base, swLbl, rm, chev);
     const body = document.createElement('div');
     body.className = 'provider-body';
     const keyLabel = document.createElement('span');
@@ -1002,7 +1021,8 @@ export function renderCustomProviders(){
     card.append(head, body);
     frag.appendChild(card);
   }
-  box.appendChild(frag);
+  box.replaceChildren(frag);
+  if (scrollHost) scrollHost.scrollTop = prevHostScroll;
   syncCustomModelsBtn();
 }
 function syncCustomModelsBtn(){
@@ -1037,10 +1057,12 @@ export function chainPanelOpen(target){
 function renderChainPanel(target){
   const { list, search } = chainPanelEls(target);
   if(!list) return;
+  const scrollHost = list.closest('.settings-panel');
+  const prevHostScroll = scrollHost ? scrollHost.scrollTop : 0;
+  const prevListScroll = list.scrollTop;
   const qRaw = (search?.value || '').trim();
   const q = qRaw.toLowerCase();
   const pf = panelFilterState[target] || { prov: 'all', freeOnly: false };
-  list.innerHTML = '';
   const rows = allFlowModels()
     .filter(d => target === 'stt' ? isSttEligible(d.id, d.providerId) : true)
     .filter(d => {
@@ -1065,7 +1087,9 @@ function renderChainPanel(target){
     } else {
       emptyWrap.textContent = 'نتیجه‌ای نیست — جست‌وجو را عوض کن یا کاتالوگ زنده را بروزرسانی کن.';
     }
-    list.appendChild(emptyWrap);
+    list.replaceChildren(emptyWrap);
+    list.scrollTop = 0;
+    if (scrollHost) scrollHost.scrollTop = prevHostScroll;
     return;
   }
   const chainFa = target === 'stt' ? 'STT' : 'پالیش';
@@ -1121,13 +1145,15 @@ function renderChainPanel(target){
         addModelToChain(d.id, d.providerId, target);
         renderFlowList();
         renderChainPanel(target);
-        chainPanelEls(target).search?.focus?.();
+        chainPanelEls(target).search?.focus?.({ preventScroll: true });
       });
     }
     card.append(main, btn);
     frag.appendChild(card);
   }
-  list.appendChild(frag);
+  list.replaceChildren(frag);
+  list.scrollTop = prevListScroll;
+  if (scrollHost) scrollHost.scrollTop = prevHostScroll;
 }
 export function setChainPanel(target, open, focusSearch){
   const { btn, panel, search } = chainPanelEls(target);
@@ -1137,7 +1163,7 @@ export function setChainPanel(target, open, focusSearch){
   btn.innerHTML = (open ? IC_CLOSE : IC_PLUS) + `<span>${open ? 'بستن فهرست' : CHAIN_EXPAND_LABEL[target]}</span>`;
   if(open){
     renderChainPanel(target);
-    if(focusSearch) search?.focus?.();
+    if(focusSearch) search?.focus?.({ preventScroll: true });
   }
 }
 function toggleChainPanel(target){ setChainPanel(target, !chainPanelOpen(target), true); }
@@ -1196,7 +1222,7 @@ export function mountChains(deps){
     const card = flowProv === 'groq' ? $('provider-card-groq') : flowProv === 'gemini' ? $('provider-card-gemini') : $('provider-card-openrouter');
     if(card && 'open' in card) card.open = true;
     const target = flowProv === 'groq' ? els.keyGroq : flowProv === 'gemini' ? $('btn-test-gemini') : els.keyOpenrouter;
-    target?.focus?.();
+    target?.focus?.({ preventScroll: true });
   });
   els.customName?.addEventListener('input', syncCustomModelsBtn);
   $('btn-custom-add')?.addEventListener('click', ()=>{

@@ -41,6 +41,14 @@ let syncCustomProviderSelects = () => {};
 
 let geminiPersonalOpen = false;
 const BUILTIN_LABELS = { groq: 'Groq', google: 'Google Gemini', openrouter: 'OpenRouter' };
+const providerTestState = { groq: 'untested', google: 'untested', openrouter: 'untested' };
+
+export function setProviderTestState(pid, state) {
+  const key = pid === 'gemini' ? 'google' : pid;
+  if (!Object.prototype.hasOwnProperty.call(providerTestState, key)) return;
+  providerTestState[key] = (state === 'ok' || state === 'error') ? state : 'untested';
+  try { renderProvidersStatus(); } catch {}
+}
 
 function engineInfo() {
   const s = Storage.getSettings();
@@ -206,8 +214,17 @@ function renderProvidersStatus() {
       const hasPersonal = !!(liveValues.google || s.geminiKey);
       const serverReady = Storage.isServerGeminiAvailable();
       if (hasPersonal) {
-        pill.className = 'provider-status ok';
-        pill.textContent = 'متصل (کلید شخصی)';
+        const st = providerTestState.google;
+        if (st === 'ok') {
+          pill.className = 'provider-status ok';
+          pill.textContent = 'متصل (تأییدشده)';
+        } else if (st === 'error') {
+          pill.className = 'provider-status err';
+          pill.textContent = 'کلید نامعتبر یا خطا';
+        } else {
+          pill.className = 'provider-status untested';
+          pill.textContent = 'ثبت‌شده (تست‌نشده)';
+        }
       } else if (serverReady) {
         pill.className = 'provider-status ok';
         pill.textContent = 'متصل (سرور)';
@@ -218,8 +235,19 @@ function renderProvidersStatus() {
       continue;
     }
     const has = !!(liveValues[pid] || (pid === 'groq' ? s.groqKey : s.openrouterKey));
-    pill.className = 'provider-status ' + (has ? 'ok' : 'missing');
-    pill.textContent = has ? 'متصل' : 'بدون کلید';
+    if (!has) {
+      pill.className = 'provider-status missing';
+      pill.textContent = 'بدون کلید';
+    } else if (providerTestState[pid] === 'ok') {
+      pill.className = 'provider-status ok';
+      pill.textContent = 'متصل (تأییدشده)';
+    } else if (providerTestState[pid] === 'error') {
+      pill.className = 'provider-status err';
+      pill.textContent = 'کلید نامعتبر یا خطا';
+    } else {
+      pill.className = 'provider-status untested';
+      pill.textContent = 'ثبت‌شده (تست‌نشده)';
+    }
   }
   renderRestoreProvidersBar();
   try { syncCustomProviderSelects(); } catch {}
@@ -449,7 +477,7 @@ function openModal(initialTab) {
   const box = els.modal.querySelector('.modal-box');
   if (box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
   const f = modalFocusables();
-  (f[0] || box)?.focus?.();
+  (f[0] || box)?.focus?.({ preventScroll: true });
 }
 
 function closeModal() {
@@ -464,8 +492,8 @@ function closeModal() {
   const hadMic = isWaveMicActive();
   waveMicStop();
   if (hadMic) waveSync();
-  if (lastModalFocus?.focus) lastModalFocus.focus();
-  else els.btnSettings?.focus?.();
+  if (lastModalFocus?.focus) lastModalFocus.focus({ preventScroll: true });
+  else els.btnSettings?.focus?.({ preventScroll: true });
 }
 
 export function mountSettingsModal(deps) {
@@ -505,16 +533,16 @@ export function mountSettingsModal(deps) {
     persistKeysQuietly();
     validate();
   };
-  if (els.keyGroq) { els.keyGroq.addEventListener('input', validate); els.keyGroq.addEventListener('change', onKeyPersist); els.keyGroq.addEventListener('blur', onKeyPersist); }
-  if (els.keyGemini) { els.keyGemini.addEventListener('input', validate); els.keyGemini.addEventListener('change', onKeyPersist); els.keyGemini.addEventListener('blur', onKeyPersist); }
-  if (els.keyOpenrouter) { els.keyOpenrouter.addEventListener('input', validate); els.keyOpenrouter.addEventListener('change', onKeyPersist); els.keyOpenrouter.addEventListener('blur', onKeyPersist); }
+  if (els.keyGroq) { els.keyGroq.addEventListener('input', () => { providerTestState.groq = 'untested'; validate(); }); els.keyGroq.addEventListener('change', onKeyPersist); els.keyGroq.addEventListener('blur', onKeyPersist); }
+  if (els.keyGemini) { els.keyGemini.addEventListener('input', () => { providerTestState.google = 'untested'; validate(); }); els.keyGemini.addEventListener('change', onKeyPersist); els.keyGemini.addEventListener('blur', onKeyPersist); }
+  if (els.keyOpenrouter) { els.keyOpenrouter.addEventListener('input', () => { providerTestState.openrouter = 'untested'; validate(); }); els.keyOpenrouter.addEventListener('change', onKeyPersist); els.keyOpenrouter.addEventListener('blur', onKeyPersist); }
   if (els.groqBaseUrl) els.groqBaseUrl.addEventListener('input', validate);
   if (els.openrouterBaseUrl) els.openrouterBaseUrl.addEventListener('input', validate);
 
   $('btn-gemini-personal')?.addEventListener('click', () => {
     geminiPersonalOpen = !geminiPersonalOpen;
     syncGeminiCardLayout();
-    if (geminiPersonalOpen) els.keyGemini?.focus?.();
+    if (geminiPersonalOpen) els.keyGemini?.focus?.({ preventScroll: true });
   });
   $('btn-gemini-models-srv')?.addEventListener('click', () => els.btnGeminiModels?.click?.());
 
@@ -611,7 +639,7 @@ export function mountSettingsModal(deps) {
     e.preventDefault();
     switchTab(TAB_KEYS[next]);
     const tabMap = { ai: els.tabAi, behavior: els.tabBehavior, tools: els.tabTools, wave: els.tabWave };
-    tabMap[TAB_KEYS[next]]?.focus?.();
+    tabMap[TAB_KEYS[next]]?.focus?.({ preventScroll: true });
   });
 
   els.modal.querySelector('.ai-subtabs')?.addEventListener('keydown', (e) => {
@@ -627,7 +655,7 @@ export function mountSettingsModal(deps) {
     e.preventDefault();
     switchTab(AI_SUBTABS[next]);
     const subMap = { keys: els.tabKeys, pipeline: els.tabPipeline };
-    subMap[AI_SUBTABS[next]]?.focus?.();
+    subMap[AI_SUBTABS[next]]?.focus?.({ preventScroll: true });
   });
 
   // Jump from "missing key" link inside model explorer directly to Keys section
@@ -642,7 +670,7 @@ export function mountSettingsModal(deps) {
       const openPanel = ['stt', 'polish'].find(t => chainPanelOpen(t));
       if (openPanel) {
         setChainPanel(openPanel, false);
-        chainPanelEls(openPanel).btn?.focus?.();
+        chainPanelEls(openPanel).btn?.focus?.({ preventScroll: true });
         return;
       }
       closeModal();
@@ -652,8 +680,8 @@ export function mountSettingsModal(deps) {
     const f = modalFocusables();
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus({ preventScroll: true }); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus({ preventScroll: true }); }
   });
 
   els.btnSettings.onclick = () => openModal();
@@ -691,5 +719,5 @@ export function mountSettingsModal(deps) {
     try { onSettingsSync(); } catch {}
   });
 
-  return { engineInfo, updateBadge, validate, renderProvidersStatus, loadSettings, saveSettings, switchTab, openModal, closeModal, modalFocusables, hasAnyConfiguredKey, hasReadySttConfig };
+  return { engineInfo, updateBadge, validate, renderProvidersStatus, setProviderTestState, loadSettings, saveSettings, switchTab, openModal, closeModal, modalFocusables, hasAnyConfiguredKey, hasReadySttConfig };
 }

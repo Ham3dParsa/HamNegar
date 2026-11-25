@@ -143,8 +143,10 @@ function renderSandboxTargetUI() {
 function renderToolsManagerList() {
   const box = $('tools-manager-list');
   if (!box) return;
+  const scrollHost = box.closest('.settings-panel');
+  const prevScroll = scrollHost ? scrollHost.scrollTop : 0;
   const tools = Storage.getToolsConfig();
-  box.innerHTML = '';
+  const frag = document.createDocumentFragment();
 
   tools.forEach((tool, idx) => {
     const row = document.createElement('div');
@@ -305,8 +307,10 @@ function renderToolsManagerList() {
     }
 
     row.append(pinBtn, info, actions);
-    box.appendChild(row);
+    frag.appendChild(row);
   });
+  box.replaceChildren(frag);
+  if (scrollHost) scrollHost.scrollTop = prevScroll;
 }
 
 function openToolEditor(toolId = null) {
@@ -348,7 +352,7 @@ function openToolEditor(toolId = null) {
 
   renderToolsManagerList();
   renderSandboxTargetUI();
-  labelEl?.focus?.();
+  labelEl?.focus?.({ preventScroll: true });
 }
 
 function closeToolEditor() {
@@ -373,8 +377,8 @@ function saveToolFromEditor() {
   const smart = !!$('tool-ed-smart')?.checked;
   const respectTone = !!$('tool-ed-tone')?.checked;
 
-  if (!label) { Logger.toast('نام ابزار را وارد کن'); $('tool-ed-label')?.focus?.(); return; }
-  if (!systemRaw) { Logger.toast('پرامپت سیستمی نمی‌تواند خالی باشد'); $('tool-ed-system')?.focus?.(); return; }
+  if (!label) { Logger.toast('نام ابزار را وارد کن'); $('tool-ed-label')?.focus?.({ preventScroll: true }); return; }
+  if (!systemRaw) { Logger.toast('پرامپت سیستمی نمی‌تواند خالی باشد'); $('tool-ed-system')?.focus?.({ preventScroll: true }); return; }
 
   const list = Storage.getToolsConfig();
   let savedId = editingId;
@@ -499,7 +503,7 @@ async function runPromptSandbox() {
 
   if (!sampleText) {
     Logger.toast('یک متن آماده انتخاب کن یا متن دلخواهت را بنویس');
-    inputEl?.focus?.();
+    inputEl?.focus?.({ preventScroll: true });
     return;
   }
 
@@ -598,7 +602,7 @@ export function mountToolsTab(deps = {}) {
         if (txt && inp) {
           inp.value = txt;
           renderSandboxTargetUI();
-          inp.focus();
+          inp.focus({ preventScroll: true });
         }
       });
     });

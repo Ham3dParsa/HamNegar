@@ -1286,6 +1286,50 @@ select.model {
   font-size: 13.5px;
   flex-shrink: 0;
 }
+.inspector-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin: 10px 14px 0;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+}
+.inspector-tab {
+  min-height: 34px;
+  padding: 5px 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inspector-tab.active {
+  background: var(--surface-elevated);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+.inspector-tabpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.inspector-tabpanel[hidden] {
+  display: none;
+}
+.inspector-tabpanel--log {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.inspector-tabpanel--log #log-panel {
+  flex: 1 1 auto;
+  min-height: 240px;
+  max-height: none;
+}
 .inspector-body {
   flex: 1 1 auto;
   overflow-y: auto;
@@ -2303,9 +2347,7 @@ pre.log-pre {
 }
 @media (hover: hover) and (pointer: fine) {
   #settings-modal {
-    background: rgba(5, 7, 10, 0.72);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(5, 7, 10, 0.82);
   }
 }
 #settings-modal.is-open { opacity: 1; }
@@ -2321,10 +2363,11 @@ pre.log-pre {
   flex-direction: column;
   overflow: hidden;
   overscroll-behavior: contain;
+  isolation: isolate;
   transform: scale(0.97);
   transition: transform 220ms var(--ease-out);
 }
-#settings-modal.is-open .modal-box { transform: scale(1); }
+#settings-modal.is-open .modal-box { transform: none; }
 
 .sheet-handle { display: none; }
 
@@ -2444,7 +2487,7 @@ pre.log-pre {
     transform: translateY(24px);
     transition: transform 240ms var(--ease-drawer);
   }
-  #settings-modal.is-open .modal-box { transform: translateY(0); }
+  #settings-modal.is-open .modal-box { transform: none; }
   .sheet-handle {
     display: block;
     width: 40px;
@@ -2525,6 +2568,19 @@ pre.log-pre {
   flex-wrap: wrap;
 }
 .provider-head::-webkit-details-marker { display: none; }
+.provider-chev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  transition: transform 200ms var(--ease-spring), color 150ms var(--ease-out);
+}
+.provider-card[open] > .provider-head .provider-chev {
+  transform: rotate(180deg);
+  color: var(--text);
+}
 .provider-title-wrap {
   display: flex;
   flex-direction: column;
@@ -2543,6 +2599,20 @@ pre.log-pre {
 }
 .provider-status.ok { color: var(--success); }
 .provider-status.missing { color: var(--warning); }
+.provider-status.untested {
+  color: var(--warning);
+  background: var(--warning-soft);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11.5px;
+}
+.provider-status.err {
+  color: var(--danger);
+  background: var(--danger-soft);
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11.5px;
+}
 .provider-status.disabled { color: var(--muted); }
 
 .prov-switch {
@@ -3057,6 +3127,19 @@ pre.log-pre {
   border-color: rgba(48, 164, 108, 0.55);
   color: var(--success);
 }
+.chain-add-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  padding: 8px 10px;
+  margin: -10px -10px 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .chain-add-count {
   flex-shrink: 0;
   white-space: nowrap;
@@ -3067,6 +3150,16 @@ pre.log-pre {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+#stt-add-list, #polish-add-list {
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#models-list {
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .mrow {
   display: flex;
@@ -3176,6 +3269,14 @@ pre.log-pre {
 }
 
 .fetch-bar { display: flex; flex-direction: column; gap: 8px; }
+.fetch-bar--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: var(--surface);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
 #m-chips, #m-prov-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 #m-chips .fchip, #m-prov-chips .fchip {
   padding: 5px 12px;
@@ -4232,6 +4333,7 @@ pre.log-pre {
   justify-content: center;
   gap: 10px;
   box-shadow: var(--shadow-pop);
+  isolation: isolate;
   transition: transform 200ms var(--ease-out), opacity 180ms var(--ease-out);
 }
 #toast.show {
