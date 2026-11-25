@@ -29,7 +29,7 @@ jobs:
       !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
       HAS_KILO: ${{ secrets.KILO_API_KEY != '' && '1' || '0' }}
       REVIEW_PROMPT: |
@@ -70,8 +70,8 @@ jobs:
       - id: rev1
         name: Review (1/4 — Zen DeepSeek v4.1 Flash Free)
         continue-on-error: true
-        timeout-minutes: 4
-        uses: anomalyco/opencode/github@latest
+        timeout-minutes: 3
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
@@ -82,8 +82,8 @@ jobs:
         name: Review (2/4 — Zen HY 4 Flash Free)
         if: steps.rev1.outcome != 'success'
         continue-on-error: true
-        timeout-minutes: 4
-        uses: anomalyco/opencode/github@latest
+        timeout-minutes: 3
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
         with:
@@ -94,8 +94,8 @@ jobs:
         name: Review (3/4 — Kilo Nemotron 3.5 Super VL Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 4
-        uses: anomalyco/opencode/github@latest
+        timeout-minutes: 3
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
@@ -107,8 +107,8 @@ jobs:
         name: Review (4/4 — Kilo Ling 3.2 Flash Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 4
-        uses: anomalyco/opencode/github@latest
+        timeout-minutes: 3
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           KILO_API_KEY: ${{ secrets.KILO_API_KEY }}
