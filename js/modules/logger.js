@@ -72,9 +72,12 @@ let progressIndex = 0;
 // raw chain ids (e.g. gemini-flash-lite-latest) never reach the progress UI.
 const STT_DISPLAY_NAMES = {
   groq: 'Groq',
-  'gemini-3.5-transcribe': 'Gemini 3.5 Transcribe',
+  'gemini-3.5-flash-lite': 'Flash-Lite 3.5',
   'gemini-3.1-flash-lite': 'Flash-Lite 3.1',
+  'gemini-3.6-flash': 'Flash 3.6',
+  'gemini-3.8-flash': 'Flash 3.8',
   'gemini-4-hydrogen': 'Gemini 4',
+  'gemini-3.5-transcribe': 'Gemini 3.5 Transcribe',
   'gemini-flash-lite-latest': 'Flash-Lite',
   'gemini-flash-latest': 'Flash',
   'groq-whisper-2': 'Groq Whisper 2',

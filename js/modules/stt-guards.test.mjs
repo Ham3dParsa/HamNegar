@@ -13,7 +13,18 @@ globalThis.localStorage = (() => {
 })();
 
 const { stripTimecodes, scrubSecrets, stripUrlSecret } = await import('./format.js');
-const { extractGeminiCandidate, audioFilenameForBlob } = await import('./transcription.js');
+const { extractGeminiCandidate, audioFilenameForBlob, smartModelScore } = await import('./transcription.js');
+const { Storage, STT_DEFAULTS, POLISH_DEFAULTS } = await import('./storage.js');
+let resolveSttModel;
+try {
+  ({ resolveSttModel } = await import('../../server/gemini.js'));
+} catch (err) {
+  if (err?.code !== 'ERR_MODULE_NOT_FOUND') throw err;
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../../server/gemini.js', import.meta.url), 'utf8')
+    .replace(/^import\s+\{\s*GoogleGenAI\s*\}\s+from\s+['"]@google\/genai['"];?/m, 'class GoogleGenAI {}');
+  ({ resolveSttModel } = await import(`data:text/javascript;base64,${Buffer.from(src).toString('base64')}`));
+}
 
 describe('stripTimecodes', () => {
   it('strips bracketed start timecode [00:00] سلام and [00:05]: سلام', () => {
@@ -206,5 +217,72 @@ describe('audioFilenameForBlob', () => {
     assert.equal(audioFilenameForBlob({ type: 'application/octet-stream', name: 'clip.FLAC' }), 'speech.flac');
     assert.equal(audioFilenameForBlob({ type: 'audio/webm;codecs=opus' }), 'speech.webm');
     assert.equal(audioFilenameForBlob({}), 'speech.webm');
+  });
+});
+
+describe('STT_DEFAULTS & POLISH_DEFAULTS verified chains', () => {
+  it('STT_DEFAULTS has exact verified priority order', () => {
+    assert.deepEqual(STT_DEFAULTS, [
+      'gemini-3.5-flash-lite',
+      'gemini-3.1-flash-lite',
+      'gemini-3.6-flash',
+      'gemini-3.8-flash',
+      'gemini-4-hydrogen',
+      'groq',
+    ]);
+    assert.ok(STT_DEFAULTS.indexOf('gemini-3.5-flash-lite') < STT_DEFAULTS.indexOf('gemini-3.1-flash-lite'));
+    assert.equal(STT_DEFAULTS[STT_DEFAULTS.length - 1], 'groq');
+  });
+
+  it('POLISH_DEFAULTS puts fast Groq & OpenRouter :free first and Gemini Flash-Lite at index 3+', () => {
+    assert.deepEqual(
+      POLISH_DEFAULTS.map((e) => `${e.providerId}:${e.id}`),
+      [
+        'groq:openai/gpt-oss-20b',
+        'groq:qwen/qwen3.8-27b',
+        'openrouter:google/gemma-4-26b-a4b-it:free',
+        'google:gemini-3.5-flash-lite',
+        'google:gemini-3.1-flash-lite',
+        'openrouter:inclusionai/ling-3.2-flash:free',
+        'openrouter:nvidia/nemotron-3.5-super-vl:free',
+        'openrouter:nvidia/nemotron-3.5-lightning:free',
+        'groq:openai/gpt-oss-120b',
+      ],
+    );
+  });
+
+  it('smartModelScore ranks nemotron-3.5-super above lightning and 3.6-flash above flash-lite', () => {
+    assert.ok(smartModelScore('nvidia/nemotron-3.5-super-vl:free') > smartModelScore('nvidia/nemotron-3.5-lightning:free'));
+    assert.ok(smartModelScore('gemini-3.6-flash') > smartModelScore('gemini-3.5-flash-lite'));
+    assert.ok(smartModelScore('gemini-3.5-flash-lite') > smartModelScore('gemini-3.1-flash-lite'));
+    assert.ok(smartModelScore('google/gemma-4-26b-a4b-it:free') > smartModelScore('gemini-3.1-flash-lite'));
+  });
+});
+
+describe('server/gemini.js resolveSttModel', () => {
+  it('keeps gemini-3.5-flash-lite intact without rewriting to gemini-4-hydrogen', () => {
+    assert.equal(resolveSttModel('gemini-3.5-flash-lite'), 'gemini-3.5-flash-lite');
+    assert.equal(resolveSttModel('gemini-3.6-flash'), 'gemini-3.6-flash');
+    assert.equal(resolveSttModel('gemini-3.8-flash'), 'gemini-3.8-flash');
+  });
+
+  it('still rewrites genuinely legacy/deprecated models to DEFAULT_STT_MODEL', () => {
+    assert.equal(resolveSttModel('gemini-2.5-flash'), 'gemini-4-hydrogen');
+    assert.equal(resolveSttModel('gemini-flash-lite-latest'), 'gemini-4-hydrogen');
+    assert.equal(resolveSttModel('gemini-pro'), 'gemini-4-hydrogen');
+  });
+});
+
+describe('Storage translateModel persistence', () => {
+  it('defaults to null and round-trips { id, providerId }', () => {
+    globalThis.localStorage.clear();
+    Storage.saveSettings({ translateModel: null });
+    assert.equal(Storage.getSettings().translateModel, null);
+
+    Storage.saveSettings({ translateModel: { id: 'gemini-4-hydrogen', providerId: 'google' } });
+    assert.deepEqual(Storage.getSettings().translateModel, { id: 'gemini-4-hydrogen', providerId: 'google' });
+
+    Storage.saveSettings({ translateModel: null });
+    assert.equal(Storage.getSettings().translateModel, null);
   });
 });

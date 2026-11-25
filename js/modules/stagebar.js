@@ -126,58 +126,116 @@ function stageModelPick(){
 function renderStageModelOptions(){
   const polishChainState = _getPolishChain();
   const sel = $('stage-model');
-  if (!sel) return;
-  const prev = sel.value;
-  sel.innerHTML = '';
-  const head = document.createElement('option');
-  head.value = '';
-  head.textContent = 'خودکار: زنجیره پالایش (مدل هوشمند برای ابزارهای تحلیلی)';
-  head.title = 'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه در ابزارهای ساده زنجیره به‌ترتیب و در ابزارهای هوشمند قوی‌ترین مدل فعال زنجیره اجرا می‌شود.';
-  sel.appendChild(head);
-  const seen = new Set();
-  const chainGroup = document.createElement('optgroup');
-  chainGroup.label = 'زنجیره فعال پالایش';
-  for (const e of polishChainState) {
-    const id = entryIdOf(e), pid = providerIdOf(e, 'groq');
-    const key = `${pid}:${id}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const o = document.createElement('option');
-    o.value = JSON.stringify({ id, providerId: pid });
-    o.textContent = `${id} (${pid})${e.enabled === false ? ' — خاموش' : ''}`;
-    chainGroup.appendChild(o);
-  }
-  if (chainGroup.children.length) sel.appendChild(chainGroup);
+  const trSel = $('translate-model');
+  if (!sel && !trSel) return;
 
-  try {
-    const catalog = Storage.getModelCatalog?.() || {};
-    const providers = Storage.getProviders?.() || [];
-    const activeSet = new Set(providers.filter(p => !p.disabled && p.hasKey).map(p => p.id));
-    const liveExtras = [];
-    for (const [pid, info] of Object.entries(catalog)) {
-      if (!activeSet.has(pid)) continue;
-      for (const id of (info?.models || [])) {
-        if (/whisper|transcrib|\bstt\b|embedding|tts|guard/i.test(id)) continue;
-        const key = `${pid}:${id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        liveExtras.push({ id, pid, score: smartModelScore(id) });
-      }
+  const populateSelect = (target, headText, headTitle, { includeTranslateCurated = false } = {}) => {
+    if (!target) return;
+    const prev = target.value;
+    target.innerHTML = '';
+    const head = document.createElement('option');
+    head.value = '';
+    head.textContent = headText;
+    if (headTitle) head.title = headTitle;
+    target.appendChild(head);
+    const seen = new Set();
+    const chainGroup = document.createElement('optgroup');
+    chainGroup.label = 'زنجیره فعال پالایش';
+    for (const e of polishChainState) {
+      const id = entryIdOf(e), pid = providerIdOf(e, 'groq');
+      const key = `${pid}:${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const o = document.createElement('option');
+      o.value = JSON.stringify({ id, providerId: pid });
+      o.textContent = `${id} (${pid})${e.enabled === false ? ' — خاموش' : ''}`;
+      chainGroup.appendChild(o);
     }
-    if (liveExtras.length) {
-      liveExtras.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
-      const catGroup = document.createElement('optgroup');
-      catGroup.label = 'سایر مدل‌های زنده کاتالوگ (دارای کلید)';
-      for (const item of liveExtras.slice(0, 80)) {
-        const o = document.createElement('option');
-        o.value = JSON.stringify({ id: item.id, providerId: item.pid });
-        o.textContent = `${item.id} (${item.pid})`;
-        catGroup.appendChild(o);
+    if (chainGroup.children.length) target.appendChild(chainGroup);
+
+    try {
+      const providers = Storage.getProviders?.() || [];
+      const activeSet = new Set(providers.filter(p => !p.disabled && p.hasKey).map(p => p.id));
+
+      if (includeTranslateCurated) {
+        const curated = [
+          { id: 'gemini-4-hydrogen', pid: 'google' },
+          { id: 'gemini-3.8-flash', pid: 'google' },
+          { id: 'gemini-3.6-flash', pid: 'google' },
+          { id: 'openai/gpt-oss-120b', pid: 'groq' },
+          { id: 'google/gemma-4-31b-it:free', pid: 'openrouter' },
+        ];
+        const trGroup = document.createElement('optgroup');
+        trGroup.label = 'مدل‌های پیشنهادی ترجمه';
+        for (const item of curated) {
+          if (!activeSet.has(item.pid)) continue;
+          const key = `${item.pid}:${item.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const o = document.createElement('option');
+          o.value = JSON.stringify({ id: item.id, providerId: item.pid });
+          o.textContent = `${item.id} (${item.pid})`;
+          trGroup.appendChild(o);
+        }
+        if (trGroup.children.length) target.appendChild(trGroup);
       }
-      sel.appendChild(catGroup);
+
+      const catalog = Storage.getModelCatalog?.() || {};
+      const liveExtras = [];
+      for (const [pid, info] of Object.entries(catalog)) {
+        if (!activeSet.has(pid)) continue;
+        for (const id of (info?.models || [])) {
+          if (/whisper|transcrib|\bstt\b|embedding|tts|guard/i.test(id)) continue;
+          const key = `${pid}:${id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          liveExtras.push({ id, pid, score: smartModelScore(id) });
+        }
+      }
+      if (liveExtras.length) {
+        liveExtras.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+        const catGroup = document.createElement('optgroup');
+        catGroup.label = 'سایر مدل‌های زنده کاتالوگ (دارای کلید)';
+        for (const item of liveExtras.slice(0, 80)) {
+          const o = document.createElement('option');
+          o.value = JSON.stringify({ id: item.id, providerId: item.pid });
+          o.textContent = `${item.id} (${item.pid})`;
+          catGroup.appendChild(o);
+        }
+        target.appendChild(catGroup);
+      }
+    } catch {}
+    if (prev) target.value = prev;
+  };
+
+  populateSelect(
+    sel,
+    'خودکار: زنجیره پالایش (مدل هوشمند برای ابزارهای تحلیلی)',
+    'اگر مدلی انتخاب کنی همان اول امتحان می‌شود؛ وگرنه در ابزارهای ساده زنجیره به‌ترتیب و در ابزارهای هوشمند قوی‌ترین مدل فعال زنجیره اجرا می‌شود.'
+  );
+
+  if (trSel) {
+    populateSelect(
+      trSel,
+      'خودکار (همان زنجیره پالایش)',
+      'اگر مدل ترجمه انتخاب کنی مستقیماً برای ترجمه استفاده می‌شود؛ وگرنه زنجیره پالایش یا مدل متنی انتخاب‌شده به کار می‌رود.',
+      { includeTranslateCurated: true }
+    );
+    const savedTm = Storage.getSettings?.().translateModel;
+    if (savedTm?.id && savedTm?.providerId) {
+      const val = JSON.stringify({ id: savedTm.id, providerId: savedTm.providerId });
+      const exists = [...trSel.options].some(o => o.value === val);
+      if (!exists) {
+        const extraOpt = document.createElement('option');
+        extraOpt.value = val;
+        extraOpt.textContent = `${savedTm.id} (${savedTm.providerId})`;
+        trSel.appendChild(extraOpt);
+      }
+      trSel.value = val;
+    } else {
+      trSel.value = '';
     }
-  } catch {}
-  if (prev) sel.value = prev;
+  }
 }
 
 function stageApply(scope, next){
@@ -259,11 +317,16 @@ async function runTranslate(code){
   const _dpSeq = _getDiffPending();
   const mySeq = _dpSeq ? _dpSeq.seq : -1;
   try {
+    const savedTm = Storage.getSettings?.().translateModel || null;
+    const tmOk = savedTm?.id && hasKeyById(providerIdOf(savedTm, 'groq'));
+    if (savedTm?.id && !tmOk) Logger.log('warn', 'مدل ترجمه بی‌کلید — بازگشت به مدل جایگزین', { id: savedTm.id });
     const pick = stageModelPick();
     const explicit = $('stage-model')?.value ? pick : null;
-    const preferOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
-    if(explicit && !preferOk) Logger.log('warn','مدل ترجیحی بی‌کلید — از زنجیره استفاده شد',{id:explicit.id});
-    const res = await Transcription.translate(scope.text, code, preferOk ? explicit : undefined);
+    const explicitOk = explicit && hasKeyById(providerIdOf(explicit, 'groq'));
+    if (!tmOk && explicit && !explicitOk) Logger.log('warn', 'مدل ترجیحی بی‌کلید — از زنجیره استفاده شد', { id: explicit.id });
+    const chosen = tmOk ? savedTm : (explicitOk ? explicit : undefined);
+    Logger.log('info', '🌐 شروع ترجمه', { lang: code, model: chosen ? `${chosen.providerId}:${chosen.id}` : 'auto' });
+    const res = await Transcription.translate(scope.text, code, chosen);
     if(els.output.value.length !== vlen){ closeDiffSheet(); Logger.clearRun(); Logger.log('warn','متن حین اجرا عوض شد — نتیجه دور ریخته شد'); Logger.toast('متن حین اجرا عوض شد — دوباره بزن'); return; }
     const out = res.text;
     fillDiffSheet({ kind: 'translate', scope, text: out, model: res.model, faLabel: 'ترجمه → ' + code, logTitle: '🌐 ترجمه → ' + code,
@@ -502,6 +565,15 @@ export function mountStagebar(deps){
     }
     const det = $('stage-settings');
     if (det && det.open && !e.target.closest('#stage-settings')) det.removeAttribute('open');
+  });
+
+  $('translate-model')?.addEventListener('change', (e) => {
+    let next = null;
+    try {
+      const parsed = e.target.value ? JSON.parse(e.target.value) : null;
+      if (parsed?.id) next = { id: parsed.id, providerId: parsed.providerId || 'groq' };
+    } catch {}
+    Storage.saveSettings({ translateModel: next });
   });
 
   renderToolsUI();
