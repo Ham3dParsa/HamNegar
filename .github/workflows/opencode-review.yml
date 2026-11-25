@@ -29,7 +29,7 @@ jobs:
       !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     env:
       HAS_KILO: ${{ secrets.KILO_API_KEY != '' && '1' || '0' }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -41,8 +41,8 @@ jobs:
         - First inspect `git diff origin/main...HEAD` and read `./REVIEW.md` from base (`git show origin/main:REVIEW.md`) — focus only on changed files and their direct callers (1..11 traps in `REVIEW.md`). Keep your review fast and concise.
 
         Output contract:
-        - Do NOT run `gh api` or `gh pr review` manually, and do NOT stage, modify, or commit any file in the repository.
-        - Write the JSON result OUTSIDE the repository at `$RUNNER_TEMP/opencode-review-result.json` with this exact schema:
+        - Do NOT run `gh api` or `gh pr review` manually, and do NOT run `git add` or `git commit`.
+        - Write `.opencode-review-result.json` in the repository root (it is gitignored; do not stage or commit it) with this exact schema:
           {
             "verdict": "APPROVED" | "REQUEST_CHANGES",
             "summary_fa": "1-2 simple Persian sentences for a non-technical owner (NO code/function names or jargon): explain what this PR changes for users and whether it is safe to merge.",
@@ -64,7 +64,7 @@ jobs:
           }
         - Use `line` (and `start_line` <= `line` for multi-line) matching the RIGHT-side (new file) line numbers in `git diff origin/main...HEAD`.
         - Set `verdict` to `"REQUEST_CHANGES"` if any `critical` or `warning` finding exists, otherwise `"APPROVED"`.
-        - End your final stdout message with: `Review written to $RUNNER_TEMP/opencode-review-result.json.`
+        - End your final stdout message with: `Review written to .opencode-review-result.json.`
     steps:
       - uses: actions/checkout@v6
         with:
@@ -74,13 +74,13 @@ jobs:
       - name: Record review start time
         id: timer
         run: |
-          rm -f "$RUNNER_TEMP/opencode-review-result.json"
+          rm -f .opencode-review-result.json
           echo "start_ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - id: rev1
         name: Review (1/4 — Zen DeepSeek v4.1 Flash Free)
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 10
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -92,7 +92,7 @@ jobs:
         name: Review (2/4 — Zen HY 4 Flash Free)
         if: steps.rev1.outcome != 'success'
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 10
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -104,7 +104,7 @@ jobs:
         name: Review (3/4 — Kilo Ling 3.2 Flash Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 10
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -117,7 +117,7 @@ jobs:
         name: Review (4/4 — Kilo Nemotron 3.5 Super VL Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 5
+        timeout-minutes: 10
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -137,8 +137,8 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
             const crypto = require('crypto');
+            const { execFileSync } = require('child_process');
 
             const { owner, repo } = context.repo;
             const pull_number = context.payload.pull_request.number;
@@ -159,9 +159,16 @@ jobs:
             const winner = candidates.find((c) => c.outcome === 'success') || { model: 'unknown', slot: '?/4' };
             const footnote = `\n\n---\n> 🤖 **Reviewer:** \`${winner.model}\` (\`${winner.slot}\`) · ⏱️ **Duration:** \`${durationStr}\``;
 
-            const resultPath = path.join(process.env.RUNNER_TEMP || '/tmp', 'opencode-review-result.json');
+            const resultPath = '.opencode-review-result.json';
+            let isTracked = false;
+            try {
+              isTracked = Boolean(execFileSync('git', ['ls-files', '--', resultPath], { encoding: 'utf8' }).trim());
+            } catch (_) {}
+
             let parsed = null;
-            if (fs.existsSync(resultPath)) {
+            if (isTracked) {
+              core.warning(`${resultPath} is tracked in git; ignoring it as untrusted.`);
+            } else if (fs.existsSync(resultPath)) {
               try {
                 const stat = fs.statSync(resultPath);
                 if (stat.mtimeMs / 1000 >= startTs - 10) {

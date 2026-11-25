@@ -30,7 +30,7 @@ gh api graphql -f query='query($o:String!,$r:String!,$n:Int!){repository(owner:$
 
 - **Done when:** Current `headRefOid`, check statuses (`review`, `Review Gate`), formal review `state`, and all unresolved `reviewThreads` are accounted for.
 - If checks are still `pending` / `in_progress`, wait 90s (max 30m total) and re-run Step 1. As soon as any `CHANGES_REQUESTED`, `action_required`, or `failure` appears, move immediately to Step 2 — waiting never turns `CHANGES_REQUESTED` into `APPROVED`.
-- If `opencode-review` fails in `0s` on `push` (`workflow file issue`), inspect the workflow YAML/expressions immediately (e.g. `${{ runner.* }}` used in `jobs.<id>.env` instead of `$RUNNER_TEMP`) — `pull_request` will not trigger until fixed.
+- If `opencode-review` fails in `0s` on `push` (`workflow file issue`), inspect the workflow YAML/expressions immediately (e.g. `${{ runner.* }}` used in `jobs.<id>.env`) — `pull_request` will not trigger until fixed.
 
 ### 2. Triage, Fix or Escalate, and Resolve Threads
 For every finding in `pulls/<n>/reviews` and `reviewThreads`:

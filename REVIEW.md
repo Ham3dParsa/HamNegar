@@ -64,8 +64,10 @@ Set `APPROVED` only with zero `[critical]`/`[warning]`. Otherwise `REQUEST_CHANG
 11. **CI workflows** — job `timeout-minutes` must exceed the sum of step timeouts; pin
     third-party actions to full commit SHAs and guard against `[bot]` actor loops.
     Never reference `${{ runner.* }}` in `jobs.<id>.env` (causes `0s` workflow parse
-    failure — use `$RUNNER_TEMP` in shell/script); write transient LLM artifacts outside
-    the repo (`$RUNNER_TEMP`) with `mtime` freshness checks, and fail closed on missing/invalid review output.
+    failure). Headless OpenCode hangs on `external_directory: ask` if writing outside
+    the repo (`$RUNNER_TEMP`), so write `.opencode-review-result.json` inside the
+    `.gitignore`d repo root, run `rm -f` before start, reject if `git ls-files` tracks
+    it, verify `mtime >= startTs`, and fail closed on missing/invalid review output.
 
 ## Verify (run, don't guess)
 
