@@ -2,6 +2,17 @@
 
 همه تغییرات مهم این پروژه اینجا ثبت می‌شود. فرمت بر اساس [Keep a Changelog](https://keepachangelog.com/fa/1.0.0/) و نسخه‌گذاری `MAJOR.MINOR.PATCH`.
 
+## [0.6.59] - 2026-11-24
+### Added
+- **انتخاب‌گر مستقل مدل ترجمه (`storage.js`, `stagebar.js`, `index.html`):** افزودن تنظیم پایدار `translateModel` (`#translate-model` در پنل ترجمه) تا کاربر بتواند برای ترجمه مدل دلخواه و دقیق‌تری را جدا از زنجیره ویرایش متن انتخاب کند.
+
+### Changed
+- **چیدمان جدید و دقیق زنجیره پیش‌فرض صوت به متن (`storage.js`, `transcription.js`, `chains.js`, `logger.js`, `stats.js`, `server/gemini.js`):** تنظیم ترتیب پیش‌فرض `gemini-3.5-flash-lite` ← `gemini-3.1-flash-lite` ← `gemini-3.6-flash` ← `gemini-3.8-flash` ← `gemini-4-hydrogen` ← `groq` (`whisper-large-v3`) با آیدی‌های زنده و معتبر.
+- **چیدمان جدید زنجیره پیش‌فرض متنی/پالایش (`storage.js`, `transcription.js`, `chains.js`):** اولویت اول با مدل‌های سریع و پایدار Groq (`openai/gpt-oss-20b`، `qwen/qwen3.8-27b`) و مدل‌های رایگان زنده OpenRouter (`google/gemma-4-26b-a4b-it:free`، `inclusionai/ling-3.2-flash:free`، `nvidia/nemotron-3.5-super-vl:free` با اولویت بالاتر از `nvidia/nemotron-3.5-lightning:free`) و قرارگیری مدل‌های `Gemini Flash-Lite` در ردیف چهارم به بعد.
+
+### Fixed
+- **رفع ریدایرکت اشتباه `gemini-3.5-flash-lite` در سرور (`server/gemini.js`):** حذف `gemini-3.5-flash-lite` از الگوی مدل‌های منسوخ تا `resolveSttModel` دیگر آن را به `gemini-4-hydrogen` بازنویسی نکند.
+
 ## [0.6.57] - 2026-11-24
 ### Changed
 - **بهینه‌سازی کیفیت و کدک صدای ورودی به مدل‌ها (`audio.js`, `app.js`):** ضبط مونو (`1ch`) با نرخ `48kHz` و بیت‌ریت بهینه `64kbps` (با fallback ایمن)، حذف برش‌های ۲۵۰ میلی‌ثانیه‌ای هنگام روشن بودن VAD و حذف `requestData()`های اضافی پیش از توقف برای تولید کانتینر یکپارچه WebM/Opus و متادیتای دقیق صدا در لاگ.
