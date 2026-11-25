@@ -11,7 +11,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  checks: read
+  checks: write
   id-token: write
 
 jobs:
@@ -41,8 +41,8 @@ jobs:
         - First inspect `git diff origin/main...HEAD` and read `./REVIEW.md` from base (`git show origin/main:REVIEW.md`) — focus only on changed files and their direct callers (1..11 traps in `REVIEW.md`). Keep your review fast and concise.
 
         Output contract:
-        - Do NOT run `gh api` or `gh pr review` manually, and do NOT stage or commit any output file.
-        - Write a JSON file `.opencode-review-result.json` in the repository root with this exact schema:
+        - Do NOT run `gh api` or `gh pr review` manually, and do NOT stage, modify, or commit any file in the repository.
+        - Write the JSON result OUTSIDE the repository at `${{ runner.temp }}/opencode-review-result.json` with this exact schema:
           {
             "verdict": "APPROVED" | "REQUEST_CHANGES",
             "summary_fa": "1-2 simple Persian sentences for a non-technical owner (NO code/function names or jargon): explain what this PR changes for users and whether it is safe to merge.",
@@ -64,7 +64,7 @@ jobs:
           }
         - Use `line` (and `start_line` <= `line` for multi-line) matching the RIGHT-side (new file) line numbers in `git diff origin/main...HEAD`.
         - Set `verdict` to `"REQUEST_CHANGES"` if any `critical` or `warning` finding exists, otherwise `"APPROVED"`.
-        - End your final stdout message with: `Review written to .opencode-review-result.json.`
+        - End your final stdout message with: `Review written to ${{ runner.temp }}/opencode-review-result.json.`
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,7 +73,9 @@ jobs:
 
       - name: Record review start time
         id: timer
-        run: echo "start_ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+        run: |
+          rm -f "${{ runner.temp }}/opencode-review-result.json"
+          echo "start_ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - id: rev1
         name: Review (1/4 — Zen DeepSeek v4.1 Flash Free)
@@ -135,6 +137,7 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const path = require('path');
             const crypto = require('crypto');
 
             const { owner, repo } = context.repo;
@@ -156,11 +159,16 @@ jobs:
             const winner = candidates.find((c) => c.outcome === 'success') || { model: 'unknown', slot: '?/4' };
             const footnote = `\n\n---\n> 🤖 **Reviewer:** \`${winner.model}\` (\`${winner.slot}\`) · ⏱️ **Duration:** \`${durationStr}\``;
 
-            const resultPath = '.opencode-review-result.json';
+            const resultPath = path.join(process.env.RUNNER_TEMP || '/tmp', 'opencode-review-result.json');
             let parsed = null;
             if (fs.existsSync(resultPath)) {
               try {
-                parsed = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+                const stat = fs.statSync(resultPath);
+                if (stat.mtimeMs / 1000 >= startTs - 10) {
+                  parsed = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+                } else {
+                  core.warning(`Ignoring stale ${resultPath} (older than current run).`);
+                }
               } catch (err) {
                 core.warning(`Failed to parse ${resultPath}: ${err.message}`);
               }
@@ -186,6 +194,20 @@ jobs:
                   owner, repo, comment_id: latest.id, body: cleaned + footnote,
                 });
               }
+              const failSummary = '### ❌ خطا در دریافت نتیجهٔ بازبینی\nفایل نتیجهٔ ساختاریافتهٔ بازبینی تولید نشد یا معتبر نبود، بنابراین گیت مرج مسدود شد.';
+              await github.rest.checks.create({
+                owner,
+                repo,
+                name: 'Review Gate',
+                head_sha: commit_id,
+                status: 'completed',
+                conclusion: 'failure',
+                output: {
+                  title: '❌ خطا در دریافت نتیجهٔ بازبینی',
+                  summary: failSummary,
+                },
+              }).catch((e) => core.warning(`Check run create failed: ${e.message}`));
+              await core.summary.addRaw(failSummary).write();
               core.setFailed('Structured review JSON missing or invalid; cannot enforce the review gate.');
               return;
             }
@@ -366,18 +388,24 @@ jobs:
             };
 
             const primaryEvent = hasBlocking ? 'REQUEST_CHANGES' : 'APPROVE';
+            let submittedReview = null;
+            let fellBackToComment = false;
             try {
-              await submitReview(primaryEvent, inlineComments, reviewBody);
+              const res = await submitReview(primaryEvent, inlineComments, reviewBody);
+              submittedReview = res.data;
             } catch (err) {
               if (err.status === 422 && primaryEvent === 'APPROVE') {
                 core.info('APPROVE blocked by repo settings; retrying with COMMENT.');
+                fellBackToComment = true;
                 try {
-                  await submitReview('COMMENT', inlineComments, reviewBody);
+                  const res = await submitReview('COMMENT', inlineComments, reviewBody);
+                  submittedReview = res.data;
                 } catch (err2) {
                   if (err2.status === 422 && inlineComments.length > 0) {
                     core.warning(`Inline comments rejected (422): ${err2.message}; folding into review body.`);
                     const folded = inlineComments.map((c) => `#### \`${c.path}:${c.line}\`\n${c.body}`).join('\n\n');
-                    await submitReview('COMMENT', [], `${reviewBody}\n\n---\n${folded}`);
+                    const res = await submitReview('COMMENT', [], `${reviewBody}\n\n---\n${folded}`);
+                    submittedReview = res.data;
                   } else {
                     throw err2;
                   }
@@ -385,19 +413,84 @@ jobs:
               } else if (err.status === 422 && inlineComments.length > 0) {
                 core.warning(`Inline comments rejected (422): ${err.message}; folding into review body.`);
                 const folded = inlineComments.map((c) => `#### \`${c.path}:${c.line}\`\n${c.body}`).join('\n\n');
-                await submitReview(primaryEvent, [], `${reviewBody}\n\n---\n${folded}`);
+                const res = await submitReview(primaryEvent, [], `${reviewBody}\n\n---\n${folded}`);
+                submittedReview = res.data;
               } else {
                 throw err;
               }
             }
 
+            if (!hasBlocking && fellBackToComment) {
+              const priorReviews = await github.paginate(github.rest.pulls.listReviews, {
+                owner, repo, pull_number, per_page: 100,
+              });
+              for (const r of priorReviews) {
+                if (r.user?.login === 'github-actions[bot]' && r.state === 'CHANGES_REQUESTED') {
+                  await github.rest.pulls.dismissReview({
+                    owner,
+                    repo,
+                    pull_number,
+                    review_id: r.id,
+                    message: 'Superseded by APPROVED review.',
+                  }).catch((e) => core.info(`Could not dismiss prior review ${r.id}: ${e.message}`));
+                }
+              }
+            }
+
+            // Publish dedicated Review Gate Check Run in PR Checks tab
+            const annotations = findings
+              .filter((item) => item && item.path && Number(item.line) > 0)
+              .slice(0, 50)
+              .map((item) => {
+                const sev = ['critical', 'warning', 'info'].includes(item.severity) ? item.severity : 'info';
+                const endLn = Math.max(1, Math.trunc(Number(item.line)));
+                const startLn = Math.max(1, Math.min(endLn, Math.trunc(Number(item.start_line) || endLn)));
+                return {
+                  path: String(item.path).replace(/^\.\//, ''),
+                  start_line: startLn,
+                  end_line: endLn,
+                  annotation_level: sev === 'critical' ? 'failure' : sev === 'warning' ? 'warning' : 'notice',
+                  title: String(item.title || sev).slice(0, 255),
+                  message: String(item.plain_fa || item.body || item.title || 'Finding').slice(0, 1000),
+                };
+              });
+
+            const checkTitle = hasBlocking
+              ? `⚠️ نیازمند اصلاح — ${critCount} 🔴 · ${warnCount} 🟡 · ${infoCount} 🔵 (${winner.model} · ${durationStr})`
+              : `✅ تایید شده — ${critCount} 🔴 · ${warnCount} 🟡 · ${infoCount} 🔵 (${winner.model} · ${durationStr})`;
+            const reviewLink = submittedReview?.html_url ? `\n\n[مشاهدهٔ Review کامل در PR](${submittedReview.html_url})` : '';
+            const checkSummary = [
+              `### ${hasBlocking ? '⚠️ نیازمند اصلاح' : '✅ تایید شده'}`,
+              `- **خلاصه:** ${summaryFa}`,
+              `- **اقدام پیشنهادی:** ${actionFa}`,
+              `- **یافته‌ها:** \`${critCount}\` بحرانی 🔴 · \`${warnCount}\` هشدار 🟡 · \`${infoCount}\` پیشنهادی 🔵`,
+              `- **مدل و زمان:** \`${winner.model}\` (\`${winner.slot}\`) · \`${durationStr}\`${reviewLink}`,
+            ].join('\n');
+
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Review Gate',
+              head_sha: commit_id,
+              status: 'completed',
+              conclusion: hasBlocking ? 'action_required' : 'success',
+              output: {
+                title: checkTitle.slice(0, 255),
+                summary: checkSummary,
+                annotations,
+              },
+            }).catch((e) => core.warning(`Check run create failed: ${e.message}`));
+
+            await core.summary.addRaw(checkSummary).write();
+
             // Clean up transient opencode-agent[bot] issue comments only AFTER formal review succeeds
             for (const c of botIssueComments) {
               const createdTs = c.created_at ? Math.floor(new Date(c.created_at).getTime() / 1000) : 0;
               const isCurrentRun = createdTs >= startTs - 10;
-              const hasMarker = Boolean(c.body && (c.body.includes('.opencode-review-result.json') || c.body.includes('🤖 **Reviewer:**')));
+              const hasMarker = Boolean(c.body && (c.body.includes('opencode-review-result.json') || c.body.includes('🤖 **Reviewer:**')));
               if (isCurrentRun || hasMarker) {
-                await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id }).catch(() => {});
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: c.id })
+                  .catch((e) => core.info(`Could not delete transient comment ${c.id}: ${e.message}`));
               }
             }
 
