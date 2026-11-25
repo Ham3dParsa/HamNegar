@@ -29,7 +29,7 @@ jobs:
       !endsWith(github.actor, '[bot]') &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 22
     env:
       HAS_KILO: ${{ secrets.KILO_API_KEY != '' && '1' || '0' }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -37,15 +37,8 @@ jobs:
         You are the HamNegar PR reviewer (تایپ صوتی). Be STRICT: flag all potential issues, prioritize quality and security.
         PR Gate Threshold is "Warnings and above" — mark every finding as 🔴 [critical], 🟡 [warning], or 🔵 [info]. Fail the check if any [critical] or [warning] exists.
 
-        Focus Areas (all enabled):
-        - Security (XSS via innerHTML, key exposure, CORS file://)
-        - Performance (audio blob size, token waste, blocking fetch)
-        - Bug detection (realtime race rtBefore/rtAfter, fallback 401/404/429, localStorage seam breaks)
-        - Code style (modular seam discipline — one module per file)
-        - Test coverage (require manual test notes for transcription)
-        - Documentation (persian UI strings)
-
-        First read ./REVIEW.md from the base branch (git show origin/main:REVIEW.md); if present, treat it as the source of truth for repo-specific traps (1..11).
+        Speed & Scope:
+        - First inspect `git diff origin/main...HEAD` and read `./REVIEW.md` from base (`git show origin/main:REVIEW.md`) — focus only on changed files and their direct callers (1..11 traps in `REVIEW.md`). Keep your review fast and concise.
 
         Submission mode (IMPORTANT):
         - Record start time at the start (`T0=$(date +%s)`) so you can report exact elapsed seconds in the footnote.
@@ -75,7 +68,7 @@ jobs:
       - id: rev1
         name: Review (1/4 — Zen DeepSeek v4.1 Flash Free)
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 5
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -89,7 +82,7 @@ jobs:
         name: Review (2/4 — Zen HY 4 Flash Free)
         if: steps.rev1.outcome != 'success'
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 5
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -103,7 +96,7 @@ jobs:
         name: Review (3/4 — Kilo Ling 3.2 Flash Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 5
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
@@ -118,7 +111,7 @@ jobs:
         name: Review (4/4 — Kilo Nemotron 3.5 Super VL Free)
         if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && env.HAS_KILO == '1'
         continue-on-error: true
-        timeout-minutes: 3
+        timeout-minutes: 5
         uses: anomalyco/opencode/github@2c14fc5586fe0b88e5c04732d2e846769cc35671
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
