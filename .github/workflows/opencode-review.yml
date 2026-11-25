@@ -11,7 +11,8 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
-  checks: write
+  statuses: write
+  # Required by anomalyco/opencode/github (default use_github_token=false) for OIDC token exchange
   id-token: write
 
 jobs:
@@ -66,7 +67,7 @@ jobs:
         - Set `verdict` to `"REQUEST_CHANGES"` if any `critical` or `warning` finding exists, otherwise `"APPROVED"`.
         - End your final stdout message with: `Review written to .opencode-review-result.json.`
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -126,13 +127,8 @@ jobs:
           model: kilo/nvidia/nemotron-3.5-super-vl:free
           prompt: ${{ env.REVIEW_PROMPT }}
 
-      - name: Verify review succeeded
-        if: steps.rev1.outcome != 'success' && steps.rev2.outcome != 'success' && steps.rev3.outcome != 'success' && steps.rev4.outcome != 'success'
-        run: |
-          echo "All review fallback models failed or were skipped."
-          exit 1
-
       - name: Publish formal PR review
+        if: ${{ !cancelled() }}
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
@@ -156,7 +152,22 @@ jobs:
               { outcome: '${{ steps.rev3.outcome }}', model: 'kilo/inclusionai/ling-3.2-flash:free', slot: '3/4' },
               { outcome: '${{ steps.rev4.outcome }}', model: 'kilo/nvidia/nemotron-3.5-super-vl:free', slot: '4/4' },
             ];
-            const winner = candidates.find((c) => c.outcome === 'success') || { model: 'unknown', slot: '?/4' };
+            const matchedWinner = candidates.find((c) => c.outcome === 'success');
+            if (!matchedWinner) {
+              const allFailSummary = '### ❌ خطا در اجرای مدل‌های بازبینی\nهر چهار مدل زنجیرهٔ بازبینی با خطا مواجه شدند یا اسکیپ شدند.';
+              await github.rest.repos.createCommitStatus({
+                owner,
+                repo,
+                sha: commit_id,
+                context: 'Review Gate',
+                state: 'failure',
+                description: `ERROR - all review fallback models failed (${durationStr})`.slice(0, 140),
+              }).catch((e) => core.warning(`Commit status create failed: ${e.message}`));
+              await core.summary.addRaw(allFailSummary).write();
+              core.setFailed('All review fallback models failed or were skipped.');
+              return;
+            }
+            const winner = matchedWinner;
             const footnote = `\n\n---\n> 🤖 **Reviewer:** \`${winner.model}\` (\`${winner.slot}\`) · ⏱️ **Duration:** \`${durationStr}\``;
 
             const resultPath = '.opencode-review-result.json';
@@ -202,18 +213,14 @@ jobs:
                 });
               }
               const failSummary = '### ❌ خطا در دریافت نتیجهٔ بازبینی\nفایل نتیجهٔ ساختاریافتهٔ بازبینی تولید نشد یا معتبر نبود، بنابراین گیت مرج مسدود شد.';
-              await github.rest.checks.create({
+              await github.rest.repos.createCommitStatus({
                 owner,
                 repo,
-                name: 'Review Gate',
-                head_sha: commit_id,
-                status: 'completed',
-                conclusion: 'failure',
-                output: {
-                  title: '❌ خطا در دریافت نتیجهٔ بازبینی',
-                  summary: failSummary,
-                },
-              }).catch((e) => core.warning(`Check run create failed: ${e.message}`));
+                sha: commit_id,
+                context: 'Review Gate',
+                state: 'failure',
+                description: `ERROR - invalid or missing review output (${durationStr})`.slice(0, 140),
+              }).catch((e) => core.warning(`Commit status create failed: ${e.message}`));
               await core.summary.addRaw(failSummary).write();
               core.setFailed('Structured review JSON missing or invalid; cannot enforce the review gate.');
               return;
@@ -255,17 +262,24 @@ jobs:
             let infoCount = 0;
 
             const inlineComments = [];
+            const validAnnotations = [];
             const mustFixPlainFa = [];
             const mustFixBody = [];
             const optionalBody = [];
 
             const makeFence = (code, lang) => {
+              if (lang === 'suggestion' && code.includes('```')) {
+                let ticks = '````';
+                while (code.includes(ticks)) ticks += '`';
+                return `${ticks}diff\n${code}\n${ticks}`;
+              }
               let ticks = '```';
               while (code.includes(ticks)) ticks += '`';
               return `${ticks}${lang}\n${code}\n${ticks}`;
             };
 
             for (const item of findings) {
+              if (!item || typeof item !== 'object') continue;
               const sev = ['critical', 'warning', 'info'].includes(item.severity) ? item.severity : 'info';
               if (sev === 'critical') critCount++;
               else if (sev === 'warning') warnCount++;
@@ -273,8 +287,9 @@ jobs:
 
               const emoji = sevEmoji[sev];
               const filePath = String(item.path || '').replace(/^\.\//, '');
-              const endLine = Number(item.line) || 0;
-              const startLine = Math.min(endLine, Number(item.start_line) || endLine);
+              const rawEnd = Number(item.line) || 0;
+              const endLine = rawEnd > 0 ? Math.max(1, Math.trunc(rawEnd)) : 0;
+              const startLine = endLine > 0 ? Math.max(1, Math.min(endLine, Math.trunc(Number(item.start_line) || endLine))) : 0;
               const title = String(item.title || 'Finding').trim();
               const plainFa = String(item.plain_fa || '').trim();
               const explanation = String(item.body || '').trim();
@@ -296,6 +311,17 @@ jobs:
                 for (let ln = startLine; ln <= endLine; ln++) {
                   if (!fileLines.has(ln)) { canInline = false; break; }
                 }
+              }
+
+              if (canInline && validAnnotations.length < 50) {
+                validAnnotations.push({
+                  sev,
+                  file: filePath,
+                  startLine,
+                  endLine,
+                  title: `[${sev}] ${title}`.slice(0, 255),
+                  message: (plainFa || explanation || title).slice(0, 1000),
+                });
               }
 
               const locLabel = endLine > 0 ? `\`${filePath}:${startLine === endLine ? endLine : `${startLine}-${endLine}`}\`` : `\`${filePath || 'PR'}\``;
@@ -444,27 +470,35 @@ jobs:
               }
             }
 
-            // Publish dedicated Review Gate Check Run in PR Checks tab
-            const annotations = findings
-              .filter((item) => item && item.path && Number(item.line) > 0)
-              .slice(0, 50)
-              .map((item) => {
-                const sev = ['critical', 'warning', 'info'].includes(item.severity) ? item.severity : 'info';
-                const endLn = Math.max(1, Math.trunc(Number(item.line)));
-                const startLn = Math.max(1, Math.min(endLn, Math.trunc(Number(item.start_line) || endLn)));
-                return {
-                  path: String(item.path).replace(/^\.\//, ''),
-                  start_line: startLn,
-                  end_line: endLn,
-                  annotation_level: sev === 'critical' ? 'failure' : sev === 'warning' ? 'warning' : 'notice',
-                  title: String(item.title || sev).slice(0, 255),
-                  message: String(item.plain_fa || item.body || item.title || 'Finding').slice(0, 1000),
-                };
-              });
+            // Emit diff-validated workflow annotations directly on opencode-review / review
+            for (const a of validAnnotations) {
+              const props = { file: a.file, startLine: a.startLine, endLine: a.endLine, title: a.title };
+              if (a.sev === 'critical') core.error(a.message, props);
+              else if (a.sev === 'warning') core.warning(a.message, props);
+              else core.notice(a.message, props);
+            }
 
-            const checkTitle = hasBlocking
-              ? `⚠️ نیازمند اصلاح — ${critCount} 🔴 · ${warnCount} 🟡 · ${infoCount} 🔵 (${winner.model} · ${durationStr})`
-              : `✅ تایید شده — ${critCount} 🔴 · ${warnCount} 🟡 · ${infoCount} 🔵 (${winner.model} · ${durationStr})`;
+            // Publish standalone commit status (never hijacks labeler's check_suite; pure LTR avoids BiDi scramble)
+            const shortModel = winner.model.split('/').pop();
+            const statusDesc = (hasBlocking
+              ? `REQUEST_CHANGES: ${critCount} critical, ${warnCount} warning, ${infoCount} info (${shortModel}, ${durationStr})`
+              : `APPROVED: ${critCount} critical, ${warnCount} warning, ${infoCount} info (${shortModel}, ${durationStr})`
+            ).slice(0, 140);
+
+            const statusPayload = {
+              owner,
+              repo,
+              sha: commit_id,
+              context: 'Review Gate',
+              state: hasBlocking ? 'failure' : 'success',
+              description: statusDesc,
+            };
+            if (submittedReview?.html_url) {
+              statusPayload.target_url = submittedReview.html_url;
+            }
+            await github.rest.repos.createCommitStatus(statusPayload)
+              .catch((e) => core.warning(`Commit status create failed: ${e.message}`));
+
             const reviewLink = submittedReview?.html_url ? `\n\n[مشاهدهٔ Review کامل در PR](${submittedReview.html_url})` : '';
             const checkSummary = [
               `### ${hasBlocking ? '⚠️ نیازمند اصلاح' : '✅ تایید شده'}`,
@@ -473,21 +507,6 @@ jobs:
               `- **یافته‌ها:** \`${critCount}\` بحرانی 🔴 · \`${warnCount}\` هشدار 🟡 · \`${infoCount}\` پیشنهادی 🔵`,
               `- **مدل و زمان:** \`${winner.model}\` (\`${winner.slot}\`) · \`${durationStr}\`${reviewLink}`,
             ].join('\n');
-
-            await github.rest.checks.create({
-              owner,
-              repo,
-              name: 'Review Gate',
-              head_sha: commit_id,
-              status: 'completed',
-              conclusion: hasBlocking ? 'action_required' : 'success',
-              output: {
-                title: checkTitle.slice(0, 255),
-                summary: checkSummary,
-                annotations,
-              },
-            }).catch((e) => core.warning(`Check run create failed: ${e.message}`));
-
             await core.summary.addRaw(checkSummary).write();
 
             // Clean up transient opencode-agent[bot] issue comments only AFTER formal review succeeds
