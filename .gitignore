@@ -28,3 +28,6 @@ graphify-out/
 desktop/**/bin/
 desktop/**/obj/
 desktop/**/.vs/
+
+# transient opencode review output (never commit)
+.opencode-review-result.json
